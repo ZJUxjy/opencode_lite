@@ -124,6 +124,7 @@ export class LLMClient {
       messages: coreMessages,
       tools: toolDefs,
       maxSteps: 1,  // 单步执行，工具调用由 agent 循环处理
+      maxTokens: 32000,  // 足够大的 token 限制
     })
 
     return {
@@ -153,6 +154,8 @@ export class LLMClient {
       messages: coreMessages,
       tools: toolDefs,
       maxSteps: 1,  // 单步执行，工具调用由 agent 循环处理
+      maxTokens: 32000,  // 与 OpenCode 保持一致
+      temperature: 0.2,
     })
 
     let fullContent = ""
@@ -177,6 +180,9 @@ export class LLMClient {
           toolCalls.push(tc)
           callbacks.onToolCall?.(tc)
           break
+
+        case "error":
+          throw new Error(`LLM Stream Error: ${JSON.stringify(delta.error || delta)}`)
       }
     }
 
@@ -298,6 +304,7 @@ Provide a brief summary:`
 
   private convertMessages(messages: Message[]): CoreMessage[] {
     return messages.map((m) => {
+      // 处理工具结果消息
       if (m.toolResults?.length) {
         return {
           role: "tool",
@@ -310,6 +317,33 @@ Provide a brief summary:`
           })),
         }
       }
+
+      // 处理 assistant 消息（可能包含 toolCalls）
+      if (m.role === "assistant" && m.toolCalls?.length) {
+        // 构建包含文本和工具调用的 content 数组
+        const content: Array<any> = []
+
+        // 添加文本内容
+        if (m.content) {
+          content.push({ type: "text", text: m.content })
+        }
+
+        // 添加工具调用
+        for (const tc of m.toolCalls) {
+          content.push({
+            type: "tool-call",
+            toolCallId: tc.id,
+            toolName: tc.name,
+            args: tc.arguments,
+          })
+        }
+
+        return {
+          role: "assistant",
+          content,
+        }
+      }
+
       return {
         role: m.role as "user" | "assistant",
         content: m.content || "",

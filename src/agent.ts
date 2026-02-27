@@ -63,17 +63,27 @@ export class Agent {
     }
 
     // 4. 循环调用 LLM
-    while (true) {
+    let iterations = 0
+    const MAX_ITERATIONS = 50  // 防止无限循环
+
+    while (iterations < MAX_ITERATIONS) {
+      iterations++
       this.events.onThinking?.()
 
       let response
-      if (this.enableStream) {
-        response = await this.llm.chatStream(messages, this.tools.getDefinitions(), {
-          onTextDelta: (text) => this.events.onTextDelta?.(text),
-          onToolCall: (toolCall) => this.events.onToolCall?.(toolCall),
-        })
-      } else {
-        response = await this.llm.chat(messages, this.tools.getDefinitions())
+      try {
+        if (this.enableStream) {
+          response = await this.llm.chatStream(messages, this.tools.getDefinitions(), {
+            onTextDelta: (text) => this.events.onTextDelta?.(text),
+            onToolCall: (toolCall) => this.events.onToolCall?.(toolCall),
+          })
+        } else {
+          response = await this.llm.chat(messages, this.tools.getDefinitions())
+        }
+      } catch (error: any) {
+        // LLM 调用失败，返回错误
+        this.events.onResponse?.(`Error: ${error.message}`)
+        return `Error: ${error.message}`
       }
 
       // 5. 添加 assistant 消息
@@ -95,15 +105,10 @@ export class Agent {
         return response.content
       }
 
-      // 8. 执行工具
-      for (const call of response.toolCalls) {
-        this.events.onToolCall?.(call)
-        const result = await this.executeTool(call)
-        this.events.onToolResult?.(call, result)
-      }
-
-      // 9. 添加工具结果
+      // 8. 执行工具并收集结果
       const toolResults = await this.executeTools(response.toolCalls)
+
+      // 9. 添加工具结果消息
       const resultMsg: Message = {
         role: "user",
         content: "",
@@ -120,6 +125,9 @@ export class Agent {
         this.events.onCompress?.(beforeTokens2, afterTokens2)
       }
     }
+
+    // 达到最大迭代次数
+    return "Reached maximum iteration limit. Please try a simpler request."
   }
 
   private async executeTool(call: ToolCall): Promise<string> {
@@ -141,26 +149,34 @@ export class Agent {
     const ctx: Context = { cwd: this.cwd, messages: [] }
 
     for (const call of toolCalls) {
+      // 触发工具调用事件
+      this.events.onToolCall?.(call)
+
       const tool = this.tools.get(call.name)
 
       if (!tool) {
-        results.push({
+        const errorResult = {
           toolCallId: call.id,
           content: `Error: Unknown tool '${call.name}'`,
           isError: true,
-        })
+        }
+        results.push(errorResult)
+        this.events.onToolResult?.(call, errorResult.content)
         continue
       }
 
       try {
         const content = await tool.execute(call.arguments, ctx)
         results.push({ toolCallId: call.id, content })
+        this.events.onToolResult?.(call, content)
       } catch (error: any) {
-        results.push({
+        const errorResult = {
           toolCallId: call.id,
           content: `Error: ${error.message}`,
           isError: true,
-        })
+        }
+        results.push(errorResult)
+        this.events.onToolResult?.(call, errorResult.content)
       }
     }
 

@@ -28,6 +28,15 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
   const [currentTool, setCurrentTool] = useState<{ name: string; args: string } | null>(null)
   const [contextUsage, setContextUsage] = useState({ used: 0, limit: 0, percentage: 0 })
   const messagesEndRef = useRef<number>(0)
+  const [pulseIndex, setPulseIndex] = useState(0)
+
+  // 颜色脉冲动画
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setPulseIndex(prev => (prev + 1) % 3)
+    }, 300)
+    return () => clearInterval(timer)
+  }, [])
 
   // 更新上下文使用情况
   const updateContextUsage = useCallback(() => {
@@ -75,7 +84,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
     // 设置事件回调
     const events: AgentEvents = {
       onThinking: () => {
-        setStreamingText("🤖 Thinking...")
+        // Don't set streaming text - let the animated "Thinking..." show
       },
       onTextDelta: (text) => {
         setStreamingText(prev => prev === "🤖 Thinking..." ? text : prev + text)
@@ -182,11 +191,18 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
               </Text>
             ) : (
               <Box>
-                <Text color="cyan">
-                  <Spinner type="dots" />
+                <Text>
+                  <Text color="cyan">
+                    <Spinner type="dots" />
+                  </Text>
+                  <Text> </Text>
+                  <Text color="cyan">Thinking</Text>
+                  {/* Pulsing dots: 浅色=亮 深色=暗 */}
+                  {/* State 0: 亮暗暗, State 1: 亮亮暗, State 2: 亮亮亮 */}
+                  <Text dimColor={false}>.</Text>
+                  <Text dimColor={pulseIndex === 0}>.</Text>
+                  <Text dimColor={pulseIndex < 2}>.</Text>
                 </Text>
-                <Text> </Text>
-                <Text dimColor>Thinking...</Text>
               </Box>
             )}
           </Box>
