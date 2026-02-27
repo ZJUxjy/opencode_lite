@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react"
 import { Box, Text, useInput, useApp } from "ink"
 import TextInput from "ink-text-input"
+import Spinner from "ink-spinner"
 import { Agent, type AgentEvents } from "./agent.js"
 
 interface Props {
@@ -172,12 +173,22 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
         ))}
 
         {/* 流式输出 */}
-        {streamingText && (
+        {(streamingText || isProcessing) && (
           <Box marginBottom={1}>
-            <Text>
-              {streamingText}
-              {isProcessing && <Text dimColor>▌</Text>}
-            </Text>
+            {streamingText ? (
+              <Text>
+                {streamingText}
+                {isProcessing && <Text dimColor>▌</Text>}
+              </Text>
+            ) : (
+              <Box>
+                <Text color="cyan">
+                  <Spinner type="dots" />
+                </Text>
+                {" "}
+                <Text dimColor>Thinking...</Text>
+              </Box>
+            )}
           </Box>
         )}
 
