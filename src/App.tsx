@@ -185,7 +185,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
                 <Text color="cyan">
                   <Spinner type="dots" />
                 </Text>
-                {" "}
+                <Text> </Text>
                 <Text dimColor>Thinking...</Text>
               </Box>
             )}
