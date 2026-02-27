@@ -15,6 +15,7 @@ interface Props {
 interface Message {
   role: "user" | "assistant" | "system"
   content: string
+  reasoning?: string  // 思考过程
   isStreaming?: boolean
   toolCall?: { name: string; args: string }
 }
@@ -25,6 +26,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
   const [input, setInput] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
   const [streamingText, setStreamingText] = useState("")
+  const [streamingReasoning, setStreamingReasoning] = useState("")  // 思考过程流式输出
   const [currentTool, setCurrentTool] = useState<{ name: string; args: string } | null>(null)
   const [contextUsage, setContextUsage] = useState({ used: 0, limit: 0, percentage: 0 })
   const messagesEndRef = useRef<number>(0)
@@ -79,12 +81,16 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
     setMessages(prev => [...prev, { role: "user", content: trimmed }])
     setIsProcessing(true)
     setStreamingText("")
+    setStreamingReasoning("")  // 重置思考过程
     setCurrentTool(null)
 
     // 设置事件回调
     const events: AgentEvents = {
       onThinking: () => {
         // Don't set streaming text - let the animated "Thinking..." show
+      },
+      onReasoningDelta: (text) => {
+        setStreamingReasoning(prev => prev + text)
       },
       onTextDelta: (text) => {
         setStreamingText(prev => prev === "🤖 Thinking..." ? text : prev + text)
@@ -99,11 +105,16 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
         }])
         setCurrentTool(null)
       },
-      onResponse: (content) => {
+      onResponse: (content, reasoning) => {
         if (content && streamingText !== "🤖 Thinking...") {
-          setMessages(prev => [...prev, { role: "assistant", content }])
+          setMessages(prev => [...prev, {
+            role: "assistant",
+            content,
+            reasoning: reasoning || streamingReasoning || undefined
+          }])
         }
         setStreamingText("")
+        setStreamingReasoning("")
       },
       onCompress: (before, after) => {
         setMessages(prev => [...prev, {
@@ -173,13 +184,31 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
               </Text>
             )}
             {msg.role === "assistant" && (
-              <Text>{msg.content}</Text>
+              <Box flexDirection="column">
+                {/* 显示思考过程 */}
+                {msg.reasoning && (
+                  <Text dimColor color="gray">
+                    💭 {msg.reasoning.slice(0, 200)}{msg.reasoning.length > 200 ? "..." : ""}
+                  </Text>
+                )}
+                <Text>{msg.content}</Text>
+              </Box>
             )}
             {msg.role === "system" && (
               <Text dimColor>{msg.content}</Text>
             )}
           </Box>
         ))}
+
+        {/* 思考过程流式输出 */}
+        {streamingReasoning && (
+          <Box marginBottom={1} flexDirection="column">
+            <Text dimColor italic>
+              💭 {streamingReasoning}
+              {isProcessing && <Text dimColor>▌</Text>}
+            </Text>
+          </Box>
+        )}
 
         {/* 流式输出 */}
         {(streamingText || isProcessing) && (

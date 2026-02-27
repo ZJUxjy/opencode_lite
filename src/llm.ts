@@ -10,12 +10,14 @@ export interface LLMConfig {
 
 export interface ChatResponse {
   content: string
+  reasoning?: string  // 思考过程
   toolCalls?: ToolCall[]
   finishReason?: string
 }
 
 export interface StreamCallbacks {
   onTextDelta?: (text: string) => void
+  onReasoningDelta?: (text: string) => void  // 思考过程增量
   onToolCall?: (toolCall: ToolCall) => void
 }
 
@@ -159,6 +161,7 @@ export class LLMClient {
     })
 
     let fullContent = ""
+    let fullReasoning = ""
     const toolCalls: ToolCall[] = []
 
     const streamResult = await result
@@ -169,6 +172,13 @@ export class LLMClient {
         case "text-delta":
           fullContent += delta.textDelta
           callbacks.onTextDelta?.(delta.textDelta)
+          break
+
+        case "reasoning":
+          // 处理思考过程增量（MiniMax、DeepSeek 等模型支持）
+          // AI SDK 使用 type: 'reasoning' + textDelta 属性
+          fullReasoning += delta.textDelta
+          callbacks.onReasoningDelta?.(delta.textDelta)
           break
 
         case "tool-call":
@@ -188,6 +198,7 @@ export class LLMClient {
 
     return {
       content: fullContent || (await streamResult.text),
+      reasoning: fullReasoning || undefined,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       finishReason: await streamResult.finishReason,
     }
@@ -200,6 +211,7 @@ export class LLMClient {
     let total = 0
     for (const msg of messages) {
       total += Math.ceil((msg.content?.length || 0) / 4)
+      total += Math.ceil((msg.reasoning?.length || 0) / 4)  // 包含思考过程
       if (msg.toolCalls) {
         total += Math.ceil(JSON.stringify(msg.toolCalls).length / 4)
       }

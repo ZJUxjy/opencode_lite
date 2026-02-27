@@ -18,6 +18,7 @@ export interface Context {
 export interface Message {
   role: "user" | "assistant"
   content: string
+  reasoning?: string  // 思考过程（MiniMax、DeepSeek 等模型支持）
   toolCalls?: ToolCall[]
   toolResults?: ToolResult[]
 }
