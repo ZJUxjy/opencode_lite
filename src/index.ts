@@ -16,6 +16,8 @@ program
   .option("--base-url <url>", "API base URL (overrides ANTHROPIC_BASE_URL)")
   .option("-d, --directory <dir>", "Working directory", process.cwd())
   .option("-s, --session <id>", "Session ID", Date.now().toString())
+  .option("--no-stream", "Disable streaming output")
+  .option("--max-tokens <number>", "Max context tokens before compression", "60000")
   .option("--list-sessions", "List all sessions")
   .action(async (options) => {
     const dbPath = path.join(os.homedir(), ".lite-opencode", "history.db")
@@ -36,6 +38,8 @@ program
         model: options.model,
         baseURL: options.baseUrl,
       },
+      enableStream: options.stream !== false,
+      maxContextTokens: parseInt(options.maxTokens, 10),
     })
 
     // 显示当前配置
@@ -47,6 +51,8 @@ program
     console.log(`Model: ${model}`)
     console.log(`Session: ${options.session}`)
     console.log(`Working directory: ${options.directory}`)
+    console.log(`Streaming: ${options.stream !== false ? "enabled" : "disabled"}`)
+    console.log(`Max context tokens: ${options.maxTokens}`)
     console.log("\nType your message and press Enter. Type /exit to quit.\n")
 
     // REPL 循环
