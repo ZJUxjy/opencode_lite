@@ -6,6 +6,18 @@ import * as readline from "readline"
 import * as path from "path"
 import * as os from "os"
 
+// ANSI escape codes
+const ANSI = {
+  clearLine: "\x1b[2K",
+  moveUp: (n: number) => `\x1b[${n}A`,
+  moveToStart: "\x1b[0G",
+  dim: "\x1b[2m",
+  reset: "\x1b[0m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  red: "\x1b[31m",
+}
+
 const program = new Command()
 
 program
@@ -55,14 +67,36 @@ program
     console.log(`Compression threshold: ${Math.round(parseFloat(options.compressionThreshold) * 100)}%`)
     console.log("\nType your message and press Enter. Type /exit to quit.\n")
 
+    // 格式化上下文使用情况
+    const formatContextUsage = (usage: { used: number; limit: number; percentage: number }): string => {
+      const percent = Math.round(usage.percentage * 100)
+      let color = ANSI.green
+      if (percent >= 80) color = ANSI.yellow
+      if (percent >= 92) color = ANSI.red
+
+      const usedK = (usage.used / 1000).toFixed(1)
+      const limitK = (usage.limit / 1000).toFixed(0)
+
+      return `${color}[${percent}%]${ANSI.reset} ${ANSI.dim}${usedK}K/${limitK}K${ANSI.reset}`
+    }
+
     // REPL 循环
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
     })
 
+    // 自定义 prompt 函数，带状态栏
+    const promptWithStatus = (callback: (input: string) => void) => {
+      const usage = agent.getContextUsage()
+      const statusText = formatContextUsage(usage)
+
+      // 显示带状态栏的提示符
+      rl.question(`[${statusText}] > `, callback)
+    }
+
     const prompt = () => {
-      rl.question("\n> ", async (input) => {
+      promptWithStatus(async (input) => {
         const trimmed = input.trim()
 
         // 命令处理
@@ -81,7 +115,7 @@ program
 
         if (trimmed === "/context") {
           const usage = agent.getContextUsage()
-          console.log(`\nContext Usage: ${usage.used}/${usage.limit} tokens (${Math.round(usage.percentage * 100)}%)`)
+          console.log(`Context Usage: ${usage.used}/${usage.limit} tokens (${Math.round(usage.percentage * 100)}%)`)
           prompt()
           return
         }
@@ -91,7 +125,7 @@ program
 Commands:
   /exit, /quit  - Exit the program
   /clear        - Clear current session
-  /context      - Show context usage
+  /context      - Show detailed context usage
   /help         - Show this help
           `)
           prompt()

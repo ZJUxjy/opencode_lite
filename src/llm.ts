@@ -1,6 +1,6 @@
 import { generateText, streamText, CoreMessage, Tool } from "ai"
 import { createAnthropic } from "@ai-sdk/anthropic"
-import type { Message, ToolCall, ToolResult } from "./types.js"
+import type { Message, ToolCall } from "./types.js"
 
 export interface LLMConfig {
   model?: string
@@ -123,7 +123,7 @@ export class LLMClient {
       model: this.model,
       messages: coreMessages,
       tools: toolDefs,
-      maxSteps: 10,
+      maxSteps: 1,  // 单步执行，工具调用由 agent 循环处理
     })
 
     return {
@@ -152,14 +152,16 @@ export class LLMClient {
       model: this.model,
       messages: coreMessages,
       tools: toolDefs,
-      maxSteps: 10,
+      maxSteps: 1,  // 单步执行，工具调用由 agent 循环处理
     })
 
     let fullContent = ""
     const toolCalls: ToolCall[] = []
 
+    const streamResult = await result
+
     // 处理流式响应
-    for await (const delta of (await result).fullStream) {
+    for await (const delta of streamResult.fullStream) {
       switch (delta.type) {
         case "text-delta":
           fullContent += delta.textDelta
@@ -178,11 +180,10 @@ export class LLMClient {
       }
     }
 
-    const finalResult = await (await result)
     return {
-      content: fullContent || (await finalResult.text),
+      content: fullContent || (await streamResult.text),
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-      finishReason: await finalResult.finishReason,
+      finishReason: await streamResult.finishReason,
     }
   }
 
