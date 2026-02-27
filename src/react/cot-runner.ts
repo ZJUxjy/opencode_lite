@@ -4,6 +4,10 @@
  * 使用 ReAct (Reasoning + Acting) 模式
  *
  * 参考: dify cot_agent_runner.py
+ *
+ * Phase 3 增强:
+ * - 思考过程持久化支持
+ * - 会话恢复能力
  */
 
 import type { Message, ToolCall, ToolDefinition, Context } from "../types.js"
@@ -12,6 +16,7 @@ import { LLMClient } from "../llm.js"
 import { ToolRegistry } from "../tools/index.js"
 import { ReActParser } from "./parser.js"
 import { ScratchpadManager } from "./scratchpad.js"
+import { ThoughtPersistence } from "./persistence.js"
 import { LoopDetectionService } from "../loopDetection.js"
 import { PolicyEngine } from "../policy.js"
 
@@ -27,6 +32,8 @@ export interface CoTRunnerConfig {
   cwd?: string
   /** 停止词 */
   stopWords?: string[]
+  /** 会话 ID（用于持久化） */
+  sessionId?: string
 }
 
 /**
@@ -46,9 +53,12 @@ export class CoTRunner implements Runner {
   private scratchpad: ScratchpadManager
   private loopDetection: LoopDetectionService
   private policyEngine: PolicyEngine
+  private persistence: ThoughtPersistence | null = null
   private config: CoTRunnerConfig
   private events: ReActEvents = {}
   private cwd: string
+  private sessionId: string | null = null
+  private unitPosition: number = 0  // 用于持久化的位置计数
 
   constructor(
     llm: LLMClient,
@@ -69,6 +79,54 @@ export class CoTRunner implements Runner {
       ...config,
     }
     this.cwd = this.config.cwd || process.cwd()
+    this.sessionId = config.sessionId || null
+  }
+
+  /**
+   * 设置持久化管理器
+   */
+  setPersistence(persistence: ThoughtPersistence): void {
+    this.persistence = persistence
+  }
+
+  /**
+   * 设置会话 ID
+   */
+  setSessionId(sessionId: string): void {
+    this.sessionId = sessionId
+  }
+
+  /**
+   * 从历史恢复思考过程
+   */
+  restoreFromHistory(): boolean {
+    if (!this.persistence || !this.sessionId) {
+      return false
+    }
+
+    const records = this.persistence.get(this.sessionId)
+    if (records.length === 0) {
+      return false
+    }
+
+    // 转换为 ScratchpadUnit 并恢复
+    const units = this.persistence.toScratchpadUnits(records)
+
+    // 使用 ScratchpadManager 的 deserialize 方法
+    this.scratchpad = ScratchpadManager.deserialize(
+      units.map(unit => ({
+        thought: unit.thought,
+        actionName: unit.action?.name || null,
+        actionInput: unit.action ? JSON.stringify(unit.action.input) : "",
+        actionStr: unit.actionStr,
+        observation: unit.observation,
+      }))
+    )
+
+    // 更新位置计数
+    this.unitPosition = records.length
+
+    return true
   }
 
   /**
@@ -93,9 +151,9 @@ export class CoTRunner implements Runner {
     tools: ToolDefinition[],
     systemPrompt: string
   ): Promise<string> {
-    // 重置状态
-    this.scratchpad.reset()
+    // 重置状态（但不重置 scratchpad，可能已从历史恢复）
     this.loopDetection.reset()
+    this.unitPosition = this.scratchpad.length  // 从当前位置开始
 
     // 构建 ReAct Prompt
     const reactPrompt = this.buildReActPrompt(tools, systemPrompt)
@@ -156,6 +214,9 @@ export class CoTRunner implements Runner {
         this.scratchpad.setAction(action)
         this.scratchpad.completeCurrentUnit()
 
+        // 持久化最终答案单元
+        this.saveCurrentUnit()
+
         const finalAnswer = typeof action.input === "string"
           ? action.input
           : JSON.stringify(action.input)
@@ -174,6 +235,9 @@ export class CoTRunner implements Runner {
         const observation = `Permission denied: ${policyResult.reason}`
         this.scratchpad.addObservation(observation)
         this.events.onObservation?.(observation)
+
+        // 持久化被拒绝的单元
+        this.saveCurrentUnit()
         continue
       }
 
@@ -182,7 +246,10 @@ export class CoTRunner implements Runner {
       this.scratchpad.addObservation(observation)
       this.events.onObservation?.(observation)
 
-      // 10. 循环检测
+      // 10. 持久化完成的思考单元
+      this.saveCurrentUnit()
+
+      // 11. 循环检测
       const toolLoopResult = this.loopDetection.checkToolCallLoop({
         id: `cot-${iterations}`,
         name: action.name,
@@ -195,6 +262,23 @@ export class CoTRunner implements Runner {
     }
 
     return "Maximum iterations reached"
+  }
+
+  /**
+   * 保存当前完成的思考单元
+   */
+  private saveCurrentUnit(): void {
+    if (!this.persistence || !this.sessionId) {
+      return
+    }
+
+    const units = this.scratchpad.getCompletedUnits()
+    const lastUnit = units[units.length - 1]
+
+    if (lastUnit) {
+      this.persistence.save(this.sessionId, lastUnit, this.unitPosition)
+      this.unitPosition++
+    }
   }
 
   /**
@@ -321,11 +405,30 @@ IMPORTANT:
   }
 
   /**
+   * 获取持久化管理器
+   */
+  getPersistence(): ThoughtPersistence | null {
+    return this.persistence
+  }
+
+  /**
    * 重置状态
    */
   reset(): void {
     this.scratchpad.reset()
     this.loopDetection.reset()
     this.parser.reset()
+    this.unitPosition = 0
+  }
+
+  /**
+   * 完全重置（包括持久化数据）
+   */
+  async fullReset(): Promise<void> {
+    this.reset()
+
+    if (this.persistence && this.sessionId) {
+      this.persistence.clear(this.sessionId)
+    }
   }
 }

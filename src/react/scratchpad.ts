@@ -4,9 +4,24 @@
  * 管理 ReAct 循环中的思考过程 (Thought → Action → Observation)
  *
  * 参考: dify AgentScratchpadUnit
+ *
+ * Phase 3 增强:
+ * - 序列化/反序列化支持
+ * - 从持久化数据恢复
  */
 
 import type { Action, ScratchpadUnit } from "./types.js"
+
+/**
+ * 可序列化的思考单元（用于持久化）
+ */
+export interface SerializableUnit {
+  thought: string
+  actionName: string | null
+  actionInput: string  // JSON string
+  actionStr: string
+  observation: string | null
+}
 
 /**
  * Scratchpad 管理器
@@ -128,6 +143,13 @@ export class ScratchpadManager {
   }
 
   /**
+   * 获取已完成的单元（不包括当前进行中的）
+   */
+  getCompletedUnits(): ScratchpadUnit[] {
+    return [...this.units]
+  }
+
+  /**
    * 获取最后一个单元
    */
   getLastUnit(): ScratchpadUnit | null {
@@ -190,6 +212,59 @@ export class ScratchpadManager {
   reset(): void {
     this.units = []
     this.currentUnit = null
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // Phase 3: 序列化/反序列化支持
+  // ═══════════════════════════════════════════════════════
+
+  /**
+   * 序列化为可存储的格式
+   */
+  serialize(): SerializableUnit[] {
+    const allUnits = this.getUnits()
+    return allUnits.map(unit => ({
+      thought: unit.thought,
+      actionName: unit.action?.name || null,
+      actionInput: unit.action ? JSON.stringify(unit.action.input) : "",
+      actionStr: unit.actionStr,
+      observation: unit.observation,
+    }))
+  }
+
+  /**
+   * 从序列化数据恢复
+   */
+  static deserialize(data: SerializableUnit[]): ScratchpadManager {
+    const manager = new ScratchpadManager()
+    for (const item of data) {
+      const unit: ScratchpadUnit = {
+        thought: item.thought,
+        action: item.actionName ? {
+          name: item.actionName,
+          input: item.actionInput ? JSON.parse(item.actionInput) : {},
+        } : null,
+        actionStr: item.actionStr,
+        observation: item.observation,
+      }
+      manager.units.push(unit)
+    }
+    return manager
+  }
+
+  /**
+   * 导出为 JSON 字符串
+   */
+  toJSON(): string {
+    return JSON.stringify(this.serialize())
+  }
+
+  /**
+   * 从 JSON 字符串导入
+   */
+  static fromJSON(json: string): ScratchpadManager {
+    const data = JSON.parse(json) as SerializableUnit[]
+    return ScratchpadManager.deserialize(data)
   }
 
   /**

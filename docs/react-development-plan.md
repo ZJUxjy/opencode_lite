@@ -179,20 +179,22 @@
 - ✅ 健壮的流式 ReAct 解析器 (`src/react/parser.ts`)
 - ✅ 完整的测试用例 (`src/react/__tests__/parser.test.ts`)
 
-### Phase 3: 思考过程持久化 (2-3 天)
+### ✅ Phase 3: 思考过程持久化 (已完成)
 
 **目标**: 完整记录和恢复思考链
 
-| 任务 | 说明 | 优先级 |
-|------|------|--------|
-| 3.1 ScratchpadManager | 管理思考过程单元 | P0 |
-| 3.2 ThoughtPersistence | 数据库存储 | P0 |
-| 3.3 历史恢复 | 从数据库重建消息历史 | P0 |
-| 3.4 前端展示 | UI 展示思考过程 | P2 |
+| 任务 | 说明 | 状态 |
+|------|------|------|
+| 3.1 ScratchpadManager | 管理思考过程单元 + 序列化支持 | ✅ |
+| 3.2 ThoughtPersistence | 数据库存储层 | ✅ |
+| 3.3 历史恢复 | 从数据库重建消息历史 | ✅ |
+| 3.4 CoTRunner 集成 | 持久化机制集成到 CoT 循环 | ✅ |
+| 3.5 前端展示 | UI 展示思考过程 | ⏳ (P2) |
 
 **交付物**:
-- 完整的思考过程存储
-- 历史恢复机制
+- ✅ 增强的 ScratchpadManager (`src/react/scratchpad.ts`)
+- ✅ ThoughtPersistence 持久化层 (`src/react/persistence.ts`)
+- ✅ CoTRunner 持久化集成 (`src/react/cot-runner.ts`)
 
 ### Phase 4: 高级特性 (3-5 天)
 
