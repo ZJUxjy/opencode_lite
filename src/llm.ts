@@ -1,17 +1,29 @@
 import { generateText, CoreMessage, Tool } from "ai"
-import { openai } from "@ai-sdk/openai"
-import { anthropic } from "@ai-sdk/anthropic"
-import type { Message, ToolCall } from "./types.js"
+import { createAnthropic } from "@ai-sdk/anthropic"
+import type { Message } from "./types.js"
+
+export interface LLMConfig {
+  model?: string
+  baseURL?: string
+  apiKey?: string
+}
 
 export class LLMClient {
   private model
 
-  constructor(provider: "openai" | "anthropic", modelId: string) {
-    if (provider === "openai") {
-      this.model = openai(modelId)
-    } else {
-      this.model = anthropic(modelId)
-    }
+  constructor(config: LLMConfig = {}) {
+    // 优先级: 传入配置 > 环境变量 > 默认值
+    const baseURL = config.baseURL || process.env.ANTHROPIC_BASE_URL
+    const apiKey = config.apiKey || process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN
+    const modelId = config.model || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514"
+
+    // 创建 Anthropic 客户端，支持自定义 base URL
+    const provider = createAnthropic({
+      ...(baseURL && { baseURL }),
+      ...(apiKey && { apiKey }),
+    })
+
+    this.model = provider(modelId)
   }
 
   async chat(

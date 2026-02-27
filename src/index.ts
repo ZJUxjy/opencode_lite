@@ -12,8 +12,8 @@ program
   .name("lite-opencode")
   .description("Lightweight AI coding agent")
   .version("1.0.0")
-  .option("-p, --provider <provider>", "LLM provider (openai/anthropic)", "openai")
-  .option("-m, --model <model>", "Model ID", "gpt-4o")
+  .option("-m, --model <model>", "Model ID (overrides ANTHROPIC_MODEL)")
+  .option("--base-url <url>", "API base URL (overrides ANTHROPIC_BASE_URL)")
   .option("-d, --directory <dir>", "Working directory", process.cwd())
   .option("-s, --session <id>", "Session ID", Date.now().toString())
   .option("--list-sessions", "List all sessions")
@@ -30,15 +30,21 @@ program
     }
 
     const agent = new Agent(options.session, {
-      provider: options.provider,
-      model: options.model,
       cwd: options.directory,
       dbPath,
+      llm: {
+        model: options.model,
+        baseURL: options.baseUrl,
+      },
     })
 
+    // 显示当前配置
+    const baseURL = options.baseUrl || process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"
+    const model = options.model || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514"
+
     console.log("Lite OpenCode v1.0.0")
-    console.log(`Provider: ${options.provider}`)
-    console.log(`Model: ${options.model}`)
+    console.log(`Base URL: ${baseURL}`)
+    console.log(`Model: ${model}`)
     console.log(`Session: ${options.session}`)
     console.log(`Working directory: ${options.directory}`)
     console.log("\nType your message and press Enter. Type /exit to quit.\n")

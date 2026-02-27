@@ -1,7 +1,13 @@
 import type { Message, ToolCall, Context } from "./types.js"
-import { LLMClient } from "./llm.js"
+import { LLMClient, type LLMConfig } from "./llm.js"
 import { ToolRegistry } from "./tools/index.js"
 import { MessageStore } from "./store.js"
+
+export interface AgentConfig {
+  cwd: string
+  dbPath: string
+  llm?: LLMConfig
+}
 
 export class Agent {
   private llm: LLMClient
@@ -10,8 +16,8 @@ export class Agent {
   private sessionId: string
   private cwd: string
 
-  constructor(sessionId: string, config: { provider: "openai" | "anthropic"; model: string; cwd: string; dbPath: string }) {
-    this.llm = new LLMClient(config.provider, config.model)
+  constructor(sessionId: string, config: AgentConfig) {
+    this.llm = new LLMClient(config.llm)
     this.tools = new ToolRegistry()
     this.store = new MessageStore(config.dbPath)
     this.sessionId = sessionId
