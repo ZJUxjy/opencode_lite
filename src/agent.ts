@@ -8,7 +8,16 @@ export interface AgentConfig {
   dbPath: string
   llm?: LLMConfig
   enableStream?: boolean
-  compressionThreshold?: number  // 0-1, 默认 0.92
+  compressionThreshold?: number
+}
+
+export interface AgentEvents {
+  onThinking?: () => void
+  onTextDelta?: (text: string) => void
+  onToolCall?: (toolCall: ToolCall) => void
+  onToolResult?: (toolCall: ToolCall, result: string) => void
+  onResponse?: (content: string) => void
+  onCompress?: (beforeTokens: number, afterTokens: number) => void
 }
 
 export class Agent {
@@ -19,6 +28,7 @@ export class Agent {
   private cwd: string
   private enableStream: boolean
   private compressionThreshold: number
+  private events: AgentEvents = {}
 
   constructor(sessionId: string, config: AgentConfig) {
     this.llm = new LLMClient(config.llm)
@@ -28,6 +38,10 @@ export class Agent {
     this.cwd = config.cwd
     this.enableStream = config.enableStream ?? true
     this.compressionThreshold = config.compressionThreshold ?? 0.92
+  }
+
+  setEvents(events: AgentEvents) {
+    this.events = events
   }
 
   async run(userInput: string): Promise<string> {
@@ -40,32 +54,26 @@ export class Agent {
     // 2. 加载历史消息
     let messages = this.store.get(this.sessionId)
 
-    // 3. 上下文压缩（如果超过阈值）
+    // 3. 上下文压缩
+    const beforeTokens = this.llm.estimateTokens(messages)
     messages = await this.llm.compressContext(messages, this.compressionThreshold)
+    const afterTokens = this.llm.estimateTokens(messages)
+    if (beforeTokens !== afterTokens) {
+      this.events.onCompress?.(beforeTokens, afterTokens)
+    }
 
     // 4. 循环调用 LLM
     while (true) {
-      console.log("\n🤖 Thinking...")
+      this.events.onThinking?.()
 
       let response
       if (this.enableStream) {
-        // 流式输出
-        process.stdout.write("\n")
         response = await this.llm.chatStream(messages, this.tools.getDefinitions(), {
-          onTextDelta: (text) => {
-            process.stdout.write(text)
-          },
-          onToolCall: (toolCall) => {
-            console.log(`\n  🔧 ${toolCall.name}(${JSON.stringify(toolCall.arguments)})`)
-          },
+          onTextDelta: (text) => this.events.onTextDelta?.(text),
+          onToolCall: (toolCall) => this.events.onToolCall?.(toolCall),
         })
-        console.log() // 换行
       } else {
-        // 非流式输出
         response = await this.llm.chat(messages, this.tools.getDefinitions())
-        if (response.content) {
-          console.log(`\n${response.content}`)
-        }
       }
 
       // 5. 添加 assistant 消息
@@ -77,15 +85,25 @@ export class Agent {
       messages.push(assistantMsg)
       this.store.add(this.sessionId, assistantMsg)
 
-      // 6. 没有工具调用，结束
+      // 6. 通知响应完成
+      if (response.content) {
+        this.events.onResponse?.(response.content)
+      }
+
+      // 7. 没有工具调用，结束
       if (!response.toolCalls?.length) {
         return response.content
       }
 
-      // 7. 执行工具
-      const toolResults = await this.executeTools(response.toolCalls)
+      // 8. 执行工具
+      for (const call of response.toolCalls) {
+        this.events.onToolCall?.(call)
+        const result = await this.executeTool(call)
+        this.events.onToolResult?.(call, result)
+      }
 
-      // 8. 添加工具结果
+      // 9. 添加工具结果
+      const toolResults = await this.executeTools(response.toolCalls)
       const resultMsg: Message = {
         role: "user",
         content: "",
@@ -94,8 +112,27 @@ export class Agent {
       messages.push(resultMsg)
       this.store.add(this.sessionId, resultMsg)
 
-      // 9. 再次检查上下文是否需要压缩
+      // 10. 再次检查压缩
+      const beforeTokens2 = this.llm.estimateTokens(messages)
       messages = await this.llm.compressContext(messages, this.compressionThreshold)
+      const afterTokens2 = this.llm.estimateTokens(messages)
+      if (beforeTokens2 !== afterTokens2) {
+        this.events.onCompress?.(beforeTokens2, afterTokens2)
+      }
+    }
+  }
+
+  private async executeTool(call: ToolCall): Promise<string> {
+    const tool = this.tools.get(call.name)
+    if (!tool) {
+      return `Error: Unknown tool '${call.name}'`
+    }
+
+    const ctx: Context = { cwd: this.cwd, messages: [] }
+    try {
+      return await tool.execute(call.arguments, ctx)
+    } catch (error: any) {
+      return `Error: ${error.message}`
     }
   }
 
@@ -107,7 +144,6 @@ export class Agent {
       const tool = this.tools.get(call.name)
 
       if (!tool) {
-        console.log(`  ❌ Unknown tool: ${call.name}`)
         results.push({
           toolCallId: call.id,
           content: `Error: Unknown tool '${call.name}'`,
@@ -116,17 +152,10 @@ export class Agent {
         continue
       }
 
-      // 流式模式下工具调用已在回调中打印
-      if (!this.enableStream) {
-        console.log(`  🔧 ${call.name}(${JSON.stringify(call.arguments)})`)
-      }
-
       try {
         const content = await tool.execute(call.arguments, ctx)
-        console.log(`  ✅ Done`)
         results.push({ toolCallId: call.id, content })
       } catch (error: any) {
-        console.log(`  ❌ Error: ${error.message}`)
         results.push({
           toolCallId: call.id,
           content: `Error: ${error.message}`,
@@ -138,17 +167,14 @@ export class Agent {
     return results
   }
 
-  // 获取历史会话
   getHistory(): Message[] {
     return this.store.get(this.sessionId)
   }
 
-  // 清除当前会话
   clearSession() {
     this.store.clear(this.sessionId)
   }
 
-  // 获取上下文使用情况
   getContextUsage() {
     const messages = this.store.get(this.sessionId)
     return this.llm.getContextUsage(messages)
