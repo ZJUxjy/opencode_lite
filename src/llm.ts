@@ -112,17 +112,26 @@ export class LLMClient {
   }
 
   /**
+   * 获取当前模型 ID
+   */
+  getModelId(): string {
+    return this.modelId
+  }
+
+  /**
    * 非流式调用（保留兼容性）
    */
   async chat(
     messages: Message[],
-    tools: Array<{ name: string; description: string; parameters: any }>
+    tools: Array<{ name: string; description: string; parameters: any }>,
+    systemPrompt?: string
   ): Promise<ChatResponse> {
     const coreMessages = this.convertMessages(messages)
     const toolDefs = this.convertTools(tools)
 
     const result = await generateText({
       model: this.model,
+      system: systemPrompt,
       messages: coreMessages,
       tools: toolDefs,
       maxSteps: 1,  // 单步执行，工具调用由 agent 循环处理
@@ -146,13 +155,15 @@ export class LLMClient {
   async chatStream(
     messages: Message[],
     tools: Array<{ name: string; description: string; parameters: any }>,
-    callbacks: StreamCallbacks = {}
+    callbacks: StreamCallbacks = {},
+    systemPrompt?: string
   ): Promise<ChatResponse> {
     const coreMessages = this.convertMessages(messages)
     const toolDefs = this.convertTools(tools)
 
     const result = streamText({
       model: this.model,
+      system: systemPrompt,
       messages: coreMessages,
       tools: toolDefs,
       maxSteps: 1,  // 单步执行，工具调用由 agent 循环处理
@@ -232,10 +243,14 @@ export class LLMClient {
 
   /**
    * 压缩上下文：基于模型容量百分比触发
+   * @param messages - 要压缩的消息列表
+   * @param threshold - 压缩阈值（0-1）
+   * @param compactionPrompt - 可选的自定义压缩提示
    */
   async compressContext(
     messages: Message[],
-    threshold: number = COMPRESSION_THRESHOLD
+    threshold: number = COMPRESSION_THRESHOLD,
+    compactionPrompt?: string
   ): Promise<Message[]> {
     const { used, limit, percentage } = this.getContextUsage(messages)
 
@@ -282,8 +297,8 @@ export class LLMClient {
         model: fastModel,
         messages: [{
           role: "user",
-          content: `Please summarize the following conversation history concisely.
-Keep key information, decisions, file changes, and context needed for continuing the conversation.
+          content: `${compactionPrompt || `Please summarize the following conversation history concisely.
+Keep key information, decisions, file changes, and context needed for continuing the conversation.`}
 
 ${summaryContent}
 

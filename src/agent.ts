@@ -4,6 +4,7 @@ import { ToolRegistry } from "./tools/index.js"
 import { MessageStore } from "./store.js"
 import { LoopDetectionService, type LoopDetectionConfig } from "./loopDetection.js"
 import { PolicyEngine, type PolicyConfig, type PolicyDecision, type PolicyResult } from "./policy.js"
+import { PromptProvider } from "./prompts/index.js"
 
 export interface AgentConfig {
   cwd: string
@@ -34,6 +35,7 @@ export class Agent {
   private store: MessageStore
   private loopDetection: LoopDetectionService
   private policyEngine: PolicyEngine
+  private promptProvider: PromptProvider
   private sessionId: string
   private cwd: string
   private enableStream: boolean
@@ -46,6 +48,7 @@ export class Agent {
     this.store = new MessageStore(config.dbPath)
     this.loopDetection = new LoopDetectionService(config.loopDetection)
     this.policyEngine = new PolicyEngine(config.policy)
+    this.promptProvider = new PromptProvider()
     this.sessionId = sessionId
     this.cwd = config.cwd
     this.enableStream = config.enableStream ?? true
@@ -68,7 +71,11 @@ export class Agent {
 
     // 3. 上下文压缩
     const beforeTokens = this.llm.estimateTokens(messages)
-    messages = await this.llm.compressContext(messages, this.compressionThreshold)
+    messages = await this.llm.compressContext(
+      messages,
+      this.compressionThreshold,
+      this.promptProvider.getCompactionPrompt()
+    )
     const afterTokens = this.llm.estimateTokens(messages)
     if (beforeTokens !== afterTokens) {
       this.events.onCompress?.(beforeTokens, afterTokens)
@@ -78,6 +85,15 @@ export class Agent {
     let iterations = 0
     const MAX_ITERATIONS = 50  // 防止无限循环
 
+    // 生成 system prompt（在循环外只生成一次）
+    const systemPrompt = this.promptProvider.getSystemPrompt({
+      model: this.llm.getModelId(),
+      cwd: this.cwd,
+      platform: process.platform,
+      tools: this.tools.getDefinitions(),
+      date: new Date(),
+    })
+
     while (iterations < MAX_ITERATIONS) {
       iterations++
       this.loopDetection.incrementTurn()
@@ -86,13 +102,18 @@ export class Agent {
       let response
       try {
         if (this.enableStream) {
-          response = await this.llm.chatStream(messages, this.tools.getDefinitions(), {
-            onTextDelta: (text) => this.events.onTextDelta?.(text),
-            onReasoningDelta: (text) => this.events.onReasoningDelta?.(text),
-            onToolCall: (toolCall) => this.events.onToolCall?.(toolCall),
-          })
+          response = await this.llm.chatStream(
+            messages,
+            this.tools.getDefinitions(),
+            {
+              onTextDelta: (text) => this.events.onTextDelta?.(text),
+              onReasoningDelta: (text) => this.events.onReasoningDelta?.(text),
+              onToolCall: (toolCall) => this.events.onToolCall?.(toolCall),
+            },
+            systemPrompt
+          )
         } else {
-          response = await this.llm.chat(messages, this.tools.getDefinitions())
+          response = await this.llm.chat(messages, this.tools.getDefinitions(), systemPrompt)
         }
       } catch (error: any) {
         // LLM 调用失败，返回错误
@@ -158,7 +179,11 @@ export class Agent {
 
       // 10. 再次检查压缩
       const beforeTokens2 = this.llm.estimateTokens(messages)
-      messages = await this.llm.compressContext(messages, this.compressionThreshold)
+      messages = await this.llm.compressContext(
+        messages,
+        this.compressionThreshold,
+        this.promptProvider.getCompactionPrompt()
+      )
       const afterTokens2 = this.llm.estimateTokens(messages)
       if (beforeTokens2 !== afterTokens2) {
         this.events.onCompress?.(beforeTokens2, afterTokens2)
