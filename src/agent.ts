@@ -8,7 +8,7 @@ export interface AgentConfig {
   dbPath: string
   llm?: LLMConfig
   enableStream?: boolean
-  maxContextTokens?: number
+  compressionThreshold?: number  // 0-1, 默认 0.92
 }
 
 export class Agent {
@@ -18,7 +18,7 @@ export class Agent {
   private sessionId: string
   private cwd: string
   private enableStream: boolean
-  private maxContextTokens: number
+  private compressionThreshold: number
 
   constructor(sessionId: string, config: AgentConfig) {
     this.llm = new LLMClient(config.llm)
@@ -27,7 +27,7 @@ export class Agent {
     this.sessionId = sessionId
     this.cwd = config.cwd
     this.enableStream = config.enableStream ?? true
-    this.maxContextTokens = config.maxContextTokens ?? 60000
+    this.compressionThreshold = config.compressionThreshold ?? 0.92
   }
 
   async run(userInput: string): Promise<string> {
@@ -40,8 +40,8 @@ export class Agent {
     // 2. 加载历史消息
     let messages = this.store.get(this.sessionId)
 
-    // 3. 上下文压缩（如果超过限制）
-    messages = await this.llm.compressContext(messages, this.maxContextTokens)
+    // 3. 上下文压缩（如果超过阈值）
+    messages = await this.llm.compressContext(messages, this.compressionThreshold)
 
     // 4. 循环调用 LLM
     while (true) {
@@ -95,7 +95,7 @@ export class Agent {
       this.store.add(this.sessionId, resultMsg)
 
       // 9. 再次检查上下文是否需要压缩
-      messages = await this.llm.compressContext(messages, this.maxContextTokens)
+      messages = await this.llm.compressContext(messages, this.compressionThreshold)
     }
   }
 
@@ -146,5 +146,11 @@ export class Agent {
   // 清除当前会话
   clearSession() {
     this.store.clear(this.sessionId)
+  }
+
+  // 获取上下文使用情况
+  getContextUsage() {
+    const messages = this.store.get(this.sessionId)
+    return this.llm.getContextUsage(messages)
   }
 }

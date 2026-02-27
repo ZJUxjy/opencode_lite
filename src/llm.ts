@@ -19,15 +19,58 @@ export interface StreamCallbacks {
   onToolCall?: (toolCall: ToolCall) => void
 }
 
+// 模型上下文容量映射 (tokens)
+const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+  // Claude 4 系列
+  "claude-4-opus": 200000,
+  "claude-4-sonnet": 200000,
+  "claude-opus-4": 200000,
+  "claude-sonnet-4": 200000,
+
+  // Claude 3.7 / 3.5 系列
+  "claude-3-7-sonnet": 200000,
+  "claude-3-5-sonnet": 200000,
+  "claude-3-5-haiku": 200000,
+
+  // Claude 3 系列
+  "claude-3-opus": 200000,
+  "claude-3-sonnet": 200000,
+  "claude-3-haiku": 200000,
+
+  // MiniMax
+  "minimax-m2.5": 1000000,
+  "minimax-m1": 1000000,
+
+  // Qwen
+  "qwen3-coder-plus": 128000,
+  "qwen3-max": 128000,
+  "qwen2.5": 128000,
+
+  // DeepSeek
+  "deepseek-chat": 64000,
+  "deepseek-coder": 16000,
+
+  // GLM
+  "glm-4": 128000,
+  "glm-4.7": 128000,
+
+  // 默认值
+  "default": 200000,
+}
+
+// 压缩阈值 (模型容量的百分比)
+const COMPRESSION_THRESHOLD = 0.92  // 92%
+
 export class LLMClient {
   private model
   private provider
+  private modelId: string
 
   constructor(config: LLMConfig = {}) {
     // 优先级: 传入配置 > 环境变量 > 默认值
     const baseURL = config.baseURL || process.env.ANTHROPIC_BASE_URL
     const apiKey = config.apiKey || process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN
-    const modelId = config.model || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514"
+    this.modelId = config.model || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514"
 
     // 创建 Anthropic 客户端，支持自定义 base URL
     this.provider = createAnthropic({
@@ -35,7 +78,35 @@ export class LLMClient {
       ...(apiKey && { apiKey }),
     })
 
-    this.model = this.provider(modelId)
+    this.model = this.provider(this.modelId)
+  }
+
+  /**
+   * 获取当前模型的上下文容量
+   */
+  getContextLimit(): number {
+    // 尝试精确匹配
+    const normalizedId = this.modelId.toLowerCase()
+
+    for (const [key, limit] of Object.entries(MODEL_CONTEXT_LIMITS)) {
+      if (normalizedId.includes(key.toLowerCase())) {
+        return limit
+      }
+    }
+
+    // 返回默认值
+    return MODEL_CONTEXT_LIMITS.default
+  }
+
+  /**
+   * 获取当前上下文使用情况
+   */
+  getContextUsage(messages: Message[]): { used: number; limit: number; percentage: number } {
+    const used = this.estimateTokens(messages)
+    const limit = this.getContextLimit()
+    const percentage = used / limit
+
+    return { used, limit, percentage }
   }
 
   /**
@@ -133,31 +204,42 @@ export class LLMClient {
   }
 
   /**
-   * 压缩上下文：保留系统信息和最近的消息，中间部分用摘要替代
+   * 检查是否需要压缩上下文
+   */
+  needsCompression(messages: Message[]): boolean {
+    const { percentage } = this.getContextUsage(messages)
+    return percentage >= COMPRESSION_THRESHOLD
+  }
+
+  /**
+   * 压缩上下文：基于模型容量百分比触发
    */
   async compressContext(
     messages: Message[],
-    maxTokens: number = 60000
+    threshold: number = COMPRESSION_THRESHOLD
   ): Promise<Message[]> {
-    const currentTokens = this.estimateTokens(messages)
+    const { used, limit, percentage } = this.getContextUsage(messages)
 
-    if (currentTokens <= maxTokens) {
+    // 未达到阈值，无需压缩
+    if (percentage < threshold) {
       return messages
     }
 
-    console.log(`\n📦 Compressing context (${currentTokens} tokens → ${maxTokens} limit)...`)
+    console.log(`\n📦 Compressing context (${Math.round(percentage * 100)}% used: ${used}/${limit} tokens)...`)
+
+    // 消息太少，无法压缩
+    if (messages.length <= 4) {
+      console.log(`  ⚠️ Too few messages to compress`)
+      return messages
+    }
 
     // 策略：保留第一条用户消息 + 最近的消息
     // 中间部分让 LLM 生成摘要
-    if (messages.length <= 4) {
-      return messages
-    }
-
-    // 保留第一条和最后几条
     const keepFirst = 2  // 保留前 2 条
     const keepLast = 6   // 保留后 6 条
 
     if (messages.length <= keepFirst + keepLast) {
+      console.log(`  ⚠️ Not enough messages to compress`)
       return messages
     }
 
@@ -165,22 +247,29 @@ export class LLMClient {
     const toCompress = messages.slice(keepFirst, -keepLast)
 
     // 生成摘要
-    const summaryPrompt: Message = {
-      role: "user",
-      content: `Please summarize the following conversation history concisely (keep key information, decisions, and context needed for continuing the conversation):
-
-${toCompress.map(m => `[${m.role}]: ${m.content?.slice(0, 500)}...`).join('\n\n')}
-
-Provide a brief summary:`,
-    }
+    const summaryContent = toCompress
+      .map(m => `[${m.role}]: ${m.content?.slice(0, 500)}...`)
+      .join('\n\n')
 
     try {
       // 使用快速模型生成摘要
-      const fastModel = this.provider(process.env.ANTHROPIC_SMALL_FAST_MODEL || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514")
+      const fastModel = this.provider(
+        process.env.ANTHROPIC_SMALL_FAST_MODEL ||
+        process.env.ANTHROPIC_MODEL ||
+        this.modelId
+      )
 
       const summaryResult = await generateText({
         model: fastModel,
-        messages: [{ role: "user", content: summaryPrompt.content }],
+        messages: [{
+          role: "user",
+          content: `Please summarize the following conversation history concisely.
+Keep key information, decisions, file changes, and context needed for continuing the conversation.
+
+${summaryContent}
+
+Provide a brief summary:`
+        }],
         maxTokens: 1000,
       })
 
@@ -196,7 +285,8 @@ Provide a brief summary:`,
         ...messages.slice(-keepLast),
       ]
 
-      console.log(`  ✅ Compressed to ${this.estimateTokens(compressed)} tokens (${compressed.length} messages)`)
+      const newUsage = this.getContextUsage(compressed)
+      console.log(`  ✅ Compressed to ${Math.round(newUsage.percentage * 100)}% (${newUsage.used}/${limit} tokens, ${compressed.length} messages)`)
 
       return compressed
     } catch (error) {

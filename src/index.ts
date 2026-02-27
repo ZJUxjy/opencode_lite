@@ -17,7 +17,7 @@ program
   .option("-d, --directory <dir>", "Working directory", process.cwd())
   .option("-s, --session <id>", "Session ID", Date.now().toString())
   .option("--no-stream", "Disable streaming output")
-  .option("--max-tokens <number>", "Max context tokens before compression", "60000")
+  .option("--compression-threshold <number>", "Context compression threshold (0-1)", "0.92")
   .option("--list-sessions", "List all sessions")
   .action(async (options) => {
     const dbPath = path.join(os.homedir(), ".lite-opencode", "history.db")
@@ -39,7 +39,7 @@ program
         baseURL: options.baseUrl,
       },
       enableStream: options.stream !== false,
-      maxContextTokens: parseInt(options.maxTokens, 10),
+      compressionThreshold: parseFloat(options.compressionThreshold),
     })
 
     // 显示当前配置
@@ -52,7 +52,7 @@ program
     console.log(`Session: ${options.session}`)
     console.log(`Working directory: ${options.directory}`)
     console.log(`Streaming: ${options.stream !== false ? "enabled" : "disabled"}`)
-    console.log(`Max context tokens: ${options.maxTokens}`)
+    console.log(`Compression threshold: ${Math.round(parseFloat(options.compressionThreshold) * 100)}%`)
     console.log("\nType your message and press Enter. Type /exit to quit.\n")
 
     // REPL 循环
@@ -79,11 +79,19 @@ program
           return
         }
 
+        if (trimmed === "/context") {
+          const usage = agent.getContextUsage()
+          console.log(`\nContext Usage: ${usage.used}/${usage.limit} tokens (${Math.round(usage.percentage * 100)}%)`)
+          prompt()
+          return
+        }
+
         if (trimmed === "/help") {
           console.log(`
 Commands:
   /exit, /quit  - Exit the program
   /clear        - Clear current session
+  /context      - Show context usage
   /help         - Show this help
           `)
           prompt()
