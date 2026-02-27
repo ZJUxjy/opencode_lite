@@ -1333,21 +1333,23 @@ Bus.subscribe(MessageV2.Event.PartDelta, (event) => {
 
 ### 7.2 优先级排序
 
-| 改进点 | 参考 | 优先级 | 复杂度 | 说明 |
-|--------|------|--------|--------|------|
-| **三层循环检测** | Gemini-CLI | 🔴 P0 | 中 | 防止模型陷入死循环，最关键 |
-| **Reasoning 支持** | Kilocode | 🔴 P0 | 低 | MiniMax/DeepSeek 等模型需要 |
-| **策略引擎** | Gemini-CLI | 🔴 P0 | 中 | ALLOW/DENY/ASK_USER 三级权限 |
-| **模块化 Prompt** | Gemini-CLI | 🟡 P1 | 中 | 可组合的 Prompt 片段 |
-| **重试机制** | Kilocode | 🟡 P1 | 低 | 指数退避 + 可重试错误检测 |
-| **消息强类型** | Kilocode Zod | 🟡 P1 | 低 | 提高代码健壮性 |
-| **事件 Bus** | Kilocode | 🟢 P2 | 中 | 解耦 UI 和 Agent |
-| **Snapshot 追踪** | Kilocode | 🟢 P2 | 高 | 文件变更追踪 |
-| **子代理系统** | Gemini-CLI | 🟢 P3 | 高 | 可选的高级功能 |
+| 改进点 | 参考 | 优先级 | 复杂度 | 状态 | 说明 |
+|--------|------|--------|--------|------|------|
+| **三层循环检测** | Gemini-CLI | 🔴 P0 | 中 | ✅ 已实现 | `src/loopDetection.ts` |
+| **Reasoning 支持** | Kilocode | 🔴 P0 | 低 | ✅ 已实现 | Message.reasoning + 流处理 |
+| **策略引擎** | Gemini-CLI | 🔴 P0 | 中 | ✅ 已实现 | `src/policy.ts` (allow/deny/ask) |
+| **模块化 Prompt** | Gemini-CLI | 🟡 P1 | 中 | ⏳ 待实现 | 可组合的 Prompt 片段 |
+| **重试机制** | Kilocode | 🟡 P1 | 低 | ⏳ 待实现 | 指数退避 + 可重试错误检测 |
+| **消息强类型** | Kilocode Zod | 🟡 P1 | 低 | ⏳ 待实现 | 提高代码健壮性 |
+| **事件 Bus** | Kilocode | 🟢 P2 | 中 | ⏳ 待实现 | 解耦 UI 和 Agent |
+| **Snapshot 追踪** | Kilocode | 🟢 P2 | 高 | ⏳ 待实现 | 文件变更追踪 |
+| **子代理系统** | Gemini-CLI | 🟢 P3 | 高 | ⏳ 待实现 | 可选的高级功能 |
 
-### 7.3 Phase 1: 核心稳定性 (建议优先实现)
+### 7.3 Phase 1: 核心稳定性 ✅ 已完成 (v1.1.0)
 
-#### 7.3.1 三层循环检测
+> **状态**: Phase 1 所有 P0 功能已实现！详见以下实现细节。
+
+#### 7.3.1 三层循环检测 ✅
 
 ```typescript
 // src/loopDetection.ts
@@ -1397,7 +1399,9 @@ export class LoopDetectionService {
 }
 ```
 
-#### 7.3.2 Reasoning 支持
+#### 7.3.2 Reasoning 支持 ✅
+
+> **实现文件**: `src/llm.ts`, `src/types.ts`, `src/App.tsx`
 
 ```typescript
 // 扩展消息类型
@@ -1420,7 +1424,15 @@ case "reasoning-delta": {
 }
 ```
 
-#### 7.3.3 策略引擎
+#### 7.3.3 策略引擎 ✅
+
+> **实现文件**: `src/policy.ts` (~290 行)
+>
+> **实现内容**:
+> - `PolicyEngine` 类：三级决策 (allow/deny/ask)
+> - 预定义规则：读操作允许，写操作询问，危险命令拒绝
+> - 决策学习：从用户选择中学习"总是允许/拒绝"
+> - 集成到 Agent：`onPolicyAsk` 回调询问用户
 
 ```typescript
 // src/policy.ts
