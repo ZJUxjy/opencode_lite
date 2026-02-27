@@ -1,10 +1,11 @@
-import type { Message, ToolCall, Context } from "./types.js"
+import type { Message, ToolCall, Context, ToolDefinition } from "./types.js"
 import { LLMClient, type LLMConfig } from "./llm.js"
 import { ToolRegistry } from "./tools/index.js"
 import { MessageStore } from "./store.js"
 import { LoopDetectionService, type LoopDetectionConfig } from "./loopDetection.js"
 import { PolicyEngine, type PolicyConfig, type PolicyDecision, type PolicyResult } from "./policy.js"
 import { PromptProvider } from "./prompts/index.js"
+import { ReActRunner, type Strategy, type ReActEvents } from "./react/index.js"
 
 export interface AgentConfig {
   cwd: string
@@ -14,6 +15,8 @@ export interface AgentConfig {
   compressionThreshold?: number
   loopDetection?: LoopDetectionConfig
   policy?: PolicyConfig
+  /** ReAct 策略: auto | fc | cot */
+  strategy?: Strategy
 }
 
 export interface AgentEvents {
@@ -27,8 +30,21 @@ export interface AgentEvents {
   onLoopDetected?: (type: string, message: string) => void
   onPolicyCheck?: (toolCall: ToolCall, result: PolicyResult) => void  // 策略检查
   onPolicyAsk?: (toolCall: ToolCall) => Promise<PolicyDecision>  // 询问用户决策
+  /** CoT 模式：思考内容增量 */
+  onThought?: (thought: string) => void
+  /** CoT 模式：执行动作 */
+  onAction?: (action: { name: string; input: Record<string, unknown> | string }) => void
+  /** CoT 模式：观察结果 */
+  onObservation?: (observation: string) => void
 }
 
+/**
+ * Agent - AI 编程助手核心类
+ *
+ * 支持双策略 (FC + CoT) 的 ReAct 实现：
+ * - FC (Function Calling): 使用模型原生工具调用能力
+ * - CoT (Chain-of-Thought): 使用 ReAct Prompt 模板
+ */
 export class Agent {
   private llm: LLMClient
   private tools: ToolRegistry
@@ -36,10 +52,12 @@ export class Agent {
   private loopDetection: LoopDetectionService
   private policyEngine: PolicyEngine
   private promptProvider: PromptProvider
+  private reactRunner: ReActRunner
   private sessionId: string
   private cwd: string
   private enableStream: boolean
   private compressionThreshold: number
+  private strategy: Strategy
   private events: AgentEvents = {}
 
   constructor(sessionId: string, config: AgentConfig) {
@@ -53,12 +71,37 @@ export class Agent {
     this.cwd = config.cwd
     this.enableStream = config.enableStream ?? true
     this.compressionThreshold = config.compressionThreshold ?? 0.92
+    this.strategy = config.strategy || "auto"
+
+    // 初始化 ReAct Runner
+    this.reactRunner = new ReActRunner(this.llm, this.tools, {
+      strategy: this.strategy,
+      maxIterations: 50,
+      enableStreaming: this.enableStream,
+    })
   }
 
   setEvents(events: AgentEvents) {
     this.events = events
+
+    // 转换事件到 ReAct 事件格式
+    const reactEvents: ReActEvents = {
+      onThinking: events.onThinking,
+      onThought: events.onThought || events.onTextDelta,
+      onAction: events.onAction,
+      onObservation: events.onObservation,
+      onToolCall: events.onToolCall,
+      onToolResult: events.onToolResult,
+      onResponse: (content) => events.onResponse?.(content),
+      onLoopDetected: events.onLoopDetected,
+    }
+
+    this.reactRunner.setEvents(reactEvents)
   }
 
+  /**
+   * 执行 Agent 循环
+   */
   async run(userInput: string): Promise<string> {
     // 1. 添加用户消息
     this.store.add(this.sessionId, {
@@ -81,11 +124,7 @@ export class Agent {
       this.events.onCompress?.(beforeTokens, afterTokens)
     }
 
-    // 4. 循环调用 LLM
-    let iterations = 0
-    const MAX_ITERATIONS = 50  // 防止无限循环
-
-    // 生成 system prompt（在循环外只生成一次）
+    // 4. 生成 system prompt
     const systemPrompt = this.promptProvider.getSystemPrompt({
       model: this.llm.getModelId(),
       cwd: this.cwd,
@@ -94,17 +133,36 @@ export class Agent {
       date: new Date(),
     })
 
+    // 5. 使用 ReActRunner 执行
+    const result = await this.runWithReAct(messages, this.tools.getDefinitions(), systemPrompt)
+
+    return result
+  }
+
+  /**
+   * 使用 ReActRunner 执行循环
+   */
+  private async runWithReAct(
+    messages: Message[],
+    tools: ToolDefinition[],
+    systemPrompt: string
+  ): Promise<string> {
+    // 复制消息以避免修改原始数组
+    let workingMessages = [...messages]
+    let iterations = 0
+    const MAX_ITERATIONS = 50
+
     while (iterations < MAX_ITERATIONS) {
       iterations++
       this.loopDetection.incrementTurn()
-      this.events.onThinking?.()
 
+      // 调用 LLM
       let response
       try {
         if (this.enableStream) {
           response = await this.llm.chatStream(
-            messages,
-            this.tools.getDefinitions(),
+            workingMessages,
+            tools,
             {
               onTextDelta: (text) => this.events.onTextDelta?.(text),
               onReasoningDelta: (text) => this.events.onReasoningDelta?.(text),
@@ -113,107 +171,89 @@ export class Agent {
             systemPrompt
           )
         } else {
-          response = await this.llm.chat(messages, this.tools.getDefinitions(), systemPrompt)
+          response = await this.llm.chat(workingMessages, tools, systemPrompt)
         }
       } catch (error: any) {
-        // LLM 调用失败，返回错误
         this.events.onResponse?.(`Error: ${error.message}`)
         return `Error: ${error.message}`
       }
 
-      // 4.1 循环检测：检查内容重复
+      // 循环检测：内容重复
       if (response.content) {
         const contentLoopResult = this.loopDetection.checkContentLoop(response.content)
         if (contentLoopResult.detected) {
           this.events.onLoopDetected?.(contentLoopResult.type!, contentLoopResult.message)
-          console.log(`\n⚠️ ${contentLoopResult.message}`)
-          // 返回当前内容，但添加警告
-          return `${response.content}\n\n[系统检测到可能的循环，已终止。请尝试简化您的请求。]`
+          return `${response.content}\n\n[系统检测到可能的循环，已终止。]`
         }
       }
 
-      // 4.2 循环检测：检查工具调用
+      // 循环检测：工具调用
       if (response.toolCalls?.length) {
         for (const toolCall of response.toolCalls) {
           const toolLoopResult = this.loopDetection.checkToolCallLoop(toolCall)
           if (toolLoopResult.detected) {
             this.events.onLoopDetected?.(toolLoopResult.type!, toolLoopResult.message)
-            console.log(`\n⚠️ ${toolLoopResult.message}`)
-            // 返回错误信息
-            return `[系统检测到工具调用循环：${toolCall.name} 连续调用了太多次。请尝试不同的方法。]`
+            return `[系统检测到工具调用循环：${toolCall.name} 连续调用了太多次。]`
           }
         }
       }
 
-      // 5. 添加 assistant 消息
+      // 添加 assistant 消息
       const assistantMsg: Message = {
         role: "assistant",
         content: response.content,
-        reasoning: response.reasoning,  // 保存思考过程
+        reasoning: response.reasoning,
         toolCalls: response.toolCalls,
       }
-      messages.push(assistantMsg)
+      workingMessages.push(assistantMsg)
       this.store.add(this.sessionId, assistantMsg)
 
-      // 6. 通知响应完成
+      // 通知响应
       if (response.content) {
         this.events.onResponse?.(response.content, response.reasoning)
       }
 
-      // 7. 没有工具调用，结束
+      // 没有工具调用，结束
       if (!response.toolCalls?.length) {
         return response.content
       }
 
-      // 8. 执行工具并收集结果
+      // 执行工具
       const toolResults = await this.executeTools(response.toolCalls)
 
-      // 9. 添加工具结果消息
+      // 添加工具结果
       const resultMsg: Message = {
         role: "user",
         content: "",
         toolResults,
       }
-      messages.push(resultMsg)
+      workingMessages.push(resultMsg)
       this.store.add(this.sessionId, resultMsg)
 
-      // 10. 再次检查压缩
-      const beforeTokens2 = this.llm.estimateTokens(messages)
-      messages = await this.llm.compressContext(
-        messages,
+      // 检查压缩
+      const beforeTokens2 = this.llm.estimateTokens(workingMessages)
+      workingMessages = await this.llm.compressContext(
+        workingMessages,
         this.compressionThreshold,
         this.promptProvider.getCompactionPrompt()
       )
-      const afterTokens2 = this.llm.estimateTokens(messages)
+      const afterTokens2 = this.llm.estimateTokens(workingMessages)
       if (beforeTokens2 !== afterTokens2) {
         this.events.onCompress?.(beforeTokens2, afterTokens2)
       }
     }
 
-    // 达到最大迭代次数
-    return "Reached maximum iteration limit. Please try a simpler request."
+    return "Maximum iterations reached"
   }
 
-  private async executeTool(call: ToolCall): Promise<string> {
-    const tool = this.tools.get(call.name)
-    if (!tool) {
-      return `Error: Unknown tool '${call.name}'`
-    }
-
-    const ctx: Context = { cwd: this.cwd, messages: [] }
-    try {
-      return await tool.execute(call.arguments, ctx)
-    } catch (error: any) {
-      return `Error: ${error.message}`
-    }
-  }
-
+  /**
+   * 执行工具调用
+   */
   private async executeTools(toolCalls: ToolCall[]) {
     const results = []
     const ctx: Context = { cwd: this.cwd, messages: [] }
 
     for (const call of toolCalls) {
-      // 触发工具调用事件
       this.events.onToolCall?.(call)
 
       // 策略检查
@@ -221,7 +261,6 @@ export class Agent {
       this.events.onPolicyCheck?.(call, policyResult)
 
       if (policyResult.decision === "deny") {
-        // 直接拒绝
         const denyResult = {
           toolCallId: call.id,
           content: `Permission denied: ${policyResult.reason}`,
@@ -233,16 +272,13 @@ export class Agent {
       }
 
       if (policyResult.decision === "ask") {
-        // 需要询问用户
         let userDecision: PolicyDecision
         if (this.events.onPolicyAsk) {
           userDecision = await this.events.onPolicyAsk(call)
         } else {
-          // 没有询问回调，默认拒绝
           userDecision = "deny"
         }
 
-        // 从用户决策中学习
         if (userDecision !== "ask") {
           this.policyEngine.learn(call.name, call.arguments, userDecision)
         }
@@ -290,6 +326,20 @@ export class Agent {
     return results
   }
 
+  /**
+   * 获取当前策略
+   */
+  getStrategy(): "fc" | "cot" {
+    return this.reactRunner.getCurrentStrategy()
+  }
+
+  /**
+   * 获取模型能力
+   */
+  getModelCapabilities() {
+    return this.reactRunner.getModelCapabilities()
+  }
+
   getHistory(): Message[] {
     return this.store.get(this.sessionId)
   }
@@ -298,6 +348,7 @@ export class Agent {
     this.store.clear(this.sessionId)
     this.loopDetection.reset()
     this.policyEngine.clearLearnedRules()
+    this.reactRunner.reset()
   }
 
   getContextUsage() {

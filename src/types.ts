@@ -42,3 +42,10 @@ export interface AgentConfig {
   cwd: string
   dbPath: string
 }
+
+// 工具定义（用于传递给 LLM）
+export interface ToolDefinition {
+  name: string
+  description: string
+  parameters: any
+}

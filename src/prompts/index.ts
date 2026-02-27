@@ -3,9 +3,11 @@ import { identitySection } from './sections/identity.js'
 import { environmentSection } from './sections/environment.js'
 import { toolsSection } from './sections/tools.js'
 import { constraintsSection } from './sections/constraints.js'
+import { reactSection } from './sections/react.js'
 
 export type { PromptContext, PromptSection, ToolDefinition } from './types.js'
 export { substitute } from './utils.js'
+export { reactSection } from './sections/react.js'
 
 /**
  * PromptProvider - 模块化 Prompt 生成器
@@ -22,6 +24,7 @@ export class PromptProvider {
       environmentSection,
       toolsSection,
       constraintsSection,
+      reactSection,  // ReAct 格式说明（条件渲染）
     ]
   }
 
