@@ -4,10 +4,10 @@
 
 ## 设计目标
 
-- **代码量**：500-800 行 TypeScript
-- **开发时间**：1-2 天完成 MVP
+- **代码量**：~2000 行 TypeScript（超出原计划，但功能更丰富）
+- **开发时间**：MVP 1-2 天，v1.1.0 增强功能 1-2 天
 - **核心功能**：LLM + Tool 循环、消息持久化、基础工具集
-- **简化取舍**：移除权限系统、多 UI、LSP/MCP、复杂状态管理
+- **v1.1.0 新增**：三层循环检测、Reasoning 支持、策略引擎
 
 ## 核心架构
 
@@ -36,21 +36,28 @@
 ```
 lite-opencode/
 ├── src/
-│   ├── index.ts           # CLI 入口
+│   ├── index.tsx          # CLI 入口 (Ink TUI)
+│   ├── App.tsx            # TUI 组件
 │   ├── agent.ts           # 核心 Agent 循环
 │   ├── llm.ts             # LLM 客户端封装
-│   ├── tools/
-│   │   ├── index.ts       # Tool 注册中心
-│   │   ├── bash.ts        # Shell 命令
-│   │   ├── read.ts        # 读文件
-│   │   ├── write.ts       # 写文件
-│   │   ├── edit.ts        # 编辑文件
-│   │   ├── grep.ts        # 搜索内容
-│   │   └── glob.ts        # 搜索文件
+│   ├── loopDetection.ts   # 三层循环检测服务 (v1.1.0)
+│   ├── policy.ts          # 策略引擎 (v1.1.0)
 │   ├── store.ts           # 消息持久化
-│   └── types.ts           # 类型定义
+│   ├── types.ts           # 类型定义
+│   └── tools/
+│       ├── index.ts       # Tool 注册中心
+│       ├── bash.ts        # Shell 命令
+│       ├── read.ts        # 读文件
+│       ├── write.ts       # 写文件
+│       ├── edit.ts        # 编辑文件
+│       ├── grep.ts        # 搜索内容
+│       └── glob.ts        # 搜索文件
+├── docs/
+│   ├── agent-loop-research.md  # Agent 循环调研
+│   └── hook-system-design.md   # Hook 系统设计
 ├── package.json
-└── tsconfig.json
+├── tsconfig.json
+└── CLAUDE.md              # Claude Code 指引
 ```
 
 ## 核心实现
@@ -876,17 +883,19 @@ program.parse()
 
 | 功能 | OpenCode | Lite 版 |
 |------|----------|---------|
-| LLM Provider | 20+ | 2 (OpenAI/Anthropic) |
-| 内置 Tools | 20+ | 6 个核心工具 |
-| UI | TUI + Web + Desktop | 简单 CLI REPL |
+| LLM Provider | 20+ | ✅ 多 Provider (Anthropic/MiniMax/DeepSeek/...) |
+| 内置 Tools | 20+ | ✅ 6 个核心工具 |
+| UI | TUI + Web + Desktop | ✅ Ink TUI (终端界面) |
 | 状态管理 | 复杂 Part 系统 | 简单 Message |
-| 权限系统 | 完整规则引擎 | 无 |
-| 上下文压缩 | 有 | 无 |
+| 权限系统 | 完整规则引擎 | ✅ 策略引擎 (allow/deny/ask) |
+| 上下文压缩 | 有 | ✅ 基于模型容量的百分比压缩 |
 | Session 分叉 | 有 | 无 |
 | LSP 集成 | 有 | 无 |
 | MCP 集成 | 有 | 无 |
 | Skill 系统 | 有 | 无 |
-| 流式输出 | 有 | 无 |
+| 流式输出 | 有 | ✅ 支持 |
+| 循环检测 | 有 | ✅ 三层检测 (工具/内容/LLM) |
+| Reasoning | 有 | ✅ 支持思考过程显示 |
 
 ## 使用方式
 
@@ -928,33 +937,48 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 
 ## 扩展路线图
 
-### Phase 1: MVP (当前)
+### Phase 1: MVP ✅ 已完成
 
 - ✅ 核心 Agent 循环
 - ✅ 6 个基础工具
 - ✅ SQLite 持久化
-- ✅ 简单 REPL
+- ✅ 简单 REPL → 升级为 Ink TUI
 
-### Phase 2: 增强
+### Phase 2: 增强 ✅ 大部分完成
 
-- [ ] 多 Provider 支持 (Google, Groq, etc.)
-- [ ] 流式输出
-- [ ] 上下文压缩 (token 超限处理)
-- [ ] Session 管理 (列表、删除、重命名)
+- ✅ 多 Provider 支持 (Anthropic/MiniMax/DeepSeek/OpenAI...)
+- ✅ 流式输出
+- ✅ 上下文压缩 (基于模型容量百分比)
+- ⏳ Session 管理 (列表已完成，删除/重命名待做)
 
-### Phase 3: 高级功能
+### Phase 3: 高级功能 ⏳ 部分完成
 
-- [ ] 权限系统 (工具级别的 allow/deny)
-- [ ] LSP 集成 (代码补全、跳转)
-- [ ] MCP 集成
-- [ ] TUI 界面 (使用 ink 或 blessed)
+- ✅ 权限系统 → 策略引擎 (allow/deny/ask)
+- ❌ LSP 集成 (代码补全、跳转)
+- ❌ MCP 集成
+- ✅ TUI 界面 → 使用 Ink 实现
 
-### Phase 4: 企业级
+### Phase 4: 企业级 ❌ 未开始
 
-- [ ] Skill 系统
-- [ ] 多 Agent 模式 (build/plan)
-- [ ] 远程 Server 模式
-- [ ] Web UI
+- ❌ Skill 系统
+- ❌ 多 Agent 模式 (build/plan)
+- ❌ 远程 Server 模式
+- ❌ Web UI
+
+### v1.1.0 新增功能 (Phase 1 ReAct 增强)
+
+- ✅ 三层循环检测服务
+  - 第一层：工具调用哈希检测 (相同工具+参数连续5次)
+  - 第二层：内容滑动窗口检测 (50字符窗口，3次重复)
+  - 第三层：LLM 辅助判断 (30轮后触发，可选)
+- ✅ Reasoning 支持
+  - 支持 MiniMax/DeepSeek 等模型的思考过程
+  - 流式输出思考内容
+  - 持久化到消息历史
+- ✅ 策略引擎
+  - 三级决策：allow/deny/ask
+  - 预定义规则 + 学习规则
+  - 从用户决策中学习
 
 ## 关键设计决策
 
@@ -986,11 +1010,43 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 
 ## 总结
 
-Lite OpenCode 是 OpenCode 的精简实现，保留了核心的 "LLM + Tool 循环" 模式，同时移除了企业级功能。适合：
+Lite OpenCode 是 OpenCode 的精简实现，保留了核心的 "LLM + Tool 循环" 模式。相比原设计：
+
+### 实际完成度
+
+| 阶段 | 原计划 | 实际完成 | 说明 |
+|------|--------|----------|------|
+| Phase 1 | 4 项 | ✅ 4/4 + 升级 | REPL 升级为 Ink TUI |
+| Phase 2 | 4 项 | ✅ 3/4 | Session 管理部分完成 |
+| Phase 3 | 4 项 | ✅ 2/4 | 权限系统 + TUI 已实现 |
+| 额外功能 | - | ✅ 2 项 | 循环检测 + Reasoning |
+
+### 代码统计
+
+```
+src/               ~1200 行
+├── index.tsx      ~100 行 (CLI 入口 + Ink TUI)
+├── App.tsx        ~250 行 (TUI 组件)
+├── agent.ts       ~280 行 (Agent 循环 + 事件系统)
+├── llm.ts         ~370 行 (LLM 客户端 + 上下文管理)
+├── store.ts       ~70 行 (消息持久化)
+├── types.ts       ~50 行 (类型定义)
+├── loopDetection.ts ~270 行 (三层循环检测)
+├── policy.ts      ~290 行 (策略引擎)
+└── tools/         ~250 行 (6 个工具)
+```
+
+**总计：约 1900 行**（原设计 600-800 行）
+
+### 适合场景
 
 - 学习 AI Agent 架构
 - 快速原型开发
 - 定制化修改
 - 理解 OpenCode 核心原理
+- 需要轻量级编码助手的场景
 
-代码量约 600-800 行，可以在 1-2 天内完成 MVP。
+### 版本历史
+
+- **v1.0.0** - MVP：核心 Agent 循环 + 6 工具 + 上下文压缩 + Ink TUI
+- **v1.1.0** - ReAct 增强：三层循环检测 + Reasoning 支持 + 策略引擎
