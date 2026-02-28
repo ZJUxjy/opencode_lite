@@ -66,6 +66,7 @@ const helpCommand: Command = {
   /compact preview - Show compression preview
   /yolo         - Toggle YOLO mode (auto-approve all)
   /sessions, /resume  - Show session list and switch sessions
+  /skills       - List and manage skills
 
 Current status:
   YOLO Mode: ${yoloStatus}
@@ -276,6 +277,68 @@ const sessionsCommand: Command = {
 }
 
 /**
+ * Skills command - list and manage skills
+ */
+const skillsCommand: Command = {
+  name: "/skills",
+  aliases: ["/skill"],
+  description: "List and manage skills",
+  handler: (_args: string, ctx: CommandContext) => {
+    const skills = ctx.agent.getSkills()
+
+    if (skills.length === 0) {
+      const message = createSystemMessage(
+        `No skills found.
+
+Skills can be placed in:
+  • ./skills/ (project-specific)
+  • ~/.lite-opencode/skills/ (global)
+
+Each skill is a directory containing a SKILL.md file with YAML frontmatter.`
+      )
+      ctx.setMessages((prev) => [...prev, message])
+      return
+    }
+
+    const lines: string[] = []
+    lines.push(`# Available Skills (${skills.length})`)
+    lines.push(``)
+
+    // Active skills first
+    const activeSkills = skills.filter((s) => s.isActive)
+    const inactiveSkills = skills.filter((s) => !s.isActive)
+
+    if (activeSkills.length > 0) {
+      lines.push(`## Active 🟢`)
+      lines.push(``)
+      for (const skill of activeSkills) {
+        lines.push(`**${skill.name}** (${skill.id})`)
+        lines.push(`  ${skill.description}`)
+        lines.push(``)
+      }
+    }
+
+    if (inactiveSkills.length > 0) {
+      lines.push(`## Inactive ⚪`)
+      lines.push(``)
+      for (const skill of inactiveSkills) {
+        const activation = skill.activation === "auto" ? "[auto]" :
+                          skill.activation === "always" ? "[always]" : "[manual]"
+        lines.push(`**${skill.name}** ${activation}`)
+        lines.push(`  ${skill.description}`)
+        lines.push(``)
+      }
+    }
+
+    lines.push(`---`)
+    lines.push(`To activate a skill, use: activate_skill tool with id="skill-id"`)
+
+    const message = createSystemMessage(lines.join("\n"))
+    ctx.setMessages((prev) => [...prev, message])
+  },
+}
+
+/**
  * All builtin commands
  * Exported as array for easy registration in CommandRegistry
  */
@@ -288,4 +351,5 @@ export const builtinCommands: Command[] = [
   compactCommand,
   yoloCommand,
   sessionsCommand,
+  skillsCommand,
 ]

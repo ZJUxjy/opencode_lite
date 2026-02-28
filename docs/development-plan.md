@@ -10,7 +10,8 @@
 2. [版本历史与里程碑](#2-版本历史与里程碑)
 3. [Phase 1-4: ReAct 系统（已完成）](#3-phase-1-4-react-系统已完成)
 4. [Phase 5: Plan Mode 开发计划](#4-phase-5-plan-mode-开发计划)
-5. [Phase 6-8: 未来规划](#5-phase-6-8-未来规划)
+5. [Skills 系统](#5-skills-系统-已完成)
+6. [Phase 6-8: 未来规划](#6-phase-6-8-未来规划)
 6. [技术架构总览](#6-技术架构总览)
 7. [风险与缓解措施](#7-风险与缓解措施)
 
@@ -38,6 +39,7 @@ Lite OpenCode 是一个轻量级 AI 编程 Agent，实现 ReAct（Reasoning + Ac
 | Plan Mode - 子代理 | ✅ | Phase 5.4 完成 |
 | Plan Mode - 并行探索 | ✅ | Phase 5.4 完成 |
 | Session 恢复 | ✅ | Session 独立 + Input History |
+| Skills 系统 | ✅ | Markdown + YAML + Auto-discovery |
 | MCP 集成 | 📋 | Phase 6 规划中 |
 
 ---
@@ -607,7 +609,113 @@ LITE_OPENCODE_AGGREGATION_STRATEGY=merge # 聚合策略
 
 ---
 
-## 5. Phase 6-8: 未来规划
+## 5. Skills 系统 (已完成)
+
+基于对 claude-code、gemini-cli、kimi-cli 的调研，实现了统一的 Skills 系统。
+
+### 5.1 设计原则
+
+| 原则 | 说明 |
+|------|------|
+| Markdown + YAML | SKILL.md 格式，易于编写和维护 |
+| Auto-discovery | 自动扫描 skills/ 目录 |
+| Progressive Disclosure | 渐进式加载（元数据 → 正文 → 资源） |
+| Dynamic Activation | 支持 auto/manual/always 激活策略 |
+
+### 5.2 文件格式
+
+```markdown
+---
+id: builtin:git
+name: Git Expert
+description: Best practices for Git operations
+version: "1.0.0"
+activation: manual
+tags:
+  - git
+  - version-control
+---
+
+# Git Operations Guidelines
+
+## Commit Message Conventions
+...
+```
+
+### 5.3 核心组件
+
+```typescript
+// src/skills/types.ts
+interface Skill {
+  metadata: SkillMetadata      // YAML frontmatter
+  content: string              // Markdown body
+  resources?: SkillResource[]  // 附加文件（懒加载）
+  isActive: boolean
+}
+
+// src/skills/registry.ts
+class SkillRegistry {
+  discoverAndLoad(): Promise<Skill[]>
+  activate(id: string): SkillActivationResult
+  deactivate(id: string): boolean
+  autoActivate(context: SkillContext): SkillActivationResult[]
+  getActivePromptInjection(): string
+}
+
+// src/skills/loader.ts
+class SkillLoader {
+  loadFromFile(path: string): Promise<Skill>
+  discover(config: SkillDiscoveryConfig): Promise<Skill[]>
+  loadResources(skill: Skill): Promise<SkillResource[]>
+}
+```
+
+### 5.4 工具集成
+
+```typescript
+// src/tools/skill.ts
+- list_skills      // 列出所有 skills
+- activate_skill   // 手动激活 skill
+- deactivate_skill // 停用 skill
+- show_skill       // 显示 skill 详情
+- get_active_skills_prompt // 获取 prompt 注入
+```
+
+### 5.5 内置 Skills
+
+| Skill | ID | 说明 | 激活方式 |
+|-------|-----|------|----------|
+| Git Expert | builtin:git | Git 操作最佳实践 | 手动 |
+| Code Review | builtin:code-review | 代码审查指南 | 手动 |
+| TDD | builtin:tdd | 测试驱动开发 | 手动 |
+
+### 5.6 Prompt 集成
+
+Skills 内容通过 `skillsSection` 注入到 System Prompt：
+
+```typescript
+// src/prompts/sections/skills.ts
+export const skillsSection: PromptSection = {
+  name: "skills",
+  enabled: (ctx) => !!ctx.skills && ctx.skills.length > 0,
+  render: (ctx) => ctx.skills || ""
+}
+```
+
+### 5.7 验收标准
+
+- [x] Markdown + YAML Frontmatter 格式
+- [x] Auto-discovery 从 skills/ 目录
+- [x] Progressive disclosure 渐进式加载
+- [x] 三种激活策略：auto/manual/always
+- [x] 依赖和冲突检测
+- [x] Prompt 自动注入
+- [x] /skills slash 命令
+- [x] 5 个 skill 管理工具
+
+---
+
+## 6. Phase 7-9: 未来规划
 
 ### 5.1 Phase 6: MCP 集成
 

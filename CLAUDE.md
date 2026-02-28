@@ -82,17 +82,18 @@ This is a lightweight AI coding agent implementing the ReAct (Reasoning + Acting
 
 ### Prompt System (`src/prompts/`)
 
-9 sections assembled by `PromptProvider`:
+10 sections assembled by `PromptProvider`:
 
 1. **identity** - Agent identity (Lite OpenCode)
 2. **objectives** - Task objectives
 3. **environment** - Working directory, platform, date
 4. **tools** - Tool usage guidelines
 5. **workflow** - Work process guidelines
-6. **memory** - Context management guidance
-7. **errorHandling** - Error handling guidelines
-8. **constraints** - Behavior constraints
-9. **react** - ReAct format (conditional, CoT mode only)
+6. **skills** - Active skills injection (conditional)
+7. **memory** - Context management guidance
+8. **errorHandling** - Error handling guidelines
+9. **constraints** - Behavior constraints
+10. **react** - ReAct format (conditional, CoT mode only)
 
 ### TUI Architecture (`src/App.tsx`)
 
@@ -117,7 +118,51 @@ Key TUI techniques:
 
 ### Tools (`src/tools/`)
 
-6 built-in tools: `bash`, `read`, `write`, `edit`, `grep`, `glob`
+11 built-in tools:
+- **File**: `read`, `write`, `edit`, `grep`, `glob`
+- **System**: `bash`
+- **Plan Mode**: `enter_plan_mode`, `exit_plan_mode`, `task`, `get_subagent_result`, `parallel_explore`
+- **Skills**: `list_skills`, `activate_skill`, `deactivate_skill`, `show_skill`, `get_active_skills_prompt`
+
+### Skills System (`src/skills/`)
+
+Markdown-based capability system with YAML frontmatter:
+
+```
+skills/
+├── git/SKILL.md              # Git best practices
+├── code-review/SKILL.md      # Code review guidelines
+├── tdd/SKILL.md              # Test-driven development
+├── react/SKILL.md            # React development (auto-activate)
+├── nodejs/SKILL.md           # Node.js backend (auto-activate)
+├── documentation/SKILL.md    # Documentation writing
+└── _template/SKILL.md        # Template for new skills
+```
+
+**Skill format**:
+```markdown
+---
+id: builtin:git
+name: Git Expert
+description: Best practices for Git operations
+version: "1.0.0"
+activation: manual
+tags: [git, version-control]
+---
+
+# Git Operations Guidelines
+...
+```
+
+**Key Classes**:
+- `SkillLoader` - Load and parse SKILL.md files
+- `SkillRegistry` - Manage skill lifecycle and activation
+- `skillsSection` - Prompt integration
+
+**Activation strategies**:
+- `auto` - Auto-activate based on file patterns/keywords
+- `manual` - User activates via `activate_skill` tool or `/skills` command
+- `always` - Always active when loaded
 
 ### Configuration
 
@@ -174,3 +219,5 @@ export const myTool: Tool = {
 - `docs/hook-system-design.md` - Hook system design for future implementation
 - `docs/dify-architecture-deep-dive.md` - Dify architecture analysis
 - `docs/agent-architecture-research.md` - Agent architecture research
+- `docs/skills-system-design.md` - Skills system design and implementation
+- `docs/session-restoration-plan.md` - Session restoration feature documentation

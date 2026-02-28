@@ -191,6 +191,23 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
     }
     loadInputHistory()
 
+    // 加载 skills
+    const loadSkills = async () => {
+      try {
+        await agent.loadSkills()
+        const skillCount = agent.getSkills().length
+        if (skillCount > 0) {
+          setMessages((prev) => [
+            ...prev,
+            createSystemMessage(`🎯 Loaded ${skillCount} skills. Use /skills to view and activate.`)
+          ])
+        }
+      } catch (error) {
+        // Silent fail - skills are optional
+      }
+    }
+    loadSkills()
+
     if (isResumed) {
       // 加载历史消息
       const historyMessages = agent.getHistory()

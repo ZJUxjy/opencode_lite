@@ -1,0 +1,12 @@
+# Example Template
+
+This is an example resource file that can be loaded on demand.
+
+## Usage
+
+Use `show_skill` tool with `include_resources=true` to view this content.
+
+## Template Content
+
+You can put code templates, configuration examples, or any other
+supplementary material here.

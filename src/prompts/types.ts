@@ -19,6 +19,8 @@ export interface PromptContext {
   platform: string
   tools: ToolDefinition[]
   date: Date
+  /** Skills prompt injection */
+  skills?: string
 }
 
 /**

@@ -8,6 +8,13 @@ import { globTool } from "./glob.js"
 import { enterPlanModeTool } from "./enter-plan-mode.js"
 import { exitPlanModeTool } from "./exit-plan-mode.js"
 import { taskTool, getSubagentResultTool, parallelExploreTool } from "./task.js"
+import {
+  listSkillsTool,
+  activateSkillTool,
+  deactivateSkillTool,
+  showSkillTool,
+  getActiveSkillsPromptTool,
+} from "./skill.js"
 
 export class ToolRegistry {
   private tools = new Map<string, Tool>()
@@ -26,6 +33,11 @@ export class ToolRegistry {
       taskTool,
       getSubagentResultTool,
       parallelExploreTool,
+      listSkillsTool,
+      activateSkillTool,
+      deactivateSkillTool,
+      showSkillTool,
+      getActiveSkillsPromptTool,
     ].forEach((tool) => this.register(tool))
   }
 
@@ -60,3 +72,4 @@ export * from "./glob.js"
 export * from "./enter-plan-mode.js"
 export * from "./exit-plan-mode.js"
 export * from "./task.js"
+export * from "./skill.js"

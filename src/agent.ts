@@ -7,6 +7,7 @@ import { PolicyEngine, type PolicyConfig, type PolicyDecision, type PolicyResult
 import { PromptProvider } from "./prompts/index.js"
 import { ReActRunner, type Strategy, type ReActEvents } from "./react/index.js"
 import { CompressionService, type CompressionLevel, type CompressionPreview, type CompressionResult } from "./compression.js"
+import { SkillRegistry, getSkillRegistry } from "./skills/index.js"
 
 export interface AgentConfig {
   cwd: string
@@ -55,6 +56,7 @@ export class Agent {
   private promptProvider: PromptProvider
   private reactRunner: ReActRunner
   private compressionService: CompressionService
+  private skillRegistry: SkillRegistry
   private sessionId: string
   private cwd: string
   private enableStream: boolean
@@ -71,6 +73,11 @@ export class Agent {
     this.promptProvider = new PromptProvider()
     this.compressionService = new CompressionService(this.llm, {
       threshold: config.compressionThreshold ?? 0.92,
+    })
+    this.skillRegistry = getSkillRegistry({
+      searchPaths: ["./skills", "~/.lite-opencode/skills"],
+      includeBuiltins: true,
+      recursive: false,
     })
     this.sessionId = sessionId
     this.cwd = config.cwd
@@ -130,12 +137,14 @@ export class Agent {
     }
 
     // 4. 生成 system prompt
+    const skillPrompt = this.skillRegistry.getActivePromptInjection()
     const systemPrompt = this.promptProvider.getSystemPrompt({
       model: this.llm.getModelId(),
       cwd: this.cwd,
       platform: process.platform,
       tools: this.tools.getDefinitions(),
       date: new Date(),
+      skills: skillPrompt,
     })
 
     // 5. 使用 ReActRunner 执行
@@ -539,5 +548,47 @@ export class Agent {
    */
   switchToBuildModel(): void {
     this.llm.switchToBuildModel()
+  }
+
+  /**
+   * 获取 Skill Registry
+   */
+  getSkillRegistry(): SkillRegistry {
+    return this.skillRegistry
+  }
+
+  /**
+   * 加载所有 Skills
+   */
+  async loadSkills(): Promise<void> {
+    await this.skillRegistry.discoverAndLoad()
+  }
+
+  /**
+   * 激活 Skill
+   */
+  activateSkill(id: string): ReturnType<SkillRegistry["activate"]> {
+    return this.skillRegistry.activate(id)
+  }
+
+  /**
+   * 停用 Skill
+   */
+  deactivateSkill(id: string): boolean {
+    return this.skillRegistry.deactivate(id)
+  }
+
+  /**
+   * 获取 Skill 列表
+   */
+  getSkills(): ReturnType<SkillRegistry["getSummaries"]> {
+    return this.skillRegistry.getSummaries()
+  }
+
+  /**
+   * 获取激活的 Skills
+   */
+  getActiveSkills(): ReturnType<SkillRegistry["getActive"]> {
+    return this.skillRegistry.getActive()
   }
 }

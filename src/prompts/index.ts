@@ -8,6 +8,7 @@ import { objectivesSection } from './sections/objectives.js'
 import { memorySection } from './sections/memory.js'
 import { errorHandlingSection } from './sections/errorHandling.js'
 import { workflowSection } from './sections/workflow.js'
+import { skillsSection } from './sections/skills.js'
 import { planModeSection } from './sections/plan.js'
 
 export type { PromptContext, PromptSection, ToolDefinition } from './types.js'
@@ -23,6 +24,7 @@ export { objectivesSection } from './sections/objectives.js'
 export { memorySection } from './sections/memory.js'
 export { errorHandlingSection } from './sections/errorHandling.js'
 export { workflowSection } from './sections/workflow.js'
+export { skillsSection } from './sections/skills.js'
 export { planModeSection } from './sections/plan.js'
 
 /**
@@ -55,6 +57,9 @@ export class PromptProvider {
 
       // 工作流程层 (workflow)
       workflowSection,
+
+      // Skills 层 (动态注入)
+      skillsSection,
 
       // 记忆管理层 (memory)
       memorySection,
