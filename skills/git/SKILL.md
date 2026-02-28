@@ -27,9 +27,6 @@ Follow these rules when making git commits:
    - One logical change per commit
    - Split large changes into multiple commits
 
-4. **Include Co-Authored-By for AI assistance**
-   - Add "Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" when appropriate
-
 ## Safety Rules
 
 1. **Never use --force on main/master branch**
