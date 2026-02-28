@@ -100,7 +100,7 @@ program
       compressionThreshold: parseFloat(options.compressionThreshold),
     })
 
-    // 渲染 Ink 应用
+    // 渲染 Ink 应用（启用增量渲染以改善滚动体验）
     render(
       <App
         agent={agent}
@@ -108,7 +108,10 @@ program
         baseURL={baseURL}
         sessionId={options.session}
         workingDir={options.directory}
-      />
+      />,
+      {
+        incrementalRendering: true,  // 增量渲染，避免全屏刷新
+      }
     )
   })
 

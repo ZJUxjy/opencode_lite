@@ -1166,6 +1166,231 @@ Week 3: Phase 4 - 高级特性
 
 ---
 
-*文档版本: 1.0*
+## 9. 未来改进计划 (基于 Kode-Agent 调研)
+
+> 调研日期: 2026-02-28
+> 参考项目: Kode-Agent v2.0.2 (https://github.com/shareAI-lab/kode)
+
+### 9.1 功能对比：Kode-Agent vs lite-opencode
+
+| 功能 | Kode-Agent | lite-opencode | 差距 |
+|------|:----------:|:-------------:|:----:|
+| **工具系统** ||||
+| AsyncGenerator 执行 | ✅ | ❌ | 大 |
+| 进度报告 (yield progress) | ✅ | ❌ | 大 |
+| `isConcurrencySafe()` | ✅ | ❌ | 中 |
+| `isReadOnly()` | ✅ | ❌ | 中 |
+| 工具队列并行执行 | ✅ | ❌ | 大 |
+| 动态描述 (基于输入) | ✅ | ❌ | 小 |
+| **权限系统** ||||
+| 分层权限引擎 | ✅ | ✅ | ✅ |
+| 规则匹配 (正则/通配符) | ✅ | ✅ | ✅ |
+| 用户决策学习 | ✅ | ✅ | ✅ |
+| 沙箱执行 (bwrap/sandbox-exec) | ✅ | ❌ | 大 |
+| **多模型支持** ||||
+| 统一适配器接口 | ✅ | ❌ | 大 |
+| 模型能力注册表 | ✅ | ❌ | 中 |
+| 参数模式适配 | ✅ | ❌ | 中 |
+| **扩展性** ||||
+| MCP 协议集成 | ✅ | ❌ | 大 |
+| 插件系统 | ✅ | ❌ | 大 |
+| Hook 系统 | ✅ | ❌ | 中 |
+| **高级特性** ||||
+| Agent 子任务 (TaskTool) | ✅ | ❌ | 大 |
+| Plan Mode | ✅ | ❌ | 中 |
+| 二进制反馈模式 | ✅ | ❌ | 小 |
+
+### 9.2 Phase 5: 工具系统增强 (计划中)
+
+**目标**: 增强工具系统，支持并发执行和进度报告
+
+**优先级**: 高 (低成本高收益)
+
+| 任务 | 说明 | 改动量 | 优先级 |
+|------|------|--------|--------|
+| 5.1 `isConcurrencySafe()` | 标记只读工具可并行执行 | ~20 行 | P0 |
+| 5.2 `isReadOnly()` | 标记只读工具，用于权限判断 | ~15 行 | P0 |
+| 5.3 工具并行执行 | 识别安全工具并行调用 | ~50 行 | P0 |
+| 5.4 AsyncGenerator 执行 | 支持 yield 进度 | ~100 行 | P1 |
+| 5.5 进度 UI | 显示工具执行进度 | ~50 行 | P1 |
+
+**改进后的 Tool 接口**:
+```typescript
+// src/types.ts
+export interface Tool<T extends z.ZodType = z.ZodType> {
+  name: string
+  description: string | ((input?: z.infer<T>) => Promise<string>)  // 支持动态
+  parameters: T
+
+  // 新增属性
+  isConcurrencySafe?: (input?: z.infer<T>) => boolean
+  isReadOnly?: (input?: z.infer<T>) => boolean
+  needsPermissions?: (input?: z.infer<T>) => boolean
+
+  // 改为支持 AsyncGenerator
+  execute: (
+    params: z.infer<T>,
+    ctx: Context
+  ) => Promise<string> | AsyncGenerator<
+    | { type: 'progress'; content: string }
+    | { type: 'result'; data: string }
+  >
+}
+```
+
+**工具并行执行示例**:
+```typescript
+// 当前：串行执行
+for (const call of toolCalls) {
+  await executeTool(call)
+}
+
+// 改进：并行执行安全工具
+const safeCalls = toolCalls.filter(c =>
+  tools.get(c.name)?.isConcurrencySafe?.() ?? false
+)
+const unsafeCalls = toolCalls.filter(c =>
+  !(tools.get(c.name)?.isConcurrencySafe?.() ?? true)
+)
+
+// 并行执行所有安全工具
+await Promise.all(safeCalls.map(executeTool))
+
+// 串行执行非安全工具
+for (const call of unsafeCalls) {
+  await executeTool(call)
+}
+```
+
+### 9.3 Phase 6: MCP 集成 (计划中)
+
+**目标**: 集成 Model Context Protocol，扩展工具生态
+
+**优先级**: 中
+
+| 任务 | 说明 | 改动量 | 优先级 |
+|------|------|--------|--------|
+| 6.1 MCP 客户端 | 连接 MCP 服务器 | ~150 行 | P0 |
+| 6.2 多传输协议 | stdio/sse/ws 支持 | ~100 行 | P1 |
+| 6.3 工具包装 | MCP 工具转内部格式 | ~80 行 | P0 |
+| 6.4 配置发现 | 自动发现 .mcp.json | ~50 行 | P1 |
+
+**MCP 工具命名空间**:
+```typescript
+// 命名格式: mcp__serverName__toolName
+const mcpTools = await getMCPTools()
+// 返回: [
+//   { name: 'mcp__filesystem__read_file', ... },
+//   { name: 'mcp__github__create_issue', ... }
+// ]
+```
+
+### 9.4 Phase 7: 多模型适配器 (计划中)
+
+**目标**: 统一多模型接口，支持更多 LLM 提供商
+
+**优先级**: 中
+
+| 任务 | 说明 | 改动量 | 优先级 |
+|------|------|--------|--------|
+| 7.1 适配器基类 | 统一接口定义 | ~50 行 | P0 |
+| 7.2 模型能力注册表 | 预定义模型能力 | ~100 行 | P0 |
+| 7.3 Anthropic 适配器 | 迁移现有代码 | ~80 行 | P0 |
+| 7.4 OpenAI 适配器 | 支持 GPT 系列 | ~80 行 | P1 |
+| 7.5 适配器工厂 | 自动选择适配器 | ~50 行 | P0 |
+
+**模型能力配置示例**:
+```typescript
+// src/llm/capabilities.ts
+export interface ModelCapabilities {
+  apiArchitecture: {
+    primary: 'responses_api' | 'chat_completions'
+    fallback?: 'chat_completions'
+  }
+  parameters: {
+    maxTokensField: 'max_tokens' | 'max_output_tokens'
+    supportsReasoningEffort: boolean
+  }
+  toolCalling: {
+    mode: 'function_calling' | 'custom_tools'
+    supportsParallelCalls: boolean
+  }
+}
+
+export const MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
+  'claude-sonnet-4': {
+    apiArchitecture: { primary: 'responses_api' },
+    parameters: { maxTokensField: 'max_output_tokens', supportsReasoningEffort: false },
+    toolCalling: { mode: 'function_calling', supportsParallelCalls: true },
+  },
+  'gpt-4': {
+    apiArchitecture: { primary: 'chat_completions' },
+    parameters: { maxTokensField: 'max_tokens', supportsReasoningEffort: false },
+    toolCalling: { mode: 'function_calling', supportsParallelCalls: true },
+  },
+  // ...
+}
+```
+
+### 9.5 Phase 8: Hook 系统 (计划中)
+
+**目标**: 支持生命周期钩子，增强可扩展性
+
+**优先级**: 低
+
+| Hook 点 | 触发时机 | 用途 |
+|---------|----------|------|
+| `onUserPromptSubmit` | 用户提交 prompt | 预处理、验证 |
+| `onPreToolUse` | 工具执行前 | 权限检查、日志 |
+| `onPostToolUse` | 工具执行后 | 后处理、统计 |
+| `onSessionStop` | 会话停止 | 清理、保存 |
+
+**Hook 接口**:
+```typescript
+interface HookResult {
+  decision?: 'continue' | 'block'
+  message?: string
+  modifiedInput?: any
+}
+
+type HookFn<T> = (context: T) => Promise<HookResult>
+
+// 使用示例
+hooks.onPreToolUse(async ({ toolName, input }) => {
+  if (toolName === 'bash' && input.command.includes('rm')) {
+    return { decision: 'block', message: 'Dangerous command blocked' }
+  }
+  return { decision: 'continue' }
+})
+```
+
+### 9.6 实施优先级总结
+
+| Phase | 主题 | 预计改动量 | 价值 | 优先级 |
+|-------|------|-----------|------|--------|
+| Phase 5 | 工具系统增强 | ~250 行 | 高 | **立即实施** |
+| Phase 6 | MCP 集成 | ~400 行 | 高 | 短期 |
+| Phase 7 | 多模型适配器 | ~400 行 | 中 | 短期 |
+| Phase 8 | Hook 系统 | ~200 行 | 中 | 长期 |
+
+### 9.7 Kode-Agent 代码参考
+
+| 功能 | 文件路径 |
+|------|----------|
+| 工具 AsyncGenerator | `src/core/tools/tool.ts` |
+| 工具队列并行 | `src/app/query.ts` (ToolUseQueue) |
+| MCP 客户端 | `src/services/mcp/client.ts` |
+| MCP 工具包装 | `src/services/mcp/tools-integration.ts` |
+| 模型适配器 | `src/services/ai/modelAdapterFactory.ts` |
+| 模型能力 | `src/constants/modelCapabilities.ts` |
+| 权限引擎 | `src/core/permissions/engine/index.ts` |
+| 沙箱机制 | `src/utils/sandbox/bunShellSandboxPlan.ts` |
+| Hook 系统 | `src/utils/session/kodeHooks.ts` |
+| TaskTool | `src/tools/agent/TaskTool/TaskTool.tsx` |
+
+---
+
+*文档版本: 1.1*
 *创建日期: 2026-02-28*
-*参考项目: OpenManus, Roo-Code, dify, gemini-cli, goose, kilocode, opencode, pi-mono*
+*更新日期: 2026-02-28*
+*参考项目: OpenManus, Roo-Code, dify, gemini-cli, goose, kilocode, opencode, pi-mono, Kode-Agent*
