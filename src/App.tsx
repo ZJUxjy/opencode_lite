@@ -571,6 +571,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
             </Text>
             <Text dimColor> ({contextStatus.usedK}K / {contextStatus.limitK}K)</Text>
             {agent.isYoloMode() && <Text color="yellow" bold> 🚀 YOLO</Text>}
+            {agent.isPlanMode() && <Text color="magenta" bold> 📋 PLAN</Text>}
             {isProcessing && <Text color="cyan"> ● Processing...</Text>}
           </Text>
         </Box>

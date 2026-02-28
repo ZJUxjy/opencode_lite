@@ -5,15 +5,24 @@ import { writeTool } from "./write.js"
 import { editTool } from "./edit.js"
 import { grepTool } from "./grep.js"
 import { globTool } from "./glob.js"
+import { enterPlanModeTool } from "./enter-plan-mode.js"
+import { exitPlanModeTool } from "./exit-plan-mode.js"
 
 export class ToolRegistry {
   private tools = new Map<string, Tool>()
 
   constructor() {
     // 注册内置工具
-    ;[bashTool, readTool, writeTool, editTool, grepTool, globTool].forEach(
-      (tool) => this.register(tool)
-    )
+    ;[
+      bashTool,
+      readTool,
+      writeTool,
+      editTool,
+      grepTool,
+      globTool,
+      enterPlanModeTool,
+      exitPlanModeTool,
+    ].forEach((tool) => this.register(tool))
   }
 
   register(tool: Tool) {
@@ -44,3 +53,5 @@ export * from "./write.js"
 export * from "./edit.js"
 export * from "./grep.js"
 export * from "./glob.js"
+export * from "./enter-plan-mode.js"
+export * from "./exit-plan-mode.js"

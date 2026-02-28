@@ -11,10 +11,12 @@ export type PolicyDecision = "allow" | "deny" | "ask"
 export interface PolicyRule {
   tool: string           // 工具名，"*" 表示所有工具
   decision: PolicyDecision
+  mode?: "default" | "plan" | "all"  // 适用的模式，默认为 "all"
   condition?: {
     // 可选条件
     argPattern?: RegExp       // 参数匹配模式
     pathPattern?: RegExp      // 路径匹配模式（用于文件操作）
+    readOnlyHint?: boolean    // 是否为只读工具（用于 Plan Mode）
   }
   description?: string   // 规则描述（用于 UI 显示）
 }
@@ -60,6 +62,7 @@ const DEFAULT_CONFIG: PolicyConfig = {
  * - 检查用户学习的规则
  * - 返回决策结果
  * - 支持 YOLO 模式（自动批准所有）
+ * - 支持 Plan Mode（只读模式）
  */
 export class PolicyEngine {
   private config: PolicyConfig
@@ -67,6 +70,8 @@ export class PolicyEngine {
   private learnedRules: Map<string, PolicyDecision> = new Map()
   /** YOLO 模式：自动批准所有操作 */
   private yoloMode: boolean = false
+  /** Plan Mode：只读模式 */
+  private planMode: boolean = false
 
   constructor(config: Partial<PolicyConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
@@ -153,8 +158,19 @@ export class PolicyEngine {
       }
     }
 
-    // 1. 检查预定义规则（按顺序，先匹配的优先）
+    // 1. Plan Mode 检查
+    if (this.planMode) {
+      const planResult = this.checkPlanMode(toolName, args)
+      if (planResult) return planResult
+    }
+
+    // 2. 检查预定义规则（按顺序，先匹配的优先）
     for (const rule of this.rules) {
+      // 检查模式匹配
+      if (rule.mode && rule.mode !== "all" && rule.mode !== "default") {
+        continue
+      }
+
       if (rule.tool !== toolName && rule.tool !== "*") {
         continue
       }
@@ -182,7 +198,7 @@ export class PolicyEngine {
       }
     }
 
-    // 2. 检查学习的规则
+    // 3. 检查学习的规则
     const argsHash = this.hashArgs(toolName, args)
     const learnedDecision = this.learnedRules.get(argsHash)
     if (learnedDecision) {
@@ -192,11 +208,74 @@ export class PolicyEngine {
       }
     }
 
-    // 3. 返回默认决策
+    // 4. 返回默认决策
     return {
       decision: this.config.defaultDecision,
       reason: "默认策略",
     }
+  }
+
+  /**
+   * Plan Mode 权限检查
+   * 在 Plan Mode 下，只允许只读操作
+   */
+  private checkPlanMode(toolName: string, args: Record<string, unknown>): PolicyResult | null {
+    // 首先检查 Plan Mode 专用规则
+    for (const rule of this.rules) {
+      // 只应用 Plan Mode 规则或通用规则
+      if (rule.mode && rule.mode !== "plan" && rule.mode !== "all") {
+        continue
+      }
+
+      if (rule.tool !== toolName && rule.tool !== "*") {
+        continue
+      }
+
+      // 检查条件
+      if (rule.condition) {
+        if (rule.condition.argPattern) {
+          const argsStr = JSON.stringify(args)
+          if (!rule.condition.argPattern.test(argsStr)) {
+            continue
+          }
+        }
+        if (rule.condition.pathPattern && args.path) {
+          if (!rule.condition.pathPattern.test(String(args.path))) {
+            continue
+          }
+        }
+      }
+
+      return {
+        decision: rule.decision,
+        reason: rule.description || `Plan Mode 规则: ${rule.tool}`,
+        rule,
+      }
+    }
+
+    // 默认拒绝非只读操作
+    const readOnlyTools = ["read", "glob", "grep", "bash"]
+    if (!readOnlyTools.includes(toolName)) {
+      return {
+        decision: "deny",
+        reason: "Plan Mode 下只允许只读操作。如需修改，请先退出 Plan Mode。",
+      }
+    }
+
+    // 对于 bash，进一步检查命令是否安全
+    if (toolName === "bash" && args.command) {
+      const cmd = String(args.command)
+      // 只允许安全的只读命令
+      const safePattern = /^(ls|cat|head|tail|grep|find|pwd|echo|which|git\s+(status|log|diff|branch|show))\b/
+      if (!safePattern.test(cmd)) {
+        return {
+          decision: "deny",
+          reason: "Plan Mode 下只允许执行安全的只读命令。",
+        }
+      }
+    }
+
+    return null // 继续正常检查流程
   }
 
   /**
@@ -338,5 +417,28 @@ export class PolicyEngine {
    */
   getLearnedRulesCount(): number {
     return this.learnedRules.size
+  }
+
+  /**
+   * 切换 Plan Mode
+   * @returns 新的 Plan Mode 状态
+   */
+  togglePlanMode(): boolean {
+    this.planMode = !this.planMode
+    return this.planMode
+  }
+
+  /**
+   * 设置 Plan Mode
+   */
+  setPlanMode(enabled: boolean): void {
+    this.planMode = enabled
+  }
+
+  /**
+   * 获取 Plan Mode 状态
+   */
+  isPlanMode(): boolean {
+    return this.planMode
   }
 }

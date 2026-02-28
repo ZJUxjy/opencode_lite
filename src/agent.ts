@@ -256,7 +256,11 @@ export class Agent {
    */
   private async executeTools(toolCalls: ToolCall[]) {
     const results = []
-    const ctx: Context = { cwd: this.cwd, messages: [] }
+    const ctx: Context = {
+      cwd: this.cwd,
+      messages: [],
+      setPlanMode: (enabled) => this.policyEngine.setPlanMode(enabled)
+    }
 
     for (const call of toolCalls) {
       this.events.onToolCall?.(call)
@@ -479,6 +483,27 @@ export class Agent {
    */
   isYoloMode(): boolean {
     return this.policyEngine.isYoloMode()
+  }
+
+  /**
+   * 切换 Plan Mode
+   */
+  togglePlanMode(): boolean {
+    return this.policyEngine.togglePlanMode()
+  }
+
+  /**
+   * 设置 Plan Mode
+   */
+  setPlanMode(enabled: boolean): void {
+    this.policyEngine.setPlanMode(enabled)
+  }
+
+  /**
+   * 获取 Plan Mode 状态
+   */
+  isPlanMode(): boolean {
+    return this.policyEngine.isPlanMode()
   }
 
   /**

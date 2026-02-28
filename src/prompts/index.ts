@@ -8,6 +8,7 @@ import { objectivesSection } from './sections/objectives.js'
 import { memorySection } from './sections/memory.js'
 import { errorHandlingSection } from './sections/errorHandling.js'
 import { workflowSection } from './sections/workflow.js'
+import { planModeSection } from './sections/plan.js'
 
 export type { PromptContext, PromptSection, ToolDefinition } from './types.js'
 export { substitute } from './utils.js'
@@ -22,6 +23,7 @@ export { objectivesSection } from './sections/objectives.js'
 export { memorySection } from './sections/memory.js'
 export { errorHandlingSection } from './sections/errorHandling.js'
 export { workflowSection } from './sections/workflow.js'
+export { planModeSection } from './sections/plan.js'
 
 /**
  * PromptProvider - 模块化 Prompt 生成器
@@ -62,6 +64,9 @@ export class PromptProvider {
 
       // 约束层 (constraints)
       constraintsSection,
+
+      // Plan Mode 层 (条件渲染，仅 Plan Mode 启用时)
+      planModeSection,
 
       // ReAct 格式层 (条件渲染，仅 CoT 模式)
       reactSection,
