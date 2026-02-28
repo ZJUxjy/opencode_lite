@@ -65,34 +65,57 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
 // 压缩阈值 (模型容量的百分比)
 const COMPRESSION_THRESHOLD = 0.92  // 92%
 
+export interface ModelRoutingConfig {
+  /** Plan Mode 使用的模型 (强模型) */
+  planModel?: string
+  /** 执行模式使用的模型 (快模型) */
+  buildModel?: string
+  /** 是否启用模型路由 */
+  enabled?: boolean
+}
+
 export class LLMClient {
   private model
   private provider
   private modelId: string
+  private originalModelId: string  // 保存原始模型 ID
   private timeout: number
+  private baseURL: string | undefined
+  private apiKey: string | undefined
+  private isMiniMax: boolean
   /** Current AbortController for canceling ongoing requests */
   private currentAbortController: AbortController | null = null
+  /** Model routing configuration */
+  private modelRouting: ModelRoutingConfig
 
   constructor(config: LLMConfig = {}) {
     // 优先级: 传入配置 > 环境变量 > 默认值
-    const baseURL = config.baseURL || process.env.ANTHROPIC_BASE_URL
-    const apiKey = config.apiKey || process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN
+    this.baseURL = config.baseURL || process.env.ANTHROPIC_BASE_URL
+    this.apiKey = config.apiKey || process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN
     this.modelId = config.model || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514"
+    this.originalModelId = this.modelId
     this.timeout = config.timeout || parseInt(process.env.API_TIMEOUT_MS || "120000", 10)
+
+    // 模型路由配置
+    this.modelRouting = {
+      planModel: process.env.PLAN_MODE_MODEL || "claude-opus-4",
+      buildModel: this.modelId,
+      enabled: process.env.ENABLE_MODEL_ROUTING !== "false",  // 默认启用
+    }
 
     // 创建 Anthropic 客户端，支持自定义 base URL
     // 注意: MiniMax 等 API 需要使用 Authorization: Bearer 格式
-    const isMiniMax = baseURL?.includes("minimax")
+    this.isMiniMax = this.baseURL?.includes("minimax") || false
     const anthropicConfig: any = {
-      ...(baseURL && { baseURL }),
+      ...(this.baseURL && { baseURL: this.baseURL }),
     }
 
-    if (apiKey) {
-      anthropicConfig.apiKey = apiKey
+    if (this.apiKey) {
+      anthropicConfig.apiKey = this.apiKey
       // MiniMax 需要 Authorization: Bearer 格式
-      if (isMiniMax) {
+      if (this.isMiniMax) {
         anthropicConfig.headers = {
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${this.apiKey}`,
         }
       }
     }
@@ -103,6 +126,9 @@ export class LLMClient {
 
     if (process.env.DEBUG_LLM === "1") {
       console.log(`[LLM] Initialized with model: ${this.modelId}, timeout: ${this.timeout}ms`)
+      if (this.modelRouting.enabled) {
+        console.log(`[LLM] Model routing enabled: Plan=${this.modelRouting.planModel}, Build=${this.modelRouting.buildModel}`)
+      }
     }
   }
 
@@ -138,6 +164,69 @@ export class LLMClient {
    * 获取当前模型 ID
    */
   getModelId(): string {
+    return this.modelId
+  }
+
+  /**
+   * 切换到 Plan Mode 模型（强模型）
+   */
+  switchToPlanModel(): void {
+    if (!this.modelRouting.enabled) return
+
+    const planModel = this.modelRouting.planModel
+    if (planModel && planModel !== this.modelId) {
+      this.modelId = planModel
+      this.model = this.provider(this.modelId)
+
+      if (process.env.DEBUG_LLM === "1") {
+        console.log(`[LLM] Switched to Plan Mode model: ${this.modelId}`)
+      }
+    }
+  }
+
+  /**
+   * 切换到 Build 模型（快模型）
+   */
+  switchToBuildModel(): void {
+    if (!this.modelRouting.enabled) return
+
+    const buildModel = this.modelRouting.buildModel
+    if (buildModel && buildModel !== this.modelId) {
+      this.modelId = buildModel
+      this.model = this.provider(this.modelId)
+
+      if (process.env.DEBUG_LLM === "1") {
+        console.log(`[LLM] Switched to Build model: ${this.modelId}`)
+      }
+    }
+  }
+
+  /**
+   * 获取模型路由配置
+   */
+  getModelRoutingConfig(): ModelRoutingConfig {
+    return { ...this.modelRouting }
+  }
+
+  /**
+   * 设置模型路由配置
+   */
+  setModelRoutingConfig(config: Partial<ModelRoutingConfig>): void {
+    this.modelRouting = { ...this.modelRouting, ...config }
+  }
+
+  /**
+   * 获取当前模型显示名称
+   */
+  getModelDisplayName(): string {
+    const id = this.modelId.toLowerCase()
+    if (id.includes("opus")) return "Opus"
+    if (id.includes("sonnet")) return "Sonnet"
+    if (id.includes("haiku")) return "Haiku"
+    if (id.includes("minimax")) return "MiniMax"
+    if (id.includes("glm")) return "GLM"
+    if (id.includes("qwen")) return "Qwen"
+    if (id.includes("deepseek")) return "DeepSeek"
     return this.modelId
   }
 

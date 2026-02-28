@@ -497,6 +497,13 @@ export class Agent {
    */
   setPlanMode(enabled: boolean): void {
     this.policyEngine.setPlanMode(enabled)
+
+    // 自动切换模型
+    if (enabled) {
+      this.llm.switchToPlanModel()
+    } else {
+      this.llm.switchToBuildModel()
+    }
   }
 
   /**
@@ -511,5 +518,26 @@ export class Agent {
    */
   getPolicyEngine(): PolicyEngine {
     return this.policyEngine
+  }
+
+  /**
+   * 获取当前模型显示名称
+   */
+  getModelDisplayName(): string {
+    return this.llm.getModelDisplayName()
+  }
+
+  /**
+   * 切换到 Plan Mode 模型
+   */
+  switchToPlanModel(): void {
+    this.llm.switchToPlanModel()
+  }
+
+  /**
+   * 切换到 Build 模型
+   */
+  switchToBuildModel(): void {
+    this.llm.switchToBuildModel()
   }
 }

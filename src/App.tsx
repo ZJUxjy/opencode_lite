@@ -526,6 +526,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
   }, [updateContextUsage])
 
   // =========================================================================
+  // =========================================================================
   // 格式化上下文状态
   // =========================================================================
 
@@ -536,6 +537,11 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
     const limitK = (contextUsage.limit / 1000).toFixed(0)
     return { percent, color, usedK, limitK }
   }, [contextUsage])
+
+  // 获取当前模型显示名称
+  const modelDisplayName = useMemo(() => {
+    return agent.getModelDisplayName()
+  }, [agent])
 
   // =========================================================================
   // 渲染
@@ -642,6 +648,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
               ▌Context: {contextStatus.percent}%
             </Text>
             <Text dimColor> ({contextStatus.usedK}K / {contextStatus.limitK}K)</Text>
+            <Text dimColor> | {modelDisplayName}</Text>
             {agent.isYoloMode() && <Text color="yellow" bold> 🚀 YOLO</Text>}
             {agent.isPlanMode() && <Text color="magenta" bold> 📋 PLAN</Text>}
             {isProcessing && <Text color="cyan"> ● Processing...</Text>}
