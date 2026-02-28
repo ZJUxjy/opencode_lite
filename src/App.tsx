@@ -4,9 +4,12 @@ import Spinner from "ink-spinner"
 import { Agent, type AgentEvents } from "./agent.js"
 import { CommandInput } from "./components/CommandInput.js"
 import { PermissionPrompt } from "./components/PermissionPrompt.js"
+import { PlanFollowupPrompt, type PlanFollowupDecision } from "./components/PlanFollowupPrompt.js"
 import type { CommandContext, PermissionRequest, PermissionDecision } from "./commands/types.js"
 import type { ToolCall } from "./types.js"
 import type { PolicyDecision } from "./policy.js"
+import { getPlanFilePath, readPlanFile, exitPlanMode } from "./plan/manager.js"
+import { buildNewSessionPrompt, buildContinueSessionPrompt } from "./plan/handover.js"
 
 /**
  * 方案 A 实现：最小改动修复滚动问题
@@ -173,6 +176,17 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
   // 用于 resolve 权限请求的 Promise
   const permissionResolveRef = useRef<((decision: PolicyDecision) => void) | null>(null)
 
+  // =========================================================================
+  // Plan Followup 状态
+  // =========================================================================
+
+  // 是否显示 Plan Followup 提示
+  const [planFollowupVisible, setPlanFollowupVisible] = useState(false)
+  // 当前计划文件路径
+  const [planFilePath, setPlanFilePath] = useState<string>("")
+  // 用于 resolve Plan Followup 的 Promise
+  const planFollowupResolveRef = useRef<((decision: PlanFollowupDecision) => void) | null>(null)
+
   /**
    * 处理权限请求
    * 当 Agent 需要用户授权时调用
@@ -212,6 +226,48 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
       setPermissionRequest(null)
     }
   }, [agent, permissionRequest])
+
+  /**
+   * 处理 Plan Followup 决策
+   */
+  const handlePlanFollowupDecision = useCallback(async (decision: PlanFollowupDecision) => {
+    setPlanFollowupVisible(false)
+
+    if (!decision) {
+      return
+    }
+
+    const { content: planContent } = readPlanFile()
+
+    if (decision === "new_session") {
+      // 在新会话中实现（简化版：清空当前消息并添加计划作为初始提示）
+      const newSessionPrompt = buildNewSessionPrompt({
+        planContent,
+      })
+
+      // 清空消息历史
+      setMessages([])
+
+      // 添加系统消息
+      const systemMessage = createSystemMessage("🆕 Starting new session with plan...")
+      setMessages([systemMessage])
+
+      // 添加计划作为用户消息，让 Agent 执行
+      setTimeout(() => {
+        handleSubmit(newSessionPrompt)
+      }, 100)
+    } else if (decision === "continue") {
+      // 在当前会话中继续
+      const continuePrompt = buildContinueSessionPrompt(planContent)
+
+      const systemMessage = createSystemMessage("🔄 Continuing with plan implementation...")
+      setMessages(prev => [...prev, systemMessage])
+
+      setTimeout(() => {
+        handleSubmit(continuePrompt)
+      }, 100)
+    }
+  }, [])
 
   /**
    * 获取工具的友好描述
@@ -368,6 +424,13 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
         )
         setMessages(prev => [...prev, toolMessage])
         setCurrentTool(null)
+
+        // 检测 exit_plan_mode 工具执行，显示 PlanFollowup
+        if (toolCall.name === "exit_plan_mode" && result.includes("Successfully exited")) {
+          const planPath = getPlanFilePath()
+          setPlanFilePath(planPath)
+          setPlanFollowupVisible(true)
+        }
       },
 
       onResponse: (content: string, reasoning?: string) => {
@@ -550,6 +613,15 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
         request={permissionRequest!}
         onDecision={handlePermissionDecision}
         visible={permissionRequest !== null}
+      />
+
+      {/* =====================================================================
+          Plan Followup 提示
+          ===================================================================== */}
+      <PlanFollowupPrompt
+        planFilePath={planFilePath}
+        onDecision={handlePlanFollowupDecision}
+        visible={planFollowupVisible}
       />
 
       {/* =====================================================================

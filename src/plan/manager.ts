@@ -276,3 +276,10 @@ export function getPlanFilePath(): string {
 export function isPlanFilePath(path: string): boolean {
   return getPlanModeManager().isPlanFilePath(path)
 }
+
+/**
+ * 读取计划文件
+ */
+export function readPlanFile(): { content: string; exists: boolean; planFilePath: string } {
+  return getPlanModeManager().readPlanFile()
+}
