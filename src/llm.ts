@@ -6,6 +6,8 @@ export interface LLMConfig {
   model?: string
   baseURL?: string
   apiKey?: string
+  /** 请求超时时间（毫秒），默认 120000 (2分钟) */
+  timeout?: number
 }
 
 export interface ChatResponse {
@@ -67,20 +69,39 @@ export class LLMClient {
   private model
   private provider
   private modelId: string
+  private timeout: number
 
   constructor(config: LLMConfig = {}) {
     // 优先级: 传入配置 > 环境变量 > 默认值
     const baseURL = config.baseURL || process.env.ANTHROPIC_BASE_URL
     const apiKey = config.apiKey || process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN
     this.modelId = config.model || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514"
+    this.timeout = config.timeout || parseInt(process.env.API_TIMEOUT_MS || "120000", 10)
 
     // 创建 Anthropic 客户端，支持自定义 base URL
-    this.provider = createAnthropic({
+    // 注意: MiniMax 等 API 需要使用 Authorization: Bearer 格式
+    const isMiniMax = baseURL?.includes("minimax")
+    const anthropicConfig: any = {
       ...(baseURL && { baseURL }),
-      ...(apiKey && { apiKey }),
-    })
+    }
+
+    if (apiKey) {
+      anthropicConfig.apiKey = apiKey
+      // MiniMax 需要 Authorization: Bearer 格式
+      if (isMiniMax) {
+        anthropicConfig.headers = {
+          Authorization: `Bearer ${apiKey}`,
+        }
+      }
+    }
+
+    this.provider = createAnthropic(anthropicConfig)
 
     this.model = this.provider(this.modelId)
+
+    if (process.env.DEBUG_LLM === "1") {
+      console.log(`[LLM] Initialized with model: ${this.modelId}, timeout: ${this.timeout}ms`)
+    }
   }
 
   /**
@@ -129,23 +150,43 @@ export class LLMClient {
     const coreMessages = this.convertMessages(messages)
     const toolDefs = this.convertTools(tools)
 
-    const result = await generateText({
-      model: this.model,
-      system: systemPrompt,
-      messages: coreMessages,
-      tools: toolDefs,
-      maxSteps: 1,  // 单步执行，工具调用由 agent 循环处理
-      maxTokens: 32000,  // 足够大的 token 限制
-    })
+    // 创建 AbortController 用于超时控制
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+    }, this.timeout)
 
-    return {
-      content: result.text,
-      toolCalls: result.toolCalls?.map((tc) => ({
-        id: tc.toolCallId,
-        name: tc.toolName,
-        arguments: tc.args as Record<string, unknown>,
-      })),
-      finishReason: result.finishReason,
+    try {
+      const result = await generateText({
+        model: this.model,
+        system: systemPrompt,
+        messages: coreMessages,
+        tools: toolDefs,
+        maxSteps: 1,  // 单步执行，工具调用由 agent 循环处理
+        maxTokens: 32000,  // 足够大的 token 限制
+        abortSignal: controller.signal,
+      })
+
+      clearTimeout(timeoutId)
+
+      return {
+        content: result.text,
+        toolCalls: result.toolCalls?.map((tc) => ({
+          id: tc.toolCallId,
+          name: tc.toolName,
+          arguments: tc.args as Record<string, unknown>,
+        })),
+        finishReason: result.finishReason,
+      }
+    } catch (error: any) {
+      clearTimeout(timeoutId)
+
+      // 处理超时错误
+      if (error.name === "AbortError" || controller.signal.aborted) {
+        throw new Error(`Request timed out after ${this.timeout / 1000} seconds. The API may be slow or unresponsive.`)
+      }
+
+      throw error
     }
   }
 
@@ -161,57 +202,92 @@ export class LLMClient {
     const coreMessages = this.convertMessages(messages)
     const toolDefs = this.convertTools(tools)
 
-    const result = streamText({
-      model: this.model,
-      system: systemPrompt,
-      messages: coreMessages,
-      tools: toolDefs,
-      maxSteps: 1,  // 单步执行，工具调用由 agent 循环处理
-      maxTokens: 32000,  // 与 OpenCode 保持一致
-      temperature: 0.2,
-    })
-
-    let fullContent = ""
-    let fullReasoning = ""
-    const toolCalls: ToolCall[] = []
-
-    const streamResult = await result
-
-    // 处理流式响应
-    for await (const delta of streamResult.fullStream) {
-      switch (delta.type) {
-        case "text-delta":
-          fullContent += delta.textDelta
-          callbacks.onTextDelta?.(delta.textDelta)
-          break
-
-        case "reasoning":
-          // 处理思考过程增量（MiniMax、DeepSeek 等模型支持）
-          // AI SDK 使用 type: 'reasoning' + textDelta 属性
-          fullReasoning += delta.textDelta
-          callbacks.onReasoningDelta?.(delta.textDelta)
-          break
-
-        case "tool-call":
-          const tc: ToolCall = {
-            id: delta.toolCallId,
-            name: delta.toolName,
-            arguments: delta.args as Record<string, unknown>,
-          }
-          toolCalls.push(tc)
-          callbacks.onToolCall?.(tc)
-          break
-
-        case "error":
-          throw new Error(`LLM Stream Error: ${JSON.stringify(delta.error || delta)}`)
+    // 创建 AbortController 用于超时控制
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+      if (process.env.DEBUG_LLM === "1") {
+        console.log(`[LLM] Request timed out after ${this.timeout}ms`)
       }
+    }, this.timeout)
+
+    if (process.env.DEBUG_LLM === "1") {
+      console.log(`[LLM] Starting stream request with ${messages.length} messages, timeout: ${this.timeout}ms`)
     }
 
-    return {
-      content: fullContent || (await streamResult.text),
-      reasoning: fullReasoning || undefined,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-      finishReason: await streamResult.finishReason,
+    try {
+      const result = streamText({
+        model: this.model,
+        system: systemPrompt,
+        messages: coreMessages,
+        tools: toolDefs,
+        maxSteps: 1,  // 单步执行，工具调用由 agent 循环处理
+        maxTokens: 32000,  // 与 OpenCode 保持一致
+        temperature: 0.2,
+        abortSignal: controller.signal,
+      })
+
+      let fullContent = ""
+      let fullReasoning = ""
+      const toolCalls: ToolCall[] = []
+
+      const streamResult = await result
+
+      // 处理流式响应
+      for await (const delta of streamResult.fullStream) {
+        // 收到数据，重置超时
+        clearTimeout(timeoutId)
+        timeoutId.refresh()
+
+        switch (delta.type) {
+          case "text-delta":
+            fullContent += delta.textDelta
+            callbacks.onTextDelta?.(delta.textDelta)
+            break
+
+          case "reasoning":
+            // 处理思考过程增量（MiniMax、DeepSeek 等模型支持）
+            // AI SDK 使用 type: 'reasoning' + textDelta 属性
+            fullReasoning += delta.textDelta
+            callbacks.onReasoningDelta?.(delta.textDelta)
+            break
+
+          case "tool-call":
+            const tc: ToolCall = {
+              id: delta.toolCallId,
+              name: delta.toolName,
+              arguments: delta.args as Record<string, unknown>,
+            }
+            toolCalls.push(tc)
+            callbacks.onToolCall?.(tc)
+            break
+
+          case "error":
+            throw new Error(`LLM Stream Error: ${JSON.stringify(delta.error || delta)}`)
+        }
+      }
+
+      clearTimeout(timeoutId)
+
+      return {
+        content: fullContent || (await streamResult.text),
+        reasoning: fullReasoning || undefined,
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+        finishReason: await streamResult.finishReason,
+      }
+    } catch (error: any) {
+      clearTimeout(timeoutId)
+
+      // 处理超时错误
+      if (error.name === "AbortError" || controller.signal.aborted) {
+        throw new Error(`Request timed out after ${this.timeout / 1000} seconds. The API may be slow or unresponsive.`)
+      }
+
+      // 处理其他错误
+      if (process.env.DEBUG_LLM === "1") {
+        console.error(`[LLM] Stream error:`, error)
+      }
+      throw error
     }
   }
 

@@ -12,17 +12,29 @@ import * as fs from "fs"
 // 从 settings.json 加载配置
 interface SettingsConfig {
   env?: Record<string, string>
+  timeout?: number
 }
 
 function loadSettings(): SettingsConfig {
-  const settingsPath = "/home/xjingyao/code/opencode_lite/settings.json"
-  try {
-    if (fs.existsSync(settingsPath)) {
-      const content = fs.readFileSync(settingsPath, "utf-8")
-      return JSON.parse(content)
+  // 按优先级查找 settings.json:
+  // 1. 当前工作目录
+  // 2. 项目根目录（相对于可执行文件）
+  // 3. 用户主目录
+  const searchPaths = [
+    path.join(process.cwd(), "settings.json"),
+    path.join(path.dirname(process.argv[1] || ""), "..", "settings.json"),
+    path.join(os.homedir(), ".lite-opencode", "settings.json"),
+  ]
+
+  for (const settingsPath of searchPaths) {
+    try {
+      if (fs.existsSync(settingsPath)) {
+        const content = fs.readFileSync(settingsPath, "utf-8")
+        return JSON.parse(content)
+      }
+    } catch (error) {
+      // 忽略解析错误，继续查找下一个路径
     }
-  } catch (error) {
-    // 忽略解析错误
   }
   return {}
 }
@@ -72,6 +84,8 @@ program
     const baseURL = getConfig(options.baseUrl, "ANTHROPIC_BASE_URL", settings, "https://api.anthropic.com")
     const model = getConfig(options.model, "ANTHROPIC_MODEL", settings, "claude-sonnet-4-20250514")
     const apiKey = getConfig(undefined, "ANTHROPIC_AUTH_TOKEN", settings, process.env.ANTHROPIC_API_KEY || "")
+    const timeoutStr = getConfig(undefined, "API_TIMEOUT_MS", settings, "120000")
+    const timeout = parseInt(timeoutStr, 10)
 
     const agent = new Agent(options.session, {
       cwd: options.directory,
@@ -80,6 +94,7 @@ program
         model,
         baseURL,
         apiKey,
+        timeout,
       },
       enableStream: options.stream !== false,
       compressionThreshold: parseFloat(options.compressionThreshold),

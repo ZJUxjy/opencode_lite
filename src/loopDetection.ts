@@ -8,6 +8,10 @@ export interface LoopDetectionResult {
   type: "tool_call" | "content" | "llm_assisted" | null
   message: string
   confidence: number  // 0-1
+  /** 是否需要 LLM 验证 */
+  needsVerification?: boolean
+  /** 用于验证的上下文 */
+  verificationContext?: string
 }
 
 /**
@@ -22,6 +26,9 @@ export interface LoopDetectionConfig {
   // 第三层：LLM 辅助检测
   llmAssistedMinTurns: number    // 最少轮数后才触发，默认 30
   llmAssistedConfidence: number  // 置信度阈值，默认 0.9
+  // Phase 4: 探测验证
+  enableVerification: boolean    // 是否启用 LLM 验证
+  verificationThreshold: number  // 触发验证的置信度阈值
 }
 
 const DEFAULT_CONFIG: LoopDetectionConfig = {
@@ -30,7 +37,26 @@ const DEFAULT_CONFIG: LoopDetectionConfig = {
   contentRepeatThreshold: 3,
   llmAssistedMinTurns: 30,
   llmAssistedConfidence: 0.9,
+  enableVerification: true,
+  verificationThreshold: 0.7,  // 置信度 >= 0.7 时需要验证
 }
+
+/**
+ * 探测验证 Prompt 模板
+ */
+const VERIFICATION_PROMPT = `Analyze the following conversation patterns and determine if the agent is stuck in a loop.
+
+A loop means the agent is:
+1. Repeating the same action without making progress
+2. Getting the same result repeatedly without adapting
+3. Stuck in a cycle that won't lead to task completion
+
+Recent actions:
+{CONTEXT}
+
+Respond with ONLY "LOOP" or "NO_LOOP" followed by a brief reason.
+Example: "NO_LOOP - Agent is making incremental progress"
+Example: "LOOP - Same action repeated 5 times with no change"`
 
 /**
  * 三层循环检测服务
@@ -39,6 +65,9 @@ const DEFAULT_CONFIG: LoopDetectionConfig = {
  * - 第一层：工具调用哈希检测（快速、确定性强）
  * - 第二层：内容滑动窗口检测（捕获重复文本输出）
  * - 第三层：LLM 辅助判断（高精度但成本高，延后触发）
+ *
+ * Phase 4 增强：
+ * - 探测验证：检测结果需要 LLM 验证确认
  */
 export class LoopDetectionService {
   private config: LoopDetectionConfig
@@ -50,6 +79,7 @@ export class LoopDetectionService {
   // 第二层状态
   private contentWindow: string[] = []
   private recentContents: string[] = []  // 最近的完整内容，用于 LLM 分析
+  private recentToolCalls: ToolCall[] = []  // 最近的工具调用
 
   // 轮数统计
   private turnCount = 0
@@ -80,6 +110,7 @@ export class LoopDetectionService {
     this.toolCallRepetitionCount = 0
     this.contentWindow = []
     this.recentContents = []
+    this.recentToolCalls = []
     this.turnCount = 0
   }
 
@@ -88,18 +119,32 @@ export class LoopDetectionService {
    * 相同工具 + 相同参数 连续调用超过阈值
    */
   checkToolCallLoop(toolCall: ToolCall): LoopDetectionResult {
+    // 保存工具调用记录
+    this.recentToolCalls.push(toolCall)
+    if (this.recentToolCalls.length > 20) {
+      this.recentToolCalls.shift()
+    }
+
     const key = this.hashToolCall(toolCall)
 
     if (this.lastToolCallKey === key) {
       this.toolCallRepetitionCount++
 
       if (this.toolCallRepetitionCount >= this.config.toolCallThreshold) {
-        return {
+        const result: LoopDetectionResult = {
           detected: true,
           type: "tool_call",
           message: `检测到工具调用循环：${toolCall.name} 连续调用了 ${this.toolCallRepetitionCount} 次`,
-          confidence: 1.0,
+          confidence: 0.9,
         }
+
+        // 如果启用验证且置信度在阈值范围内，需要验证
+        if (this.config.enableVerification && result.confidence < 1.0) {
+          result.needsVerification = true
+          result.verificationContext = this.buildToolCallVerificationContext()
+        }
+
+        return result
       }
     } else {
       this.lastToolCallKey = key
@@ -156,12 +201,20 @@ export class LoopDetectionService {
     }
 
     if (maxRepeatCount >= this.config.contentRepeatThreshold) {
-      return {
+      const result: LoopDetectionResult = {
         detected: true,
         type: "content",
         message: `检测到内容重复：相同内容重复了 ${maxRepeatCount} 次`,
         confidence: 0.8,
       }
+
+      // 内容循环置信度较低，建议验证
+      if (this.config.enableVerification) {
+        result.needsVerification = true
+        result.verificationContext = this.buildContentVerificationContext()
+      }
+
+      return result
     }
 
     return { detected: false, type: null, message: "", confidence: 0 }
@@ -181,6 +234,46 @@ export class LoopDetectionService {
    */
   getRecentContentForAnalysis(): string {
     return this.recentContents.join("\n\n---\n\n")
+  }
+
+  /**
+   * 获取验证 Prompt
+   */
+  getVerificationPrompt(context: string): string {
+    return VERIFICATION_PROMPT.replace("{CONTEXT}", context)
+  }
+
+  /**
+   * 解析 LLM 验证响应
+   */
+  parseVerificationResponse(response: string): { isLoop: boolean; reason: string } {
+    const trimmed = response.trim().toUpperCase()
+
+    if (trimmed.startsWith("LOOP")) {
+      const reason = response.trim().substring(4).trim() || "Detected loop pattern"
+      return { isLoop: true, reason }
+    }
+
+    return { isLoop: false, reason: response.trim() }
+  }
+
+  /**
+   * 构建工具调用验证上下文
+   */
+  private buildToolCallVerificationContext(): string {
+    const recentCalls = this.recentToolCalls.slice(-10)
+    return recentCalls.map((call, i) =>
+      `${i + 1}. Tool: ${call.name}, Args: ${JSON.stringify(call.arguments).slice(0, 100)}`
+    ).join("\n")
+  }
+
+  /**
+   * 构建内容验证上下文
+   */
+  private buildContentVerificationContext(): string {
+    return this.recentContents.slice(-5).map((content, i) =>
+      `Turn ${i + 1}: ${content.slice(0, 200)}...`
+    ).join("\n\n")
   }
 
   /**

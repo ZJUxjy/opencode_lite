@@ -54,6 +54,29 @@ export interface ReActConfig {
 }
 
 /**
+ * 多停止词配置
+ *
+ * 不同阶段使用不同的停止词
+ */
+export interface StopWordsConfig {
+  /** 思考阶段停止词 */
+  thought?: string[]
+  /** Action 阶段停止词 */
+  action?: string[]
+  /** 观察阶段停止词 */
+  observation?: string[]
+}
+
+/**
+ * 默认停止词配置
+ */
+export const DEFAULT_STOP_WORDS: StopWordsConfig = {
+  thought: ["Action:", "Action ："],
+  action: ["Observation:", "Observation ："],
+  observation: ["Thought:", "Thought ："],
+}
+
+/**
  * ReAct 事件回调
  */
 export interface ReActEvents {

@@ -4,27 +4,67 @@ import { environmentSection } from './sections/environment.js'
 import { toolsSection } from './sections/tools.js'
 import { constraintsSection } from './sections/constraints.js'
 import { reactSection } from './sections/react.js'
+import { objectivesSection } from './sections/objectives.js'
+import { memorySection } from './sections/memory.js'
+import { errorHandlingSection } from './sections/errorHandling.js'
+import { workflowSection } from './sections/workflow.js'
 
 export type { PromptContext, PromptSection, ToolDefinition } from './types.js'
 export { substitute } from './utils.js'
 export { reactSection } from './sections/react.js'
 
+// 导出所有 section 供外部使用
+export { identitySection } from './sections/identity.js'
+export { environmentSection } from './sections/environment.js'
+export { toolsSection } from './sections/tools.js'
+export { constraintsSection } from './sections/constraints.js'
+export { objectivesSection } from './sections/objectives.js'
+export { memorySection } from './sections/memory.js'
+export { errorHandlingSection } from './sections/errorHandling.js'
+export { workflowSection } from './sections/workflow.js'
+
 /**
  * PromptProvider - 模块化 Prompt 生成器
  *
  * 负责组装各个 prompt sections 成完整的 system prompt
+ *
+ * Phase 4 增强：
+ * - 扩展到 9 个 section
+ * - 支持更丰富的上下文指导
  */
 export class PromptProvider {
   private sections: PromptSection[]
 
   constructor() {
     // 注册默认的 prompt sections（按顺序）
+    // 参考 kilocode 的 4 层结构: soul -> provider -> env -> instruction
     this.sections = [
+      // 身份层 (soul)
       identitySection,
+
+      // 目标层 (objectives)
+      objectivesSection,
+
+      // 环境层 (env)
       environmentSection,
+
+      // 工具层 (tools)
       toolsSection,
+
+      // 工作流程层 (workflow)
+      workflowSection,
+
+      // 记忆管理层 (memory)
+      memorySection,
+
+      // 错误处理层 (error handling)
+      errorHandlingSection,
+
+      // 约束层 (constraints)
       constraintsSection,
-      reactSection,  // ReAct 格式说明（条件渲染）
+
+      // ReAct 格式层 (条件渲染，仅 CoT 模式)
+      reactSection,
     ]
   }
 

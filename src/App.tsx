@@ -129,9 +129,22 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
     try {
       await agent.run(trimmed)
     } catch (error: any) {
+      // 更详细的错误信息
+      let errorMessage = error.message || "Unknown error"
+
+      if (error.message?.includes("timed out")) {
+        errorMessage = `Request timed out. Please check your network connection or try again.`
+      } else if (error.message?.includes("ECONNREFUSED") || error.message?.includes("ENOTFOUND")) {
+        errorMessage = `Network error: Unable to connect to the API. Please check your base URL.`
+      } else if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
+        errorMessage = `Authentication error: Please check your API key.`
+      } else if (error.message?.includes("429")) {
+        errorMessage = `Rate limited: Too many requests. Please wait a moment and try again.`
+      }
+
       setMessages(prev => [...prev, {
         role: "system",
-        content: `❌ Error: ${error.message}`
+        content: `❌ Error: ${errorMessage}`
       }])
     }
 
