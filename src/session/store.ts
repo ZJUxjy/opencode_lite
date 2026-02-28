@@ -43,12 +43,20 @@ export class SessionStore {
         created_at INTEGER DEFAULT (unixepoch()),
         updated_at INTEGER DEFAULT (unixepoch()),
         message_count INTEGER DEFAULT 0,
-        is_archived INTEGER DEFAULT 0
+        is_archived INTEGER DEFAULT 0,
+        input_history TEXT DEFAULT '[]'
       );
 
       CREATE INDEX IF NOT EXISTS idx_sessions_cwd ON sessions(cwd);
       CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC);
     `)
+
+    // 迁移：为旧表添加 input_history 列
+    try {
+      this.db.exec(`ALTER TABLE sessions ADD COLUMN input_history TEXT DEFAULT '[]'`)
+    } catch {
+      // 列已存在，忽略错误
+    }
   }
 
   /**
@@ -64,11 +72,12 @@ export class SessionStore {
       updatedAt: now,
       messageCount: 0,
       isArchived: false,
+      inputHistory: [],
     }
 
     const stmt = this.db.prepare(`
-      INSERT INTO sessions (id, title, cwd, created_at, updated_at, message_count, is_archived)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sessions (id, title, cwd, created_at, updated_at, message_count, is_archived, input_history)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     stmt.run(
@@ -78,7 +87,8 @@ export class SessionStore {
       session.createdAt,
       session.updatedAt,
       session.messageCount,
-      session.isArchived ? 1 : 0
+      session.isArchived ? 1 : 0,
+      JSON.stringify(session.inputHistory)
     )
 
     return session
@@ -175,6 +185,11 @@ export class SessionStore {
       params.push(updates.isArchived ? 1 : 0)
     }
 
+    if (updates.inputHistory !== undefined) {
+      sets.push("input_history = ?")
+      params.push(JSON.stringify(updates.inputHistory))
+    }
+
     // 总是更新 updated_at
     sets.push("updated_at = ?")
     params.push(Math.floor(Date.now() / 1000))
@@ -197,6 +212,18 @@ export class SessionStore {
       WHERE id = ?
     `)
     stmt.run(count, Math.floor(Date.now() / 1000), id)
+  }
+
+  /**
+   * 更新输入历史
+   */
+  updateInputHistory(id: string, inputHistory: string[]): void {
+    const stmt = this.db.prepare(`
+      UPDATE sessions
+      SET input_history = ?, updated_at = ?
+      WHERE id = ?
+    `)
+    stmt.run(JSON.stringify(inputHistory), Math.floor(Date.now() / 1000), id)
   }
 
   /**
@@ -242,6 +269,13 @@ export class SessionStore {
    * 数据库行映射为 Session 对象
    */
   private mapRowToSession(row: DBSession): Session {
+    let inputHistory: string[] = []
+    try {
+      inputHistory = JSON.parse(row.input_history || "[]")
+    } catch {
+      inputHistory = []
+    }
+
     return {
       id: row.id,
       title: row.title,
@@ -250,6 +284,7 @@ export class SessionStore {
       updatedAt: row.updated_at,
       messageCount: row.message_count,
       isArchived: row.is_archived === 1,
+      inputHistory,
     }
   }
 

@@ -6,7 +6,7 @@ import { CommandInput } from "./components/CommandInput.js"
 import { PermissionPrompt } from "./components/PermissionPrompt.js"
 import { PlanFollowupPrompt, type PlanFollowupDecision } from "./components/PlanFollowupPrompt.js"
 import { SessionList } from "./components/SessionList.js"
-import type { Session } from "./session/index.js"
+import { Session, SessionStore } from "./session/index.js"
 import type { CommandContext, PermissionRequest, PermissionDecision } from "./commands/types.js"
 import type { ToolCall } from "./types.js"
 import type { PolicyDecision } from "./policy.js"
@@ -172,11 +172,25 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   // 上下文使用情况 - 初始化时直接从 agent 获取，避免重复渲染
   const [contextUsage, setContextUsage] = useState(() => agent.getContextUsage())
 
+  // 输入历史（从数据库加载）
+  const [inputHistory, setInputHistory] = useState<string[]>([])
+
   // =========================================================================
   // Session 恢复和历史消息加载
   // =========================================================================
 
   useEffect(() => {
+    // 加载会话的输入历史
+    const loadInputHistory = () => {
+      const sessionStore = new SessionStore(dbPath)
+      const session = sessionStore.get(sessionId)
+      if (session && session.inputHistory) {
+        setInputHistory(session.inputHistory)
+      }
+      sessionStore.close()
+    }
+    loadInputHistory()
+
     if (isResumed) {
       // 加载历史消息
       const historyMessages = agent.getHistory()
@@ -236,7 +250,6 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
 
   // 加载可用会话
   const loadSessions = useCallback(() => {
-    const { SessionStore } = require("./session/index.js")
     const sessionStore = new SessionStore(dbPath)
     const sessions = sessionStore.list({ includeArchived: false })
     setAvailableSessions(sessions)
@@ -261,6 +274,14 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       setMessages((prev) => [...prev, message])
     }
   }, [sessionId])
+
+  // 保存输入历史到数据库
+  const handleSaveInputHistory = useCallback((newHistory: string[]) => {
+    setInputHistory(newHistory)
+    const sessionStore = new SessionStore(dbPath)
+    sessionStore.updateInputHistory(sessionId, newHistory)
+    sessionStore.close()
+  }, [sessionId, dbPath])
 
   // 取消选择
   const handleCancelSessionList = useCallback(() => {
@@ -756,6 +777,8 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
           isProcessing={isProcessing}
           onSubmit={handleSubmit}
           commandContext={commandContext}
+          initialHistory={inputHistory}
+          onHistoryChange={handleSaveInputHistory}
         />
       </Box>
     </Box>

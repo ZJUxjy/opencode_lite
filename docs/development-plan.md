@@ -35,8 +35,9 @@ Lite OpenCode 是一个轻量级 AI 编程 Agent，实现 ReAct（Reasoning + Ac
 | Plan Mode - 5阶段工作流 | ✅ | Prompt 指导 + 计划模板 |
 | Plan Mode - Handover | ✅ | 跨会话支持 |
 | Plan Mode - 模型路由 | ✅ | Opus↔Sonnet 自动切换 |
-| Plan Mode - 子代理 | 🚧 | Phase 5.4 开发中 |
-| Plan Mode - 并行探索 | 🚧 | Phase 5.4 开发中 |
+| Plan Mode - 子代理 | ✅ | Phase 5.4 完成 |
+| Plan Mode - 并行探索 | ✅ | Phase 5.4 完成 |
+| Session 恢复 | ✅ | Session 独立 + Input History |
 | MCP 集成 | 📋 | Phase 6 规划中 |
 
 ---
@@ -52,13 +53,14 @@ Lite OpenCode 是一个轻量级 AI 编程 Agent，实现 ReAct（Reasoning + Ac
 | v1.2.0 | 2026-02 | 模块化 Prompt 系统 (4 sections) |
 | v1.3.0 | 2026-02 | ReAct 系统 Phase 1-3 (FC/CoT 双策略 + 思考持久化) |
 | v1.4.0 | 2026-02 | ReAct 系统 Phase 4 (9 sections + 渐进式压缩) |
+| v1.5.0 | 2026-02 | Plan Mode Phase 1-2 (基础 + 5阶段工作流) |
+| v1.6.0 | 2026-02 | Plan Mode Phase 3-4 (Handover + 子代理) |
 
 ### 2.2 开发中版本
 
 | 版本 | 预计日期 | 里程碑 |
 |------|----------|--------|
-| v1.5.0 | 2026-03 | Plan Mode Phase 1-2 (基础 + 5阶段工作流) |
-| v1.6.0 | 2026-03 | Plan Mode Phase 3-4 (Handover + 高级功能) |
+| v1.7.0 | 2026-03 | Session 恢复 + Input History 持久化 |
 | v2.0.0 | 2026-Q2 | MCP 集成 + 工具系统增强 |
 
 ---
@@ -292,15 +294,36 @@ exit_plan_mode
 
 | 任务 | 说明 | 优先级 | 状态 |
 |------|------|--------|------|
-| 5.4.1 子代理 Plan Mode | TaskTool 支持 Plan Mode | P1 | 🚧 开发中 |
+| 5.4.1 子代理 Plan Mode | TaskTool 支持 Plan Mode | P1 | ✅ 已完成 |
 | 5.4.2 模型路由 | Plan 用强模型，执行用快模型 | P2 | ✅ 已完成 |
-| 5.4.3 并行探索 | 多个 Explore Agent | P2 | 🚧 开发中 |
-| 5.4.4 外部编辑器 | Ctrl+X 打开编辑器 | P3 | 📋 规划中 |
-| 5.4.5 计划版本控制 | 计划文件历史 | P3 | 📋 规划中 |
+| 5.4.3 并行探索 | 多个 Explore Agent | P2 | ✅ 已完成 |
+| 5.4.4 Session 恢复 | Session 独立 + Input History 持久化 | P1 | ✅ 已完成 |
+| 5.4.5 外部编辑器 | Ctrl+X 打开编辑器 | P3 | 📋 规划中 |
+| 5.4.6 计划版本控制 | 计划文件历史 | P3 | 📋 规划中 |
 
 ---
 
-#### 5.4.1 子代理 Plan Mode (开发中)
+#### 5.4.4 Session 恢复功能 (已完成)
+
+**设计目标**: 支持跨会话恢复和 Input History 持久化
+
+**功能特性**:
+- Session 元数据存储（SQLite）
+- CLI 恢复参数（`-r/--resume`, `-c/--continue`）
+- 交互式会话选择器（`/sessions`）
+- Session 独立的 Input History
+
+**实现文件**:
+- `src/session/store.ts` - SessionStore 类
+- `src/session/types.ts` - 类型定义
+- `src/components/SessionList.tsx` - 会话选择器
+- `src/hooks/useCommandInput.ts` - Input History
+
+**详细设计**: [session-restoration-plan.md](./session-restoration-plan.md)
+
+---
+
+#### 5.4.1 子代理 Plan Mode (已完成)
 
 **设计目标**: 支持在 Plan Mode 下创建和管理子代理，实现任务分解和专业化处理
 

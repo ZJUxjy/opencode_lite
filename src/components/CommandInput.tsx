@@ -23,6 +23,8 @@ export function CommandInput({
   isProcessing,
   onSubmit,
   commandContext,
+  initialHistory,
+  onHistoryChange,
 }: CommandInputProps) {
   const { stdout } = useStdout()
   const terminalWidth = stdout?.columns || 80
@@ -41,6 +43,8 @@ export function CommandInput({
     onSubmit,
     commandContext,
     isProcessing,
+    initialHistory,
+    onHistoryChange,
   })
 
   return (

@@ -22,6 +22,8 @@ export interface Session {
   messageCount: number
   /** 是否归档 */
   isArchived: boolean
+  /** 输入历史 */
+  inputHistory: string[]
 }
 
 /**
@@ -40,6 +42,7 @@ export interface UpdateSessionParams {
   title?: string
   messageCount?: number
   isArchived?: boolean
+  inputHistory?: string[]
 }
 
 /**
@@ -67,6 +70,7 @@ export interface DBSession {
   updated_at: number
   message_count: number
   is_archived: number
+  input_history: string
 }
 
 /**

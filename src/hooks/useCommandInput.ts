@@ -29,6 +29,8 @@ export function useCommandInput({
   onSubmit,
   commandContext,
   isProcessing,
+  initialHistory = [],
+  onHistoryChange,
 }: UseCommandInputProps): UseCommandInputReturn {
   const [input, setInput] = useState("")
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -41,7 +43,7 @@ export function useCommandInput({
   const justAcceptedRef = useRef(false)
 
   // Input history for up/down navigation
-  const [inputHistory, setInputHistory] = useState<string[]>([])
+  const [inputHistory, setInputHistory] = useState<string[]>(initialHistory)
   const [historyIndex, setHistoryIndex] = useState(-1)
   const tempInputRef = useRef("")
 
@@ -209,6 +211,8 @@ export function useCommandInput({
           if (newHistory.length > MAX_INPUT_HISTORY) {
             return newHistory.slice(-MAX_INPUT_HISTORY)
           }
+          // Notify parent component to persist
+          onHistoryChange?.(newHistory)
           return newHistory
         })
       }
@@ -240,7 +244,7 @@ export function useCommandInput({
         onSubmit(trimmed)
       }
     },
-    [commandContext, onSubmit]
+    [commandContext, onSubmit, onHistoryChange]
   )
 
   return {

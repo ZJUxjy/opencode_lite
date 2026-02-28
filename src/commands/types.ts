@@ -56,6 +56,8 @@ export interface CommandInputProps {
   isProcessing: boolean
   onSubmit: (value: string) => void | Promise<void>
   commandContext: CommandContext
+  initialHistory?: string[]
+  onHistoryChange?: (history: string[]) => void
 }
 
 /**
@@ -65,6 +67,8 @@ export interface UseCommandInputProps {
   onSubmit: (value: string) => void | Promise<void>
   commandContext: CommandContext
   isProcessing: boolean
+  initialHistory?: string[]
+  onHistoryChange?: (history: string[]) => void
 }
 
 /**
