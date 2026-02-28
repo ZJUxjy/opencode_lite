@@ -221,3 +221,4 @@ export const myTool: Tool = {
 - `docs/agent-architecture-research.md` - Agent architecture research
 - `docs/skills-system-design.md` - Skills system design and implementation
 - `docs/session-restoration-plan.md` - Session restoration feature documentation
+- `docs/debugging-guide.md` - VS Code debugging configuration and tips

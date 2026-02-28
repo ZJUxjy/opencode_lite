@@ -1,0 +1,34 @@
+{
+  "recommendations": [
+    // TypeScript 支持
+    "ms-vscode.vscode-typescript-next",
+
+    // 调试增强
+    "ms-vscode.js-debug",
+
+    // ESLint
+    "dbaeumer.vscode-eslint",
+
+    // Prettier 格式化
+    "esbenp.prettier-vscode",
+
+    // 路径智能提示
+    "christian-kohler.path-intellisense",
+
+    // 更好的注释
+    "aaron-bond.better-comments",
+
+    // 颜色标记
+    "naumovs.color-highlight",
+
+    // Markdown 增强
+    "yzhang.markdown-all-in-one",
+
+    // GitLens
+    "eamodio.gitlens",
+
+    // 终端增强
+    "formulahendry.code-runner"
+  ],
+  "unwantedRecommendations": []
+}
