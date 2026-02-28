@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
-import { Box, Text, Static, useInput, useApp } from "ink"
+import { Box, Text, Static, useInput, useApp, useStdout } from "ink"
 import TextInput from "ink-text-input"
 import Spinner from "ink-spinner"
 import { Agent, type AgentEvents } from "./agent.js"
@@ -38,11 +38,17 @@ interface Message {
 // 工具函数
 // ============================================================================
 
+// 全局计数器，确保同一毫秒内的 ID 唯一
+let messageCounter = 0
+
 /**
  * 生成唯一的消息 ID
  */
 function generateMessageId(): string {
-  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  const timestamp = Date.now()
+  const counter = messageCounter++
+  const random = Math.random().toString(36).slice(2, 6)
+  return `msg-${timestamp}-${counter}-${random}`
 }
 
 /**
@@ -93,12 +99,13 @@ interface MessageItemProps {
 /**
  * 单条消息渲染组件
  * 注意：必须使用 message.id 作为 key，不能使用索引
+ * 长文本会自动换行
  */
 function MessageItem({ message }: MessageItemProps) {
   if (message.role === "user") {
     return (
       <Box flexDirection="column" marginBottom={1}>
-        <Text>
+        <Text wrap="wrap">
           <Text bold color="blue">&gt; </Text>
           <Text>{message.content}</Text>
         </Text>
@@ -110,13 +117,13 @@ function MessageItem({ message }: MessageItemProps) {
     return (
       <Box flexDirection="column" marginBottom={1}>
         {message.reasoning && (
-          <Text dimColor color="gray">
+          <Text dimColor color="gray" wrap="wrap">
             💭 {message.reasoning.length > 200
               ? message.reasoning.slice(0, 200) + "..."
               : message.reasoning}
           </Text>
         )}
-        <Text>{message.content}</Text>
+        <Text wrap="wrap">{message.content}</Text>
       </Box>
     )
   }
@@ -124,7 +131,7 @@ function MessageItem({ message }: MessageItemProps) {
   // system
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text dimColor>{message.content}</Text>
+      <Text dimColor wrap="wrap">{message.content}</Text>
     </Box>
   )
 }
@@ -135,6 +142,10 @@ function MessageItem({ message }: MessageItemProps) {
 
 export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
   const { exit } = useApp()
+  const { stdout } = useStdout()
+
+  // 终端宽度
+  const terminalWidth = stdout?.columns || 80
 
   // =========================================================================
   // 状态管理
@@ -149,12 +160,8 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
   // 处理状态
   const [isProcessing, setIsProcessing] = useState(false)
 
-  // 上下文使用情况
-  const [contextUsage, setContextUsage] = useState({
-    used: 0,
-    limit: 0,
-    percentage: 0
-  })
+  // 上下文使用情况 - 初始化时直接从 agent 获取，避免重复渲染
+  const [contextUsage, setContextUsage] = useState(() => agent.getContextUsage())
 
   // =========================================================================
   // 流式输出 - 使用 ref 累加，避免频繁 setState
@@ -413,11 +420,11 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
 
           这部分内容会频繁更新，不会进入 Static
           ===================================================================== */}
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={1} width={terminalWidth}>
         {/* 思考过程流式输出 */}
         {displayReasoning && (
           <Box marginBottom={1} flexDirection="column">
-            <Text dimColor italic>
+            <Text dimColor italic wrap="wrap">
               💭 {displayReasoning}
               {isProcessing && <Text dimColor>▌</Text>}
             </Text>
@@ -428,7 +435,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
         {(displayText || isProcessing) && (
           <Box marginBottom={1}>
             {displayText ? (
-              <Text>
+              <Text wrap="wrap">
                 {displayText}
                 {isProcessing && <Text dimColor>▌</Text>}
               </Text>
@@ -450,7 +457,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
         {/* 当前工具调用 */}
         {currentTool && (
           <Box marginBottom={1}>
-            <Text color="yellow">
+            <Text color="yellow" wrap="wrap">
               🔧 {currentTool.name}({currentTool.args})
             </Text>
           </Box>
@@ -458,32 +465,43 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
       </Box>
 
       {/* =====================================================================
+          分隔线：明确划分输出区域和输入区域（自适应终端宽度）
+          ===================================================================== */}
+      <Box marginBottom={1}>
+        <Text dimColor>{'─'.repeat(terminalWidth)}</Text>
+      </Box>
+
+      {/* =====================================================================
           底部状态栏 + 输入框
           ===================================================================== */}
-      <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
+      <Box flexDirection="column">
         {/* 状态栏 */}
-        <Box>
+        <Box marginBottom={1}>
           <Text>
             <Text color={contextStatus.color}>
-              ▌ Context: {contextStatus.percent}%
+              ▌Context: {contextStatus.percent}%
             </Text>
             <Text dimColor> ({contextStatus.usedK}K / {contextStatus.limitK}K)</Text>
+            {isProcessing && <Text color="cyan"> ● Processing...</Text>}
           </Text>
-          {isProcessing && <Text dimColor> | Processing...</Text>}
         </Box>
 
-        {/* 输入框 */}
-        <Box>
-          <Text bold color="cyan">&gt; </Text>
-          <TextInput
-            value={input}
-            onChange={setInput}
-            onSubmit={handleSubmit}
-            placeholder={isProcessing
-              ? "Waiting for response..."
-              : "Type a message... (/help for commands)"}
-            showCursor={!isProcessing}
-          />
+        {/* 输入框 - 限制宽度防止溢出 */}
+        <Box width={terminalWidth - 3}>
+          <Box width={2}>
+            <Text bold color="green">❯ </Text>
+          </Box>
+          <Box flexGrow={1}>
+            <TextInput
+              value={input}
+              onChange={setInput}
+              onSubmit={handleSubmit}
+              placeholder={isProcessing
+                ? "Waiting for response..."
+                : "Type a message..."}
+              showCursor={!isProcessing}
+            />
+          </Box>
         </Box>
       </Box>
     </Box>

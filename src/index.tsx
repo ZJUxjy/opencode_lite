@@ -100,7 +100,9 @@ program
       compressionThreshold: parseFloat(options.compressionThreshold),
     })
 
-    // 渲染 Ink 应用（启用增量渲染以改善滚动体验）
+    // 渲染 Ink 应用
+    // 注意: 不使用 incrementalRendering，因为与 Spinner 动画不兼容
+    // Static 组件已经处理历史消息的滚动
     render(
       <App
         agent={agent}
@@ -108,10 +110,7 @@ program
         baseURL={baseURL}
         sessionId={options.session}
         workingDir={options.directory}
-      />,
-      {
-        incrementalRendering: true,  // 增量渲染，避免全屏刷新
-      }
+      />
     )
   })
 
