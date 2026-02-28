@@ -1,0 +1,107 @@
+import type { Agent } from "../agent.js"
+
+/**
+ * Command execution context
+ * Provides access to agent and UI state manipulation functions
+ */
+export interface CommandContext {
+  agent: Agent
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>
+  exit: () => void
+  updateContextUsage: () => void
+}
+
+/**
+ * Message interface (mirrors App.tsx internal type)
+ */
+export interface Message {
+  id: string
+  role: "user" | "assistant" | "system"
+  content: string
+  reasoning?: string
+  timestamp: number
+}
+
+/**
+ * Command definition
+ */
+export interface Command {
+  /** Primary command name, e.g., "/exit" */
+  name: string
+  /** Optional aliases, e.g., ["/quit"] for "/exit" */
+  aliases?: string[]
+  /** Short description shown in autocomplete dropdown */
+  description: string
+  /** Command handler, receives args string and context */
+  handler: (args: string, ctx: CommandContext) => void | Promise<void>
+}
+
+/**
+ * Props for AutocompleteDropdown component
+ */
+export interface AutocompleteDropdownProps {
+  suggestions: Command[]
+  selectedIndex: number
+  scrollOffset: number
+  maxVisibleItems: number
+  visible: boolean
+  maxWidth: number
+}
+
+/**
+ * Props for CommandInput component
+ */
+export interface CommandInputProps {
+  isProcessing: boolean
+  onSubmit: (value: string) => void | Promise<void>
+  commandContext: CommandContext
+}
+
+/**
+ * Props for useCommandInput hook
+ */
+export interface UseCommandInputProps {
+  onSubmit: (value: string) => void | Promise<void>
+  commandContext: CommandContext
+  isProcessing: boolean
+}
+
+/**
+ * Return type for useCommandInput hook
+ */
+export interface UseCommandInputReturn {
+  input: string
+  setInput: React.Dispatch<React.SetStateAction<string>>
+  suggestions: Command[]
+  selectedIndex: number
+  scrollOffset: number
+  maxVisibleItems: number
+  showDropdown: boolean
+  handleInputChange: (value: string) => void
+  handleSubmit: (value: string) => void
+  inputKey: number
+}
+
+/**
+ * Permission decision types
+ */
+export type PermissionDecision = "allow" | "always" | "deny"
+
+/**
+ * Permission request info
+ */
+export interface PermissionRequest {
+  id: string
+  toolName: string
+  description: string
+  args: Record<string, unknown>
+}
+
+/**
+ * Props for PermissionPrompt component
+ */
+export interface PermissionPromptProps {
+  request: PermissionRequest
+  onDecision: (decision: PermissionDecision) => void
+  visible: boolean
+}

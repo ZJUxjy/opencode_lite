@@ -5,6 +5,8 @@
  * - 渐进式压缩恢复：压缩失败时逐步移除更多内容
  * - 非破坏性压缩：消息标记而非删除
  * - 多级压缩策略
+ * - LLM 生成高质量摘要
+ * - 压缩预览功能
  *
  * 参考: gemini-cli ChatCompressionService, goose context_mgmt
  */
@@ -28,6 +30,27 @@ export interface CompressionResult {
   compressedCount: number
   removedIndices: number[]
   summaryGenerated: boolean
+  /** 压缩前的 token 数 */
+  originalTokens: number
+  /** 压缩后的 token 数 */
+  compressedTokens: number
+}
+
+/**
+ * 压缩预览信息
+ */
+export interface CompressionPreview {
+  currentTokens: number
+  currentPercentage: number
+  messageCount: number
+  wouldCompress: boolean
+  levels: {
+    level: CompressionLevel
+    keepFirst: number
+    keepLast: number
+    wouldRemove: number
+    estimatedTokens: number
+  }[]
 }
 
 /**
@@ -45,8 +68,8 @@ export interface CompressionConfig {
   /** 激进压缩保留的消息数 */
   aggressiveKeepFirst: number
   aggressiveKeepLast: number
-  /** 是否启用非破坏性压缩 */
-  nonDestructive: boolean
+  /** 是否使用 LLM 生成摘要 */
+  useLlmSummary: boolean
   /** 最大压缩尝试次数 */
   maxAttempts: number
 }
@@ -59,7 +82,7 @@ const DEFAULT_CONFIG: CompressionConfig = {
   moderateKeepLast: 4,
   aggressiveKeepFirst: 1,
   aggressiveKeepLast: 2,
-  nonDestructive: true,
+  useLlmSummary: true,
   maxAttempts: 3,
 }
 
@@ -81,7 +104,9 @@ Focus on:
 - Key decisions made
 - Files that were read, modified, or created
 - Any errors encountered and how they were resolved
-- Current state of the task`
+- Current state of the task
+
+Format the summary as bullet points. Be concise but comprehensive.`
   }
 
   /**
@@ -92,10 +117,52 @@ Focus on:
   }
 
   /**
+   * 获取压缩预览（不执行压缩）
+   */
+  getPreview(messages: Message[]): CompressionPreview {
+    const usage = this.llm.getContextUsage(messages)
+    const levels: CompressionPreview["levels"] = []
+
+    const levelConfigs: { level: CompressionLevel; keepFirst: number; keepLast: number }[] = [
+      { level: "light", keepFirst: this.config.lightKeepFirst, keepLast: this.config.lightKeepLast },
+      { level: "moderate", keepFirst: this.config.moderateKeepFirst, keepLast: this.config.moderateKeepLast },
+      { level: "aggressive", keepFirst: this.config.aggressiveKeepFirst, keepLast: this.config.aggressiveKeepLast },
+    ]
+
+    for (const { level, keepFirst, keepLast } of levelConfigs) {
+      const wouldRemove = Math.max(0, messages.length - keepFirst - keepLast)
+      const keptMessages = messages.length <= keepFirst + keepLast
+        ? messages
+        : [...messages.slice(0, keepFirst), ...messages.slice(-keepLast)]
+
+      // 估算摘要大小（约 500 tokens）
+      const summaryTokens = 500
+      const estimatedTokens = this.llm.estimateTokens(keptMessages) + summaryTokens
+
+      levels.push({
+        level,
+        keepFirst,
+        keepLast,
+        wouldRemove,
+        estimatedTokens,
+      })
+    }
+
+    return {
+      currentTokens: usage.used,
+      currentPercentage: Math.round(usage.percentage * 100),
+      messageCount: messages.length,
+      wouldCompress: usage.percentage >= this.config.threshold,
+      levels,
+    }
+  }
+
+  /**
    * 执行压缩（带渐进式恢复）
    */
   async compress(messages: Message[]): Promise<CompressionResult> {
     const usage = this.llm.getContextUsage(messages)
+    const originalTokens = usage.used
 
     // 未达到阈值，无需压缩
     if (usage.percentage < this.config.threshold) {
@@ -106,6 +173,8 @@ Focus on:
         compressedCount: messages.length,
         removedIndices: [],
         summaryGenerated: false,
+        originalTokens,
+        compressedTokens: originalTokens,
       }
     }
 
@@ -122,7 +191,10 @@ Focus on:
 
       if (newUsage.percentage < this.config.threshold) {
         console.log(`  ✅ Compressed with ${level} level to ${Math.round(newUsage.percentage * 100)}%`)
-        return result
+        return {
+          ...result,
+          compressedTokens: newUsage.used,
+        }
       }
 
       console.log(`  ⚠️ ${level} compression insufficient (${Math.round(newUsage.percentage * 100)}%), trying next level...`)
@@ -130,8 +202,30 @@ Focus on:
 
     // 所有级别都尝试过，返回激进压缩结果
     const finalResult = await this.tryCompress(messages, "aggressive")
+    const finalUsage = this.llm.getContextUsage(finalResult.messages)
     console.log(`  ⚠️ Max compression reached`)
-    return finalResult
+    return {
+      ...finalResult,
+      compressedTokens: finalUsage.used,
+    }
+  }
+
+  /**
+   * 手动压缩（使用指定级别）
+   */
+  async compressWithLevel(
+    messages: Message[],
+    level: CompressionLevel
+  ): Promise<CompressionResult> {
+    const usage = this.llm.getContextUsage(messages)
+    const result = await this.tryCompress(messages, level)
+    const newUsage = this.llm.getContextUsage(result.messages)
+
+    return {
+      ...result,
+      originalTokens: usage.used,
+      compressedTokens: newUsage.used,
+    }
   }
 
   /**
@@ -152,6 +246,8 @@ Focus on:
         compressedCount: messages.length,
         removedIndices: [],
         summaryGenerated: false,
+        originalTokens: 0,
+        compressedTokens: 0,
       }
     }
 
@@ -162,61 +258,8 @@ Focus on:
       (_, i) => keepFirst + i
     )
 
-    // 非破坏性模式：标记而非删除
-    if (this.config.nonDestructive) {
-      return this.nonDestructiveCompress(messages, toCompress, keepFirst, keepLast, level)
-    }
-
-    // 破坏性模式：生成摘要并替换
+    // 生成摘要并替换
     return this.destructiveCompress(messages, toCompress, keepFirst, keepLast, level, removedIndices)
-  }
-
-  /**
-   * 非破坏性压缩：标记消息为已压缩
-   */
-  private async nonDestructiveCompress(
-    messages: Message[],
-    toCompress: Message[],
-    keepFirst: number,
-    keepLast: number,
-    level: CompressionLevel
-  ): Promise<CompressionResult> {
-    // 生成摘要
-    const summary = await this.generateSummary(toCompress)
-
-    // 创建摘要消息
-    const summaryMessage: Message = {
-      role: "assistant",
-      content: `[Context Summary - ${level} compression]\n${summary}`,
-    }
-
-    // 标记被压缩的消息（添加元数据）
-    const markedMessages = messages.map((msg, i) => {
-      if (i >= keepFirst && i < messages.length - keepLast) {
-        return {
-          ...msg,
-          // 使用 content 前缀标记
-          content: `[COMPRESSED] ${msg.content || ""}`,
-        }
-      }
-      return msg
-    })
-
-    // 组合：前几条 + 摘要 + 后几条
-    const compressed = [
-      ...markedMessages.slice(0, keepFirst),
-      summaryMessage,
-      ...markedMessages.slice(-keepLast),
-    ]
-
-    return {
-      messages: compressed,
-      level,
-      originalCount: messages.length,
-      compressedCount: compressed.length,
-      removedIndices: Array.from({ length: toCompress.length }, (_, i) => keepFirst + i),
-      summaryGenerated: true,
-    }
   }
 
   /**
@@ -231,12 +274,12 @@ Focus on:
     removedIndices: number[]
   ): Promise<CompressionResult> {
     // 生成摘要
-    const summary = await this.generateSummary(toCompress)
+    const summary = await this.generateSummary(toCompress, level)
 
     // 创建摘要消息
     const summaryMessage: Message = {
       role: "assistant",
-      content: `[Context Summary - ${level} compression]\n${summary}`,
+      content: `[Context Summary - ${level}]\n${summary}`,
     }
 
     // 组合：前几条 + 摘要 + 后几条
@@ -253,38 +296,91 @@ Focus on:
       compressedCount: compressed.length,
       removedIndices,
       summaryGenerated: true,
+      originalTokens: 0,
+      compressedTokens: 0,
     }
   }
 
   /**
-   * 生成摘要
+   * 生成摘要（使用 LLM 或简单格式化）
    */
-  private async generateSummary(messages: Message[]): Promise<string> {
+  private async generateSummary(messages: Message[], level: CompressionLevel): Promise<string> {
+    // 准备消息内容
     const summaryContent = messages
-      .map(m => `[${m.role}]: ${(m.content || "").slice(0, 500)}${m.content && m.content.length > 500 ? "..." : ""}`)
+      .map(m => {
+        const content = (m.content || "").slice(0, 500)
+        const toolCalls = m.toolCalls?.map(tc => `[${tc.name}]`).join(" ") || ""
+        return `[${m.role}]: ${content}${toolCalls ? ` ${toolCalls}` : ""}`
+      })
       .join('\n\n')
 
+    if (this.config.useLlmSummary) {
+      try {
+        // 使用 LLM 生成高质量摘要
+        const summary = await this.generateLlmSummary(summaryContent, level)
+        return summary
+      } catch (error) {
+        console.log(`  ⚠️ LLM summary failed, using simple summary`)
+        return this.formatSimpleSummary(messages)
+      }
+    }
+
+    return this.formatSimpleSummary(messages)
+  }
+
+  /**
+   * 使用 LLM 生成摘要
+   */
+  private async generateLlmSummary(content: string, level: CompressionLevel): Promise<string> {
+    const levelInstruction = level === "aggressive"
+      ? "Be extremely concise - use only 2-3 bullet points."
+      : level === "moderate"
+        ? "Be concise - use 3-5 bullet points."
+        : "Use 5-8 bullet points to capture important details."
+
+    const prompt = `${this.compactionPrompt}
+
+${levelInstruction}
+
+Conversation to summarize:
+${content}
+
+Summary:`
+
     try {
-      // 使用快速模型生成摘要
-      const fastModelId = process.env.ANTHROPIC_SMALL_FAST_MODEL ||
+      // 创建一个简单的 Anthropic provider
+      const { createAnthropic } = await import("@ai-sdk/anthropic")
+
+      const baseURL = process.env.ANTHROPIC_BASE_URL
+      const apiKey = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN
+      const modelId = process.env.ANTHROPIC_SMALL_FAST_MODEL ||
         process.env.ANTHROPIC_MODEL ||
         this.llm.getModelId()
 
-      // 使用 LLMClient 的内部方法生成摘要
-      // 这里简化实现，直接返回格式化的摘要
-      const summary = this.formatSummary(messages)
-      return summary
+      const anthropicConfig: any = { ...(baseURL && { baseURL }) }
+      if (apiKey) {
+        anthropicConfig.apiKey = apiKey
+      }
 
+      const provider = createAnthropic(anthropicConfig)
+      const model = provider(modelId)
+
+      const result = await generateText({
+        model,
+        prompt,
+        maxTokens: level === "aggressive" ? 300 : level === "moderate" ? 500 : 800,
+      })
+
+      return result.text.trim()
     } catch (error) {
-      console.log(`  ⚠️ Summary generation failed, using simple summary`)
-      return this.formatSummary(messages)
+      throw error
     }
   }
 
   /**
    * 格式化简单摘要（不调用 LLM）
    */
-  private formatSummary(messages: Message[]): string {
+  private formatSimpleSummary(messages: Message[]): string {
     const userMessages = messages.filter(m => m.role === "user")
     const assistantMessages = messages.filter(m => m.role === "assistant")
 
@@ -294,10 +390,21 @@ Focus on:
       .map(tc => tc.name)
 
     const uniqueTools = [...new Set(toolCalls)]
+    const keywords = this.extractKeywords(messages)
 
-    return `Messages: ${messages.length} (${userMessages.length} user, ${assistantMessages.length} assistant)
-Tools used: ${uniqueTools.length > 0 ? uniqueTools.join(", ") : "none"}
-Key topics: ${this.extractKeywords(messages)}`
+    const lines = [
+      `• ${messages.length} messages (${userMessages.length} user, ${assistantMessages.length} assistant)`,
+    ]
+
+    if (uniqueTools.length > 0) {
+      lines.push(`• Tools used: ${uniqueTools.slice(0, 5).join(", ")}${uniqueTools.length > 5 ? "..." : ""}`)
+    }
+
+    if (keywords) {
+      lines.push(`• Key topics: ${keywords}`)
+    }
+
+    return lines.join('\n')
   }
 
   /**
@@ -306,7 +413,20 @@ Key topics: ${this.extractKeywords(messages)}`
   private extractKeywords(messages: Message[]): string {
     const allContent = messages.map(m => m.content || "").join(" ")
     const words = allContent.toLowerCase().split(/\W+/)
-    const stopWords = new Set(["the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "may", "might", "must", "shall", "can", "need", "dare", "ought", "used", "to", "of", "in", "for", "on", "with", "at", "by", "from", "as", "into", "through", "during", "before", "after", "above", "below", "between", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "just", "and", "but", "if", "or", "because", "until", "while", "this", "that", "these", "those", "i", "you", "he", "she", "it", "we", "they", "what", "which", "who", "whom"])
+    const stopWords = new Set([
+      "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+      "have", "has", "had", "do", "does", "did", "will", "would", "could",
+      "should", "may", "might", "must", "shall", "can", "need", "dare",
+      "ought", "used", "to", "of", "in", "for", "on", "with", "at", "by",
+      "from", "as", "into", "through", "during", "before", "after", "above",
+      "below", "between", "under", "again", "further", "then", "once",
+      "here", "there", "when", "where", "why", "how", "all", "each", "few",
+      "more", "most", "other", "some", "such", "no", "nor", "not", "only",
+      "own", "same", "so", "than", "too", "very", "just", "and", "but",
+      "if", "or", "because", "until", "while", "this", "that", "these",
+      "those", "i", "you", "he", "she", "it", "we", "they", "what", "which",
+      "who", "whom", "file", "code", "function", "let", "const", "return",
+    ])
 
     const freq: Record<string, number> = {}
     for (const word of words) {
@@ -320,7 +440,7 @@ Key topics: ${this.extractKeywords(messages)}`
       .slice(0, 5)
       .map(([word]) => word)
 
-    return sorted.join(", ") || "general discussion"
+    return sorted.join(", ") || ""
   }
 
   /**

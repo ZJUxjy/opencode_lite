@@ -6,6 +6,7 @@ import { LoopDetectionService, type LoopDetectionConfig } from "./loopDetection.
 import { PolicyEngine, type PolicyConfig, type PolicyDecision, type PolicyResult } from "./policy.js"
 import { PromptProvider } from "./prompts/index.js"
 import { ReActRunner, type Strategy, type ReActEvents } from "./react/index.js"
+import { CompressionService, type CompressionLevel, type CompressionPreview, type CompressionResult } from "./compression.js"
 
 export interface AgentConfig {
   cwd: string
@@ -53,6 +54,7 @@ export class Agent {
   private policyEngine: PolicyEngine
   private promptProvider: PromptProvider
   private reactRunner: ReActRunner
+  private compressionService: CompressionService
   private sessionId: string
   private cwd: string
   private enableStream: boolean
@@ -67,6 +69,9 @@ export class Agent {
     this.loopDetection = new LoopDetectionService(config.loopDetection)
     this.policyEngine = new PolicyEngine(config.policy)
     this.promptProvider = new PromptProvider()
+    this.compressionService = new CompressionService(this.llm, {
+      threshold: config.compressionThreshold ?? 0.92,
+    })
     this.sessionId = sessionId
     this.cwd = config.cwd
     this.enableStream = config.enableStream ?? true
@@ -354,5 +359,132 @@ export class Agent {
   getContextUsage() {
     const messages = this.store.get(this.sessionId)
     return this.llm.getContextUsage(messages)
+  }
+
+  /**
+   * 获取工具列表
+   */
+  getTools() {
+    return this.tools.getDefinitions()
+  }
+
+  /**
+   * 获取当前策略
+   */
+  getStrategyInfo(): { strategy: Strategy; actual: "fc" | "cot" } {
+    return {
+      strategy: this.strategy,
+      actual: this.reactRunner.getCurrentStrategy(),
+    }
+  }
+
+  /**
+   * 获取压缩预览（不执行压缩）
+   */
+  getCompressionPreview(): CompressionPreview {
+    const messages = this.store.get(this.sessionId)
+    return this.compressionService.getPreview(messages)
+  }
+
+  /**
+   * 手动压缩上下文（使用渐进式压缩）
+   * @param level 可选的压缩级别，不指定则自动选择
+   * @returns 压缩结果
+   */
+  async compactContext(level?: CompressionLevel): Promise<{
+    before: number
+    after: number
+    level: CompressionLevel
+    messagesRemoved: number
+    summaryGenerated: boolean
+  }> {
+    const messages = this.store.get(this.sessionId)
+
+    // 设置压缩提示
+    this.compressionService.setCompactionPrompt(this.promptProvider.getCompactionPrompt())
+
+    let result: CompressionResult
+
+    if (level) {
+      // 使用指定级别
+      result = await this.compressionService.compressWithLevel(messages, level)
+    } else {
+      // 自动选择级别（渐进式压缩）
+      result = await this.compressionService.compress(messages)
+    }
+
+    // 如果压缩有效，更新存储
+    if (result.messages.length < messages.length) {
+      this.store.clear(this.sessionId)
+      result.messages.forEach((msg) => this.store.add(this.sessionId, msg))
+    }
+
+    return {
+      before: result.originalTokens,
+      after: result.compressedTokens,
+      level: result.level,
+      messagesRemoved: result.originalCount - result.compressedCount,
+      summaryGenerated: result.summaryGenerated,
+    }
+  }
+
+  /**
+   * 获取会话统计信息
+   */
+  getSessionStats() {
+    const messages = this.store.get(this.sessionId)
+    const contextUsage = this.llm.getContextUsage(messages)
+    const strategy = this.reactRunner.getCurrentStrategy()
+
+    // 统计消息数量
+    let userMessages = 0
+    let assistantMessages = 0
+    let toolCalls = 0
+
+    for (const msg of messages) {
+      if (msg.role === "user") userMessages++
+      if (msg.role === "assistant") {
+        assistantMessages++
+        if (msg.toolCalls) toolCalls += msg.toolCalls.length
+      }
+    }
+
+    return {
+      messageCount: messages.length,
+      userMessages,
+      assistantMessages,
+      toolCalls,
+      contextUsage,
+      strategy,
+      modelId: this.llm.getModelId(),
+    }
+  }
+
+  /**
+   * 取消当前正在进行的 LLM 请求
+   */
+  abort(): void {
+    this.llm.abort()
+  }
+
+  /**
+   * 切换 YOLO 模式
+   */
+  toggleYoloMode(): boolean {
+    return this.policyEngine.toggleYoloMode()
+  }
+
+  /**
+   * 获取 YOLO 模式状态
+   */
+  isYoloMode(): boolean {
+    return this.policyEngine.isYoloMode()
+  }
+
+  /**
+   * 获取策略引擎（用于直接访问）
+   */
+  getPolicyEngine(): PolicyEngine {
+    return this.policyEngine
   }
 }

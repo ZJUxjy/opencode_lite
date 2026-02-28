@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { Box, Text, Static, useInput, useApp, useStdout } from "ink"
-import TextInput from "ink-text-input"
 import Spinner from "ink-spinner"
 import { Agent, type AgentEvents } from "./agent.js"
+import { CommandInput } from "./components/CommandInput.js"
+import { PermissionPrompt } from "./components/PermissionPrompt.js"
+import type { CommandContext, PermissionRequest, PermissionDecision } from "./commands/types.js"
+import type { ToolCall } from "./types.js"
+import type { PolicyDecision } from "./policy.js"
 
 /**
  * 方案 A 实现：最小改动修复滚动问题
@@ -154,14 +158,80 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
   // 已完成的消息列表（会进入 Static 组件）
   const [messages, setMessages] = useState<Message[]>([])
 
-  // 输入框
-  const [input, setInput] = useState("")
-
   // 处理状态
   const [isProcessing, setIsProcessing] = useState(false)
 
   // 上下文使用情况 - 初始化时直接从 agent 获取，避免重复渲染
   const [contextUsage, setContextUsage] = useState(() => agent.getContextUsage())
+
+  // =========================================================================
+  // 权限请求状态
+  // =========================================================================
+
+  // 当前待处理的权限请求
+  const [permissionRequest, setPermissionRequest] = useState<PermissionRequest | null>(null)
+  // 用于 resolve 权限请求的 Promise
+  const permissionResolveRef = useRef<((decision: PolicyDecision) => void) | null>(null)
+
+  /**
+   * 处理权限请求
+   * 当 Agent 需要用户授权时调用
+   */
+  const handlePolicyAsk = useCallback((toolCall: ToolCall): Promise<PolicyDecision> => {
+    return new Promise((resolve) => {
+      permissionResolveRef.current = resolve
+      setPermissionRequest({
+        id: toolCall.id,
+        toolName: toolCall.name,
+        description: getToolDescription(toolCall),
+        args: toolCall.arguments,
+      })
+    })
+  }, [])
+
+  /**
+   * 处理用户决策
+   */
+  const handlePermissionDecision = useCallback((decision: PermissionDecision) => {
+    if (permissionResolveRef.current) {
+      // 转换决策类型：PermissionDecision -> PolicyDecision
+      const policyDecision: PolicyDecision = decision === "always" ? "allow" : decision
+      permissionResolveRef.current(policyDecision)
+
+      // 如果是 "always"，让 policy engine 学习
+      if (decision === "always" && permissionRequest) {
+        agent.getPolicyEngine().learn(
+          permissionRequest.toolName,
+          permissionRequest.args,
+          "allow",
+          true
+        )
+      }
+
+      permissionResolveRef.current = null
+      setPermissionRequest(null)
+    }
+  }, [agent, permissionRequest])
+
+  /**
+   * 获取工具的友好描述
+   */
+  const getToolDescription = (toolCall: ToolCall): string => {
+    const { name, arguments: args } = toolCall
+    const argStr = typeof args === "object" ? args : {}
+
+    switch (name) {
+      case "write":
+        return `Write to file: ${argStr.file_path || argStr.path || "unknown"}`
+      case "edit":
+        return `Edit file: ${argStr.file_path || argStr.path || "unknown"}`
+      case "bash":
+        const cmd = String(argStr.command || "")
+        return cmd.length > 80 ? cmd.slice(0, 80) + "..." : cmd
+      default:
+        return `${name}: ${JSON.stringify(argStr).slice(0, 60)}`
+    }
+  }
 
   // =========================================================================
   // 流式输出 - 使用 ref 累加，避免频繁 setState
@@ -226,6 +296,20 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
   }, [agent])
 
   // =========================================================================
+  // Command context for command handlers
+  // =========================================================================
+
+  const commandContext: CommandContext = useMemo(
+    () => ({
+      agent,
+      setMessages,
+      exit,
+      updateContextUsage,
+    }),
+    [agent, setMessages, exit, updateContextUsage]
+  )
+
+  // =========================================================================
   // 处理用户输入
   // =========================================================================
 
@@ -233,33 +317,8 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
     const trimmed = value.trim()
     if (!trimmed || isProcessing) return
 
-    setInput("")
-
-    // -----------------------------------------------------------------------
-    // 处理命令
-    // -----------------------------------------------------------------------
-
-    if (trimmed === "/exit" || trimmed === "/quit") {
-      exit()
-      return
-    }
-
-    if (trimmed === "/clear") {
-      agent.clearSession()
-      setMessages([])
-      updateContextUsage()
-      return
-    }
-
-    if (trimmed === "/help") {
-      setMessages(prev => [...prev, createSystemMessage(
-        `Commands:
-  /exit, /quit  - Exit the program
-  /clear        - Clear current session
-  /help         - Show this help`
-      )])
-      return
-    }
+    // Note: Command handling is now done by CommandInput component
+    // This callback only handles regular messages
 
     // -----------------------------------------------------------------------
     // 添加用户消息
@@ -333,7 +392,9 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
           `📦 Compressed: ${before} → ${after} tokens`
         )
         setMessages(prev => [...prev, compressMessage])
-      }
+      },
+
+      onPolicyAsk: handlePolicyAsk,
     }
 
     agent.setEvents(events)
@@ -345,6 +406,14 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
     try {
       await agent.run(trimmed)
     } catch (error: any) {
+      // 如果是用户取消，不显示错误（已经在上面的 useInput 中处理了）
+      if (error.message?.includes("cancelled by user")) {
+        // 用户取消，静默处理
+        setIsProcessing(false)
+        updateContextUsage()
+        return
+      }
+
       let errorMessage = error.message || "Unknown error"
 
       if (error.message?.includes("timed out")) {
@@ -363,15 +432,25 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
 
     setIsProcessing(false)
     updateContextUsage()
-  }, [agent, isProcessing, exit, updateContextUsage])
+  }, [agent, isProcessing])
 
   // =========================================================================
   // 键盘快捷键
   // =========================================================================
 
   useInput((input, key) => {
+    // Ctrl+C: Exit
     if (key.ctrl && input === "c") {
       exit()
+    }
+
+    // Escape: Cancel ongoing request
+    if (key.escape && isProcessing) {
+      agent.abort()
+      const cancelMessage = createSystemMessage("⚠️ Request cancelled by user")
+      setMessages(prev => [...prev, cancelMessage])
+      setIsProcessing(false)
+      updateContextUsage()
     }
   })
 
@@ -465,6 +544,15 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
       </Box>
 
       {/* =====================================================================
+          权限提示
+          ===================================================================== */}
+      <PermissionPrompt
+        request={permissionRequest!}
+        onDecision={handlePermissionDecision}
+        visible={permissionRequest !== null}
+      />
+
+      {/* =====================================================================
           分隔线：明确划分输出区域和输入区域（自适应终端宽度）
           ===================================================================== */}
       <Box marginBottom={1}>
@@ -482,27 +570,17 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
               ▌Context: {contextStatus.percent}%
             </Text>
             <Text dimColor> ({contextStatus.usedK}K / {contextStatus.limitK}K)</Text>
+            {agent.isYoloMode() && <Text color="yellow" bold> 🚀 YOLO</Text>}
             {isProcessing && <Text color="cyan"> ● Processing...</Text>}
           </Text>
         </Box>
 
         {/* 输入框 - 限制宽度防止溢出 */}
-        <Box width={terminalWidth - 3}>
-          <Box width={2}>
-            <Text bold color="green">❯ </Text>
-          </Box>
-          <Box flexGrow={1}>
-            <TextInput
-              value={input}
-              onChange={setInput}
-              onSubmit={handleSubmit}
-              placeholder={isProcessing
-                ? "Waiting for response..."
-                : "Type a message..."}
-              showCursor={!isProcessing}
-            />
-          </Box>
-        </Box>
+        <CommandInput
+          isProcessing={isProcessing}
+          onSubmit={handleSubmit}
+          commandContext={commandContext}
+        />
       </Box>
     </Box>
   )

@@ -59,11 +59,14 @@ const DEFAULT_CONFIG: PolicyConfig = {
  * - 检查预定义规则
  * - 检查用户学习的规则
  * - 返回决策结果
+ * - 支持 YOLO 模式（自动批准所有）
  */
 export class PolicyEngine {
   private config: PolicyConfig
   private rules: PolicyRule[] = []
   private learnedRules: Map<string, PolicyDecision> = new Map()
+  /** YOLO 模式：自动批准所有操作 */
+  private yoloMode: boolean = false
 
   constructor(config: Partial<PolicyConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
@@ -131,6 +134,25 @@ export class PolicyEngine {
    * 检查工具调用权限（简化接口）
    */
   check(toolName: string, args: Record<string, unknown>): PolicyResult {
+    // 0. YOLO 模式：自动批准所有（除了危险操作）
+    if (this.yoloMode) {
+      // 即使在 YOLO 模式下，仍然阻止极其危险的操作
+      if (toolName === "bash" && args.command) {
+        const cmd = String(args.command)
+        const extremelyDangerous = /\b(rm\s+-rf\s+\/|mkfs|dd\s+if=|>\s*\/dev\/(sda|hda|nvme))/i
+        if (extremelyDangerous.test(cmd)) {
+          return {
+            decision: "deny",
+            reason: "Extremely dangerous command blocked even in YOLO mode",
+          }
+        }
+      }
+      return {
+        decision: "allow",
+        reason: "YOLO mode enabled",
+      }
+    }
+
     // 1. 检查预定义规则（按顺序，先匹配的优先）
     for (const rule of this.rules) {
       if (rule.tool !== toolName && rule.tool !== "*") {
@@ -286,5 +308,35 @@ export class PolicyEngine {
   private saveLearnedRules(): void {
     // TODO: 保存到文件
     // 目前只在内存中保存
+  }
+
+  /**
+   * 切换 YOLO 模式
+   * @returns 新的 YOLO 模式状态
+   */
+  toggleYoloMode(): boolean {
+    this.yoloMode = !this.yoloMode
+    return this.yoloMode
+  }
+
+  /**
+   * 设置 YOLO 模式
+   */
+  setYoloMode(enabled: boolean): void {
+    this.yoloMode = enabled
+  }
+
+  /**
+   * 获取 YOLO 模式状态
+   */
+  isYoloMode(): boolean {
+    return this.yoloMode
+  }
+
+  /**
+   * 获取学习的规则数量
+   */
+  getLearnedRulesCount(): number {
+    return this.learnedRules.size
   }
 }

@@ -9,7 +9,7 @@
   "main": "./dist/index.js",
   "scripts": {
     "build": "tsc",
-    "dev": "tsx src/index.ts",
+    "dev": "tsx src/index.tsx",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -21,6 +21,7 @@
     "ai": "^4.0.0",
     "better-sqlite3": "^11.0.0",
     "commander": "^13.0.0",
+    "fzf": "^0.5.2",
     "glob": "^11.0.0",
     "ink": "^6.8.0",
     "ink-spinner": "^5.0.0",

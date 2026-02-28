@@ -15,6 +15,10 @@ node dist/index.js     # direct execution
 # Development
 npm run dev            # tsx src/index.ts (uncompiled, for quick testing)
 
+# Test
+npm run test           # vitest run
+npm run test:watch     # vitest watch mode
+
 # CLI Options
 node dist/index.js --help
 node dist/index.js -m <model> --base-url <url> -d <working-directory>
@@ -23,67 +27,122 @@ node dist/index.js --list-sessions
 
 ## Architecture
 
-This is a lightweight AI coding agent implementing the ReAct (Reasoning + Acting) pattern.
+This is a lightweight AI coding agent implementing the ReAct (Reasoning + Acting) pattern with dual strategy support.
 
-### Core Loop (agent.ts)
+### Core Architecture
 
 ```
-User Input → LLM Call → Parse Response → Tool Execution → Loop until no tools
+┌──────────────────────────────────────────────────────────────────┐
+│                         Agent (agent.ts)                         │
+│  - Session management                                             │
+│  - Context compression                                            │
+│  - Loop detection integration                                     │
+└───────────────────────────┬──────────────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                    ReActRunner (react/runner.ts)                 │
+│  - Strategy selection based on model capabilities                │
+│  - FC_CAPABLE_MODELS: claude, gpt-4, gemini, qwen, deepseek,    │
+│    glm-4, minimax, doubao, yi, moonshot, kimi                   │
+└─────────────┬────────────────────────────────┬──────────────────┘
+              │                                │
+              ▼                                ▼
+┌─────────────────────────┐      ┌─────────────────────────────────┐
+│  FCRunner (fc-runner)   │      │   CoTRunner (cot-runner)        │
+│  - Native tool calling  │      │   - ReAct Prompt format         │
+│  - Uses model's FC API  │      │   - Thought/Action/Observation  │
+└─────────────────────────┘      │   - ReActParser (streaming)     │
+                                 └─────────────────────────────────┘
 ```
-
-The `Agent.run()` method implements the main loop:
-1. Add user message to history
-2. Load messages from SQLite store
-3. Compress context if approaching token limit
-4. Loop: call LLM → check for tool calls → execute tools → add results → repeat
-5. Return when no tool calls
 
 ### Key Components
 
-| File | Purpose |
-|------|---------|
-| `src/agent.ts` | Core Agent class with ReAct loop, integrates LLM + tools + storage |
-| `src/llm.ts` | LLM client wrapper using Vercel AI SDK, supports Anthropic/OpenAI-compatible APIs |
+| File/Directory | Purpose |
+|----------------|---------|
+| `src/agent.ts` | Core Agent class, session management, integrates all components |
+| `src/llm.ts` | LLM client using Vercel AI SDK, supports Anthropic/OpenAI-compatible APIs |
 | `src/store.ts` | Message persistence using better-sqlite3 |
+| `src/compression.ts` | Progressive context compression (light → moderate → aggressive) |
 | `src/loopDetection.ts` | Three-layer loop detection (tool calls, content repetition, LLM-assisted) |
-| `src/tools/*.ts` | 6 built-in tools: bash, read, write, edit, grep, glob |
-| `src/App.tsx` | Ink-based TUI with streaming output |
+| `src/policy.ts` | Policy engine for permission control |
+| `src/App.tsx` | Ink-based TUI with Static/dynamic separation for proper scrolling |
 | `src/index.tsx` | CLI entry point with commander |
 
-### Data Flow
+### ReAct System (`src/react/`)
+
+| File | Purpose |
+|------|---------|
+| `runner.ts` | Strategy router, selects FC or CoT based on model |
+| `fc-runner.ts` | Function Calling mode implementation |
+| `cot-runner.ts` | Chain-of-Thought mode with ReAct prompt |
+| `parser.ts` | Streaming ReAct output parser (Thought/Action/Observation) |
+| `scratchpad.ts` | Thought process management |
+| `persistence.ts` | Thought persistence to SQLite |
+
+### Prompt System (`src/prompts/`)
+
+9 sections assembled by `PromptProvider`:
+
+1. **identity** - Agent identity (Lite OpenCode)
+2. **objectives** - Task objectives
+3. **environment** - Working directory, platform, date
+4. **tools** - Tool usage guidelines
+5. **workflow** - Work process guidelines
+6. **memory** - Context management guidance
+7. **errorHandling** - Error handling guidelines
+8. **constraints** - Behavior constraints
+9. **react** - ReAct format (conditional, CoT mode only)
+
+### TUI Architecture (`src/App.tsx`)
 
 ```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  index.tsx  │───▶│   App.tsx   │───▶│   Agent     │
-│  (CLI)      │    │   (TUI)     │    │   (Loop)    │
-└─────────────┘    └─────────────┘    └──────┬──────┘
-                                             │
-                    ┌────────────────────────┼────────────────────────┐
-                    ▼                        ▼                        ▼
-             ┌───────────┐           ┌───────────┐           ┌───────────┐
-             │  LLMClient│           │ToolRegistry│          │MessageStore│
-             │  (llm.ts) │           │ (tools/)   │          │ (store.ts) │
-             └───────────┘           └───────────┘           └───────────┘
+App (Main Container)
+├── Static (Message History) - Scrolls with terminal
+│   └── MessageItem (stable IDs: msg-${timestamp}-${counter}-${random})
+├── Dynamic Section (Streaming output)
+│   ├── Reasoning display (💭)
+│   ├── Streaming text with cursor (▌)
+│   └── Tool call display (🔧)
+├── Separator Line (terminal width)
+└── Bottom Section
+    ├── Status Bar (Context %: green<80%, yellow 80-92%, red>92%)
+    └── Input Box
 ```
+
+Key TUI techniques:
+- **Static/Dynamic separation**: Completed messages go to Static component for proper scrolling
+- **Ref + throttling**: Streaming text uses `useRef` with 150ms batched updates to reduce re-renders
+- **Stable keys**: Messages use unique IDs, not array indices
+
+### Tools (`src/tools/`)
+
+6 built-in tools: `bash`, `read`, `write`, `edit`, `grep`, `glob`
 
 ### Configuration
 
-The project reads configuration from `/home/xjingyao/code/opencode_lite/settings.json`:
+Config loaded from `settings.json` (search order):
+1. Current working directory
+2. Project root (relative to executable)
+3. `~/.lite-opencode/settings.json`
 
 ```json
 {
-  "ANTHROPIC_API_KEY": "...",
-  "ANTHROPIC_BASE_URL": "...",
-  "ANTHROPIC_MODEL": "..."
+  "env": {
+    "ANTHROPIC_API_KEY": "...",
+    "ANTHROPIC_BASE_URL": "...",
+    "ANTHROPIC_MODEL": "...",
+    "API_TIMEOUT_MS": "120000"
+  }
 }
 ```
 
 ### Context Management
 
 - Token estimation: ~4 characters per token
-- Model context limits defined in `llm.ts` (Claude: 200K, MiniMax: 1M, etc.)
-- Compression triggered at 92% capacity via `compressContext()`
-- Compression strategy: keep first 2 + last 6 messages, summarize middle
+- Model context limits in `llm.ts` (Claude: 200K, MiniMax: 1M, etc.)
+- Compression triggered at 92% capacity (configurable via `--compression-threshold`)
+- Progressive compression: light → moderate → aggressive
 
 ### Adding New Tools
 
@@ -100,7 +159,6 @@ export const myTool: Tool = {
     arg1: z.string().describe("Arg description"),
   }),
   execute: async (params, ctx) => {
-    // ctx.cwd is working directory
     return "result string"
   },
 }
@@ -108,18 +166,11 @@ export const myTool: Tool = {
 
 2. Register in `src/tools/index.ts`
 
-### Message Types
-
-```typescript
-interface Message {
-  role: "user" | "assistant"
-  content: string
-  toolCalls?: ToolCall[]      // For assistant messages
-  toolResults?: ToolResult[]  // For tool response messages
-}
-```
-
 ## Documentation
 
 - `docs/agent-loop-research.md` - Research on kimi-cli, kilocode, gemini-cli ReAct implementations
+- `docs/react-development-plan.md` - ReAct system development phases and future plans
+- `docs/modular-prompt-research.md` - Modular prompt system design
 - `docs/hook-system-design.md` - Hook system design for future implementation
+- `docs/dify-architecture-deep-dive.md` - Dify architecture analysis
+- `docs/agent-architecture-research.md` - Agent architecture research

@@ -70,6 +70,8 @@ export class LLMClient {
   private provider
   private modelId: string
   private timeout: number
+  /** Current AbortController for canceling ongoing requests */
+  private currentAbortController: AbortController | null = null
 
   constructor(config: LLMConfig = {}) {
     // 优先级: 传入配置 > 环境变量 > 默认值
@@ -140,6 +142,26 @@ export class LLMClient {
   }
 
   /**
+   * Abort any ongoing request
+   */
+  abort(): void {
+    if (this.currentAbortController) {
+      this.currentAbortController.abort()
+      this.currentAbortController = null
+      if (process.env.DEBUG_LLM === "1") {
+        console.log(`[LLM] Request aborted by user`)
+      }
+    }
+  }
+
+  /**
+   * Check if there's an ongoing request
+   */
+  isProcessing(): boolean {
+    return this.currentAbortController !== null
+  }
+
+  /**
    * 非流式调用（保留兼容性）
    */
   async chat(
@@ -150,8 +172,9 @@ export class LLMClient {
     const coreMessages = this.convertMessages(messages)
     const toolDefs = this.convertTools(tools)
 
-    // 创建 AbortController 用于超时控制
-    const controller = new AbortController()
+    // 创建 AbortController 用于超时控制和用户取消
+    this.currentAbortController = new AbortController()
+    const controller = this.currentAbortController
     const timeoutId = setTimeout(() => {
       controller.abort()
     }, this.timeout)
@@ -168,6 +191,7 @@ export class LLMClient {
       })
 
       clearTimeout(timeoutId)
+      this.currentAbortController = null
 
       return {
         content: result.text,
@@ -180,6 +204,7 @@ export class LLMClient {
       }
     } catch (error: any) {
       clearTimeout(timeoutId)
+      this.currentAbortController = null
 
       // 处理超时错误
       if (error.name === "AbortError" || controller.signal.aborted) {
@@ -202,8 +227,9 @@ export class LLMClient {
     const coreMessages = this.convertMessages(messages)
     const toolDefs = this.convertTools(tools)
 
-    // 创建 AbortController 用于超时控制
-    const controller = new AbortController()
+    // 创建 AbortController 用于超时控制和用户取消
+    this.currentAbortController = new AbortController()
+    const controller = this.currentAbortController
     const timeoutId = setTimeout(() => {
       controller.abort()
       if (process.env.DEBUG_LLM === "1") {
@@ -268,6 +294,7 @@ export class LLMClient {
       }
 
       clearTimeout(timeoutId)
+      this.currentAbortController = null
 
       return {
         content: fullContent || (await streamResult.text),
@@ -277,10 +304,11 @@ export class LLMClient {
       }
     } catch (error: any) {
       clearTimeout(timeoutId)
+      this.currentAbortController = null
 
-      // 处理超时错误
-      if (error.name === "AbortError" || controller.signal.aborted) {
-        throw new Error(`Request timed out after ${this.timeout / 1000} seconds. The API may be slow or unresponsive.`)
+      // 处理用户取消
+      if (error.name === "AbortError" && controller.signal.aborted) {
+        throw new Error(`Request cancelled by user`)
       }
 
       // 处理其他错误
