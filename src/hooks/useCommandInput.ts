@@ -22,6 +22,9 @@ const MAX_VISIBLE_ITEMS = 5
  * - Enter: Execute command or accept suggestion
  * - Escape: Close dropdown
  */
+/** Maximum input history to keep */
+const MAX_INPUT_HISTORY = 50
+
 export function useCommandInput({
   onSubmit,
   commandContext,
@@ -36,6 +39,11 @@ export function useCommandInput({
 
   // Track if we just accepted a suggestion (to prevent double-submit)
   const justAcceptedRef = useRef(false)
+
+  // Input history for up/down navigation
+  const [inputHistory, setInputHistory] = useState<string[]>([])
+  const [historyIndex, setHistoryIndex] = useState(-1)
+  const tempInputRef = useRef("")
 
   // Get autocomplete suggestions based on input
   const suggestions = useMemo<Command[]>(() => {
@@ -69,38 +77,48 @@ export function useCommandInput({
     }
   }, [selectedIndex, scrollOffset])
 
-  // Keyboard navigation for autocomplete dropdown
+  // Keyboard navigation for autocomplete dropdown and input history
   // Note: This runs in parallel with TextInput's internal useInput
-  // We use the isActive pattern to only capture navigation keys when dropdown is shown
   useInput(
     (_char, key) => {
       if (isProcessing) return
 
       // Tab: Accept selected suggestion
-      // Note: Tab doesn't trigger TextInput's onSubmit, so no need for justAcceptedRef
       if (key.tab && showDropdown && suggestions.length > 0) {
         const selectedCmd = suggestions[selectedIndex]
         if (selectedCmd) {
           setInput(selectedCmd.name + " ")
-          setInputKey((prev) => prev + 1) // Force remount to fix cursor position
+          setInputKey((prev) => prev + 1)
           setDropdownClosed(true)
         }
         return
       }
 
-      // Up arrow: Move selection up (wrap around)
-      if (key.upArrow && showDropdown && suggestions.length > 0) {
-        setSelectedIndex((prev) =>
-          prev > 0 ? prev - 1 : suggestions.length - 1
-        )
+      // Up arrow: History navigation or dropdown navigation
+      if (key.upArrow) {
+        if (showDropdown && suggestions.length > 0) {
+          // Dropdown navigation
+          setSelectedIndex((prev) =>
+            prev > 0 ? prev - 1 : suggestions.length - 1
+          )
+        } else {
+          // Input history navigation
+          navigateHistory("up")
+        }
         return
       }
 
-      // Down arrow: Move selection down (wrap around)
-      if (key.downArrow && showDropdown && suggestions.length > 0) {
-        setSelectedIndex((prev) =>
-          prev < suggestions.length - 1 ? prev + 1 : 0
-        )
+      // Down arrow: History navigation or dropdown navigation
+      if (key.downArrow) {
+        if (showDropdown && suggestions.length > 0) {
+          // Dropdown navigation
+          setSelectedIndex((prev) =>
+            prev < suggestions.length - 1 ? prev + 1 : 0
+          )
+        } else {
+          // Input history navigation
+          navigateHistory("down")
+        }
         return
       }
 
@@ -111,27 +129,62 @@ export function useCommandInput({
       }
 
       // Enter: If dropdown is shown and we have suggestions, accept the selected one
-      // This prevents the form from submitting immediately when navigating
       if (key.return && showDropdown && suggestions.length > 0) {
         const selectedCmd = suggestions[selectedIndex]
         if (selectedCmd) {
           setInput(selectedCmd.name + " ")
-          setInputKey((prev) => prev + 1) // Force remount to fix cursor position
+          setInputKey((prev) => prev + 1)
           justAcceptedRef.current = true
           setDropdownClosed(true)
         }
         return
       }
     },
-    { isActive: showDropdown && !isProcessing }
+    { isActive: !isProcessing }
   )
+
+  /**
+   * Navigate through input history
+   */
+  const navigateHistory = useCallback((direction: "up" | "down") => {
+    if (inputHistory.length === 0) return
+
+    if (direction === "up") {
+      // First time pressing up: save current input
+      if (historyIndex === -1) {
+        tempInputRef.current = input
+      }
+
+      // Move up in history (towards more recent = higher index)
+      const newIndex = historyIndex + 1
+      if (newIndex < inputHistory.length) {
+        setHistoryIndex(newIndex)
+        setInput(inputHistory[inputHistory.length - 1 - newIndex])
+      }
+    } else {
+      // Move down in history
+      const newIndex = historyIndex - 1
+      if (newIndex >= 0) {
+        setHistoryIndex(newIndex)
+        setInput(inputHistory[inputHistory.length - 1 - newIndex])
+      } else if (newIndex === -1) {
+        // Back to current editing
+        setHistoryIndex(-1)
+        setInput(tempInputRef.current)
+      }
+    }
+  }, [inputHistory, historyIndex, input])
 
   // Handle input change
   const handleInputChange = useCallback((value: string) => {
     setInput(value)
     // Reset the "just accepted" flag when user types
     justAcceptedRef.current = false
-  }, [])
+    // Reset history index when user manually types
+    if (historyIndex !== -1) {
+      setHistoryIndex(-1)
+    }
+  }, [historyIndex])
 
   // Handle form submission
   const handleSubmit = useCallback(
@@ -143,6 +196,26 @@ export function useCommandInput({
         justAcceptedRef.current = false
         return
       }
+
+      // Save to history if not empty and different from last entry
+      if (trimmed) {
+        setInputHistory((prev) => {
+          // Don't save if same as last entry
+          if (prev.length > 0 && prev[prev.length - 1] === trimmed) {
+            return prev
+          }
+          // Add new entry, keeping max size
+          const newHistory = [...prev, trimmed]
+          if (newHistory.length > MAX_INPUT_HISTORY) {
+            return newHistory.slice(-MAX_INPUT_HISTORY)
+          }
+          return newHistory
+        })
+      }
+
+      // Reset history navigation
+      setHistoryIndex(-1)
+      tempInputRef.current = ""
 
       // Clear input
       setInput("")

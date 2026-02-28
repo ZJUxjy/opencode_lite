@@ -61,7 +61,7 @@ export function CommandInput({
             placeholder={
               isProcessing
                 ? "Waiting for response..."
-                : "Type a message... (/ for commands)"
+                : "Type a message... (/ for commands, ↑↓ for history)"
             }
             showCursor={!isProcessing}
           />
