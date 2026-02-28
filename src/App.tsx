@@ -5,6 +5,8 @@ import { Agent, type AgentEvents } from "./agent.js"
 import { CommandInput } from "./components/CommandInput.js"
 import { PermissionPrompt } from "./components/PermissionPrompt.js"
 import { PlanFollowupPrompt, type PlanFollowupDecision } from "./components/PlanFollowupPrompt.js"
+import { SessionList } from "./components/SessionList.js"
+import type { Session } from "./session/index.js"
 import type { CommandContext, PermissionRequest, PermissionDecision } from "./commands/types.js"
 import type { ToolCall } from "./types.js"
 import type { PolicyDecision } from "./policy.js"
@@ -31,6 +33,7 @@ interface Props {
   baseURL: string
   sessionId: string
   workingDir: string
+  dbPath: string
   isResumed?: boolean
   resumedSessionTitle?: string
 }
@@ -149,7 +152,7 @@ function MessageItem({ message }: MessageItemProps) {
 // 主组件
 // ============================================================================
 
-export function App({ agent, model, baseURL, sessionId, workingDir, isResumed, resumedSessionTitle }: Props) {
+export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isResumed, resumedSessionTitle }: Props) {
   const { exit } = useApp()
   const { stdout } = useStdout()
 
@@ -170,15 +173,37 @@ export function App({ agent, model, baseURL, sessionId, workingDir, isResumed, r
   const [contextUsage, setContextUsage] = useState(() => agent.getContextUsage())
 
   // =========================================================================
-  // Session 恢复提示
+  // Session 恢复和历史消息加载
   // =========================================================================
 
   useEffect(() => {
-    if (isResumed && resumedSessionTitle) {
-      const resumeMessage = createSystemMessage(
-        `📂 Resumed session: ${resumedSessionTitle}\nSession ID: ${sessionId.slice(0, 20)}...`
-      )
-      setMessages([resumeMessage])
+    if (isResumed) {
+      // 加载历史消息
+      const historyMessages = agent.getHistory()
+
+      if (historyMessages.length > 0) {
+        // 转换历史消息为 UI Message 格式
+        const uiMessages: Message[] = historyMessages.map((msg, index) => ({
+          id: `hist-${sessionId}-${index}-${Date.now()}`,
+          role: msg.role,
+          content: msg.content || "",
+          reasoning: undefined, // 历史消息不保留 reasoning
+          timestamp: Date.now() - (historyMessages.length - index) * 1000, // 估算时间戳
+        }))
+
+        // 添加恢复提示作为第一条消息
+        const resumeMessage = createSystemMessage(
+          `📂 Resumed session: ${resumedSessionTitle || "Unknown"}\nSession ID: ${sessionId.slice(0, 20)}... (${uiMessages.length} messages)`
+        )
+
+        setMessages([resumeMessage, ...uiMessages])
+      } else {
+        // 没有历史消息，只显示恢复提示
+        const resumeMessage = createSystemMessage(
+          `📂 Resumed session: ${resumedSessionTitle || "Unknown"}\nSession ID: ${sessionId.slice(0, 20)}... (empty)`
+        )
+        setMessages([resumeMessage])
+      }
     }
   }, []) // 只在组件挂载时执行
 
@@ -201,6 +226,46 @@ export function App({ agent, model, baseURL, sessionId, workingDir, isResumed, r
   const [planFilePath, setPlanFilePath] = useState<string>("")
   // 用于 resolve Plan Followup 的 Promise
   const planFollowupResolveRef = useRef<((decision: PlanFollowupDecision) => void) | null>(null)
+
+  // =========================================================================
+  // Session 选择器状态
+  // =========================================================================
+
+  const [showSessionList, setShowSessionList] = useState(false)
+  const [availableSessions, setAvailableSessions] = useState<Session[]>([])
+
+  // 加载可用会话
+  const loadSessions = useCallback(() => {
+    const { SessionStore } = require("./session/index.js")
+    const sessionStore = new SessionStore(dbPath)
+    const sessions = sessionStore.list({ includeArchived: false })
+    setAvailableSessions(sessions)
+    sessionStore.close()
+  }, [dbPath])
+
+  // 显示会话列表
+  const handleShowSessionList = useCallback(() => {
+    loadSessions()
+    setShowSessionList(true)
+  }, [loadSessions])
+
+  // 选择会话
+  const handleSelectSession = useCallback((selectedSessionId: string) => {
+    setShowSessionList(false)
+    if (selectedSessionId !== sessionId) {
+      // 由于 Agent 实例绑定特定 sessionId，需要提示用户重启
+      const message = createSystemMessage(
+        `💡 To switch to session ${selectedSessionId.slice(0, 20)}..., exit and run:\n` +
+        `   lite-opencode -r ${selectedSessionId}`
+      )
+      setMessages((prev) => [...prev, message])
+    }
+  }, [sessionId])
+
+  // 取消选择
+  const handleCancelSessionList = useCallback(() => {
+    setShowSessionList(false)
+  }, [])
 
   /**
    * 处理权限请求
@@ -376,8 +441,9 @@ export function App({ agent, model, baseURL, sessionId, workingDir, isResumed, r
       setMessages,
       exit,
       updateContextUsage,
+      showSessionList: handleShowSessionList,
     }),
-    [agent, setMessages, exit, updateContextUsage]
+    [agent, setMessages, exit, updateContextUsage, handleShowSessionList]
   )
 
   // =========================================================================
@@ -651,6 +717,21 @@ export function App({ agent, model, baseURL, sessionId, workingDir, isResumed, r
       <Box marginBottom={1}>
         <Text dimColor>{'─'.repeat(terminalWidth)}</Text>
       </Box>
+
+      {/* =====================================================================
+          Session 选择器
+          ===================================================================== */}
+      {showSessionList && (
+        <Box flexDirection="column" marginTop={1} marginBottom={1}>
+          <SessionList
+            sessions={availableSessions}
+            currentCwd={workingDir}
+            currentSessionId={sessionId}
+            onSelect={handleSelectSession}
+            onCancel={handleCancelSessionList}
+          />
+        </Box>
+      )}
 
       {/* =====================================================================
           底部状态栏 + 输入框

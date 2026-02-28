@@ -9,6 +9,7 @@ export interface CommandContext {
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
   exit: () => void
   updateContextUsage: () => void
+  showSessionList?: () => void
 }
 
 /**

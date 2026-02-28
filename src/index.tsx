@@ -238,6 +238,7 @@ program
         baseURL={baseURL}
         sessionId={sessionId}
         workingDir={options.directory}
+        dbPath={dbPath}
         isResumed={!isNewSession}
         resumedSessionTitle={resumedSession?.title}
       />

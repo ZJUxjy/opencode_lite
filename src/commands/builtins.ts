@@ -65,6 +65,7 @@ const helpCommand: Command = {
   /compact      - Compress context (auto level)
   /compact preview - Show compression preview
   /yolo         - Toggle YOLO mode (auto-approve all)
+  /sessions, /resume  - Show session list and switch sessions
 
 Current status:
   YOLO Mode: ${yoloStatus}
@@ -256,6 +257,25 @@ const yoloCommand: Command = {
 }
 
 /**
+ * Sessions command - shows interactive session selector
+ */
+const sessionsCommand: Command = {
+  name: "/sessions",
+  aliases: ["/resume"],
+  description: "Show session list and switch sessions",
+  handler: (_args: string, ctx: CommandContext) => {
+    if (ctx.showSessionList) {
+      ctx.showSessionList()
+    } else {
+      const message = createSystemMessage(
+        "⚠️ Session list not available in this context"
+      )
+      ctx.setMessages((prev) => [...prev, message])
+    }
+  },
+}
+
+/**
  * All builtin commands
  * Exported as array for easy registration in CommandRegistry
  */
@@ -267,4 +287,5 @@ export const builtinCommands: Command[] = [
   statsCommand,
   compactCommand,
   yoloCommand,
+  sessionsCommand,
 ]
