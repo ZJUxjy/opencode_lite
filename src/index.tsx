@@ -4,6 +4,7 @@ import { render } from "ink"
 import { Command } from "commander"
 import { Agent } from "./agent.js"
 import { MessageStore } from "./store.js"
+import { SessionStore, formatRelativeTime, type Session } from "./session/index.js"
 import { App } from "./App.js"
 import * as path from "path"
 import * as os from "os"
@@ -52,6 +53,114 @@ function getConfig(
   return defaultValue
 }
 
+/**
+ * 解析会话参数，确定要使用的会话ID和是否为新会话
+ */
+function resolveSession(
+  options: {
+    resume?: boolean | string
+    continue?: boolean
+    session?: string
+  },
+  sessionStore: SessionStore,
+  cwd: string
+): { sessionId: string; isNewSession: boolean; resumedSession?: Session } {
+  // 优先级: --resume <id> > --resume (latest) > --continue > --session > new session
+
+  // Case 1: --resume [session-id]
+  if (options.resume !== undefined) {
+    if (typeof options.resume === "string") {
+      // --resume <session-id>: 恢复指定会话
+      const session = sessionStore.get(options.resume)
+      if (!session) {
+        console.error(`Error: Session "${options.resume}" not found`)
+        process.exit(1)
+      }
+      return { sessionId: options.resume, isNewSession: false, resumedSession: session }
+    } else {
+      // --resume: 恢复最新会话
+      const latestSession = sessionStore.getLatestSession()
+      if (!latestSession) {
+        console.error("Error: No sessions found. Create a new session instead.")
+        process.exit(1)
+      }
+      return {
+        sessionId: latestSession.id,
+        isNewSession: false,
+        resumedSession: latestSession,
+      }
+    }
+  }
+
+  // Case 2: --continue: 继续当前目录的最后会话
+  if (options.continue) {
+    const lastSession = sessionStore.getLastSession(cwd)
+    if (!lastSession) {
+      console.error(`Error: No previous session found for directory: ${cwd}`)
+      process.exit(1)
+    }
+    return { sessionId: lastSession.id, isNewSession: false, resumedSession: lastSession }
+  }
+
+  // Case 3: --session <id>: 使用指定的会话ID（兼容现有行为）
+  if (options.session && options.session !== Date.now().toString()) {
+    // 检查会话是否存在
+    const existingSession = sessionStore.get(options.session)
+    if (existingSession) {
+      return { sessionId: options.session, isNewSession: false, resumedSession: existingSession }
+    }
+    // 会话不存在，创建新会话（用户显式指定了ID）
+    return { sessionId: options.session, isNewSession: true }
+  }
+
+  // Case 4: 创建新会话
+  const newSessionId = `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+  return { sessionId: newSessionId, isNewSession: true }
+}
+
+/**
+ * 格式化会话列表输出
+ */
+function formatSessionList(
+  sessions: Session[],
+  currentCwd: string,
+  currentSessionId?: string
+): string {
+  if (sessions.length === 0) {
+    return "No sessions found."
+  }
+
+  const lines: string[] = ["Sessions:", ""]
+
+  // 按目录分组
+  const grouped = sessions.reduce((acc, session) => {
+    const dir = session.cwd
+    if (!acc[dir]) acc[dir] = []
+    acc[dir].push(session)
+    return acc
+  }, {} as Record<string, Session[]>)
+
+  Object.entries(grouped).forEach(([dir, dirSessions]) => {
+    const isCurrentDir = dir === currentCwd
+    lines.push(`${isCurrentDir ? "📁" : "  "} ${dir}${isCurrentDir ? " (current)" : ""}`)
+
+    dirSessions.forEach((session) => {
+      const isCurrentSession = session.id === currentSessionId
+      const marker = isCurrentSession ? "▸" : " "
+      const timeStr = formatRelativeTime(session.updatedAt)
+      const msgCount = session.messageCount > 0 ? `${session.messageCount} msgs` : "empty"
+      const archived = session.isArchived ? " [archived]" : ""
+
+      lines.push(
+        `  ${marker} ${session.id.slice(0, 20)}...  ${session.title.slice(0, 40)}  (${msgCount}, ${timeStr})${archived}`
+      )
+    })
+    lines.push("")
+  })
+
+  return lines.join("\n")
+}
+
 const program = new Command()
 
 program
@@ -61,20 +170,39 @@ program
   .option("-m, --model <model>", "Model ID")
   .option("--base-url <url>", "API base URL")
   .option("-d, --directory <dir>", "Working directory", process.cwd())
-  .option("-s, --session <id>", "Session ID", Date.now().toString())
+  .option("-s, --session <id>", "Session ID (creates new if not exists)")
+  .option("-r, --resume [session-id]", "Resume session (latest or specific ID)")
+  .option("-c, --continue", "Continue the last session for current directory")
   .option("--no-stream", "Disable streaming output")
   .option("--compression-threshold <number>", "Context compression threshold (0-1)", "0.92")
-  .option("--list-sessions", "List all sessions")
+  .option("--list-sessions", "List all sessions with metadata")
   .action(async (options) => {
     const dbPath = path.join(os.homedir(), ".lite-opencode", "history.db")
 
+    // 初始化 SessionStore
+    const sessionStore = new SessionStore(dbPath)
+
     // 列出会话
     if (options.listSessions) {
-      const store = new MessageStore(dbPath)
-      const sessions = store.listSessions()
-      console.log("Sessions:")
-      sessions.forEach((s) => console.log(`  - ${s}`))
+      const sessions = sessionStore.list({ includeArchived: true })
+      console.log(formatSessionList(sessions, options.directory))
       process.exit(0)
+    }
+
+    // 解析会话参数
+    const { sessionId, isNewSession, resumedSession } = resolveSession(
+      options,
+      sessionStore,
+      options.directory
+    )
+
+    // 如果是新会话，创建会话记录
+    if (isNewSession) {
+      sessionStore.create({
+        id: sessionId,
+        cwd: options.directory,
+        title: "New Session",
+      })
     }
 
     // 加载 settings.json
@@ -87,7 +215,7 @@ program
     const timeoutStr = getConfig(undefined, "API_TIMEOUT_MS", settings, "120000")
     const timeout = parseInt(timeoutStr, 10)
 
-    const agent = new Agent(options.session, {
+    const agent = new Agent(sessionId, {
       cwd: options.directory,
       dbPath,
       llm: {
@@ -108,8 +236,10 @@ program
         agent={agent}
         model={model}
         baseURL={baseURL}
-        sessionId={options.session}
+        sessionId={sessionId}
         workingDir={options.directory}
+        isResumed={!isNewSession}
+        resumedSessionTitle={resumedSession?.title}
       />
     )
   })

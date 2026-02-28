@@ -2,6 +2,7 @@ import Database from "better-sqlite3"
 import { mkdirSync } from "fs"
 import { dirname } from "path"
 import type { Message, ToolCall, ToolResult } from "./types.js"
+import { SessionStore, generateSessionTitle } from "./session/index.js"
 
 interface DBMessage {
   id: number
@@ -15,12 +16,21 @@ interface DBMessage {
 
 export class MessageStore {
   private db: Database.Database
+  private sessionStore: SessionStore | null = null
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, sessionStore?: SessionStore) {
     // Ensure directory exists
     mkdirSync(dirname(dbPath), { recursive: true })
     this.db = new Database(dbPath)
+    this.sessionStore = sessionStore || null
     this.init()
+  }
+
+  /**
+   * 设置 SessionStore（用于会话元数据管理）
+   */
+  setSessionStore(sessionStore: SessionStore): void {
+    this.sessionStore = sessionStore
   }
 
   private init() {
@@ -52,6 +62,21 @@ export class MessageStore {
       message.toolCalls ? JSON.stringify(message.toolCalls) : null,
       message.toolResults ? JSON.stringify(message.toolResults) : null
     )
+
+    // 更新会话元数据
+    if (this.sessionStore) {
+      const session = this.sessionStore.get(sessionId)
+      if (session) {
+        // 检查是否需要更新标题（第一条用户消息）
+        if (message.role === "user" && session.messageCount === 0) {
+          const title = generateSessionTitle(message.content || "")
+          this.sessionStore.update(sessionId, { title, messageCount: 1 })
+        } else {
+          // 仅增加消息计数
+          this.sessionStore.incrementMessageCount(sessionId)
+        }
+      }
+    }
   }
 
   get(sessionId: string): Message[] {
@@ -72,6 +97,11 @@ export class MessageStore {
 
   clear(sessionId: string) {
     this.db.prepare("DELETE FROM messages WHERE session_id = ?").run(sessionId)
+
+    // 更新会话的消息计数为 0
+    if (this.sessionStore) {
+      this.sessionStore.update(sessionId, { messageCount: 0 })
+    }
   }
 
   listSessions(): string[] {
@@ -85,4 +115,16 @@ export class MessageStore {
   close() {
     this.db.close()
   }
+}
+
+/**
+ * 组合 MessageStore 和 SessionStore 的工厂函数
+ */
+export function createStore(dbPath: string): {
+  messageStore: MessageStore
+  sessionStore: SessionStore
+} {
+  const sessionStore = new SessionStore(dbPath)
+  const messageStore = new MessageStore(dbPath, sessionStore)
+  return { messageStore, sessionStore }
 }

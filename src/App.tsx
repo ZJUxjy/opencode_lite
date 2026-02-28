@@ -31,6 +31,8 @@ interface Props {
   baseURL: string
   sessionId: string
   workingDir: string
+  isResumed?: boolean
+  resumedSessionTitle?: string
 }
 
 interface Message {
@@ -147,7 +149,7 @@ function MessageItem({ message }: MessageItemProps) {
 // 主组件
 // ============================================================================
 
-export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
+export function App({ agent, model, baseURL, sessionId, workingDir, isResumed, resumedSessionTitle }: Props) {
   const { exit } = useApp()
   const { stdout } = useStdout()
 
@@ -166,6 +168,19 @@ export function App({ agent, model, baseURL, sessionId, workingDir }: Props) {
 
   // 上下文使用情况 - 初始化时直接从 agent 获取，避免重复渲染
   const [contextUsage, setContextUsage] = useState(() => agent.getContextUsage())
+
+  // =========================================================================
+  // Session 恢复提示
+  // =========================================================================
+
+  useEffect(() => {
+    if (isResumed && resumedSessionTitle) {
+      const resumeMessage = createSystemMessage(
+        `📂 Resumed session: ${resumedSessionTitle}\nSession ID: ${sessionId.slice(0, 20)}...`
+      )
+      setMessages([resumeMessage])
+    }
+  }, []) // 只在组件挂载时执行
 
   // =========================================================================
   // 权限请求状态
