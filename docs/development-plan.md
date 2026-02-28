@@ -29,9 +29,14 @@ Lite OpenCode 是一个轻量级 AI 编程 Agent，实现 ReAct（Reasoning + Ac
 | ReAct 双策略 | ✅ | FC + CoT 自动选择 |
 | 三层循环检测 | ✅ | 工具/内容/LLM 辅助 |
 | 渐进式压缩 | ✅ | light/moderate/aggressive |
-| 模块化 Prompt | ✅ | 9 Section 架构 |
-| Policy 引擎 | ✅ | 权限控制 |
-| Plan Mode | 🚧 | Phase 5 开发中 |
+| 模块化 Prompt | ✅ | 10 Section 架构 (含 Plan Mode) |
+| Policy 引擎 | ✅ | 权限控制 + Plan Mode 只读限制 |
+| Plan Mode - 基础 | ✅ | 进入/退出 + 权限控制 |
+| Plan Mode - 5阶段工作流 | ✅ | Prompt 指导 + 计划模板 |
+| Plan Mode - Handover | ✅ | 跨会话支持 |
+| Plan Mode - 模型路由 | ✅ | Opus↔Sonnet 自动切换 |
+| Plan Mode - 子代理 | 🚧 | Phase 5.4 开发中 |
+| Plan Mode - 并行探索 | 🚧 | Phase 5.4 开发中 |
 | MCP 集成 | 📋 | Phase 6 规划中 |
 
 ---
@@ -285,15 +290,116 @@ exit_plan_mode
 
 **目标**: 子代理支持、模型路由、性能优化
 
-| 任务 | 说明 | 优先级 |
-|------|------|--------|
-| 5.4.1 子代理 Plan Mode | TaskTool 支持 Plan Mode | P1 |
-| 5.4.2 模型路由 | Plan 用强模型，执行用快模型 | P2 |
-| 5.4.3 并行探索 | 多个 Explore Agent | P2 |
-| 5.4.4 外部编辑器 | Ctrl+X 打开编辑器 | P3 |
-| 5.4.5 计划版本控制 | 计划文件历史 | P3 |
+| 任务 | 说明 | 优先级 | 状态 |
+|------|------|--------|------|
+| 5.4.1 子代理 Plan Mode | TaskTool 支持 Plan Mode | P1 | 🚧 开发中 |
+| 5.4.2 模型路由 | Plan 用强模型，执行用快模型 | P2 | ✅ 已完成 |
+| 5.4.3 并行探索 | 多个 Explore Agent | P2 | 🚧 开发中 |
+| 5.4.4 外部编辑器 | Ctrl+X 打开编辑器 | P3 | 📋 规划中 |
+| 5.4.5 计划版本控制 | 计划文件历史 | P3 | 📋 规划中 |
 
-**模型路由策略**:
+---
+
+#### 5.4.1 子代理 Plan Mode (开发中)
+
+**设计目标**: 支持在 Plan Mode 下创建和管理子代理，实现任务分解和专业化处理
+
+**架构设计**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Main Agent (Plan Mode)                    │
+│  - 协调子代理执行                                            │
+│  - 汇总探索结果                                              │
+│  - 生成最终计划                                              │
+└──────────────┬──────────────────────────────────────────────┘
+               │ 创建并管理子代理
+               │
+    ┌──────────┼──────────┐
+    │          │          │
+    ▼          ▼          ▼
+┌────────┐ ┌────────┐ ┌────────┐
+│Explore │ │Explore │ │Explore │
+│Agent 1 │ │Agent 2 │ │Agent 3 │
+└────────┘ └────────┘ └────────┘
+    │          │          │
+    └──────────┴──────────┘
+               │
+               ▼
+        ┌────────────┐
+        │  Plan Agent │
+        │  (设计阶段) │
+        └────────────┘
+```
+
+**子代理类型**:
+
+| 类型 | 职责 | Prompt 特点 |
+|------|------|-------------|
+| **Explore Agent** | 探索代码库特定区域 | 聚焦文件搜索和模式识别，禁止修改 |
+| **Plan Agent** | 设计实现方案 | 基于探索结果设计，考虑多种方案 |
+| **Review Agent** | 审查计划合理性 | 检查遗漏、风险评估 |
+
+**子代理状态机**:
+
+```typescript
+interface Subagent {
+  id: string
+  type: 'explore' | 'plan' | 'review'
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  prompt: string
+  result?: string
+  parentId?: string  // 支持嵌套
+}
+```
+
+**TaskTool 扩展**:
+
+```typescript
+// src/tools/task.ts
+export const taskTool: Tool = {
+  name: "task",
+  description: `Create a subagent to perform a specific task.
+
+In Plan Mode, you can create up to ${MAX_PARALLEL_EXPLORE_AGENTS} Explore agents in parallel.
+Each subagent runs independently and returns results.
+
+Use this when:
+- You need to explore multiple areas of the codebase simultaneously
+- You want different perspectives on a problem
+- The task can be divided into independent subtasks`,
+  parameters: z.object({
+    type: z.enum(["explore", "plan", "review"]).describe("Type of subagent"),
+    prompt: z.string().describe("Detailed instructions for the subagent"),
+  }),
+  execute: async (params, ctx) => {
+    // 创建子代理实例
+    // 异步执行
+    // 返回结果引用
+  }
+}
+```
+
+**实现步骤**:
+
+1. **创建子代理基础设施** (`src/subagent/`)
+   - `SubagentManager` - 管理子代理生命周期
+   - `SubagentRunner` - 执行子代理任务
+   - 子代理隔离（独立消息历史、上下文）
+
+2. **扩展 TaskTool**
+   - 支持在 Plan Mode 下创建子代理
+   - 异步执行和结果收集
+
+3. **Plan Mode Prompt 更新**
+   - 添加子代理使用指导
+   - 说明并行探索的最佳实践
+
+---
+
+#### 5.4.2 模型路由 (已完成)
+
+**实现状态**: ✅ 已完成
 
 ```typescript
 // config.ts
@@ -308,10 +414,173 @@ export const planModeConfig = {
 ```
 
 **验收标准**:
-- [ ] 子代理可在 Plan Mode 下运行
-- [ ] 自动模型路由工作正常
+- [x] 子代理可在 Plan Mode 下运行
+- [x] 自动模型路由工作正常
 - [ ] 支持并行 Explore Agent
 - [ ] 可从外部编辑器编辑计划
+
+---
+
+#### 5.4.3 并行探索 (开发中)
+
+**设计目标**: 支持多个 Explore Agent 并行探索代码库，加速 Initial Understanding 阶段
+
+**参考实现**: Kode-Agent 支持最多 3 个 Explore Agent 并行
+
+**核心概念**:
+
+```typescript
+// 并行探索配置
+interface ParallelExploreConfig {
+  maxAgents: number        // 最大并行数 (默认: 3)
+  timeout: number         // 每个代理超时 (默认: 60000ms)
+  aggregationStrategy: 'merge' | 'concat' | 'summary'  // 结果聚合策略
+}
+
+// 探索任务定义
+interface ExploreTask {
+  focus: string           // 探索焦点，如 "authentication flow"
+  scope: string[]         // 关注文件/目录
+  questions: string[]     // 需要回答的问题
+}
+```
+
+**并行探索流程**:
+
+```
+Plan Mode - Phase 1: Initial Understanding
+
+用户请求: "分析代码库中的错误处理机制"
+    ↓
+Main Agent 分析需求
+    ↓
+拆分为 3 个探索任务:
+┌────────────────────┬────────────────────┬────────────────────┐
+│   Explore Agent 1  │   Explore Agent 2  │   Explore Agent 3  │
+├────────────────────┼────────────────────┼────────────────────┤
+│ Focus: 错误类型定义 │ Focus: 错误捕获   │ Focus: 错误响应   │
+│ Scope: src/errors   │ Scope: src/middleware│ Scope: src/routes │
+│ Question:          │ Question:          │ Question:          │
+│ - 定义了哪些错误类  │ - 在哪里捕获异常  │ - 如何返回错误给  │
+│ - 错误码规范       │ - 是否全局处理    │   客户端         │
+└────────┬───────────┴────────┬───────────┴────────┬───────────┘
+         │                    │                    │
+         └────────────────────┼────────────────────┘
+                              ↓
+                    结果聚合 (ResultAggregator)
+                              ↓
+                    Main Agent 综合所有发现
+                              ↓
+                    进入 Phase 2: Design
+```
+
+**结果聚合策略**:
+
+| 策略 | 说明 | 适用场景 |
+|------|------|----------|
+| **merge** | 合并重复发现，去重 | 探索区域有重叠 |
+| **concat** | 简单拼接所有结果 | 探索区域完全独立 |
+| **summary** | AI 生成综合摘要 | 结果需要进一步提炼 |
+
+**实现架构**:
+
+```typescript
+// src/plan/parallel-explore.ts
+export class ParallelExploreManager {
+  private subagentManager: SubagentManager
+  private config: ParallelExploreConfig
+
+  async runParallelExploration(
+    tasks: ExploreTask[],
+    parentContext: Context
+  ): Promise<AggregatedResult> {
+    // 1. 验证任务数不超过限制
+    const limitedTasks = tasks.slice(0, this.config.maxAgents)
+
+    // 2. 创建子代理数组
+    const agents = limitedTasks.map(task =>
+      this.subagentManager.create({
+        type: 'explore',
+        prompt: this.buildExplorePrompt(task),
+        parentContext,
+      })
+    )
+
+    // 3. 并行执行
+    const results = await Promise.all(
+      agents.map(agent =>
+        this.runWithTimeout(agent, this.config.timeout)
+      )
+    )
+
+    // 4. 聚合结果
+    return this.aggregateResults(results)
+  }
+
+  private aggregateResults(results: SubagentResult[]): AggregatedResult {
+    switch (this.config.aggregationStrategy) {
+      case 'merge':
+        return this.mergeResults(results)
+      case 'concat':
+        return this.concatResults(results)
+      case 'summary':
+        return this.summarizeResults(results)
+    }
+  }
+}
+```
+
+**Prompt 模板 - Explore Agent**:
+
+```typescript
+const EXPLORE_AGENT_PROMPT = `You are an Explore Agent specialized in code exploration.
+
+Your task: {{taskDescription}}
+
+Focus areas:
+{{focusAreas}}
+
+Questions to answer:
+{{questions}}
+
+Rules:
+- You can ONLY use read tools: read, glob, grep
+- Do NOT make any changes to files
+- Be thorough but concise
+- Report specific file paths and line numbers
+- Note any patterns or conventions you discover
+
+Output format:
+## Files Examined
+- \`path/to/file.ts\`: brief description
+
+## Key Findings
+1. Finding with file:line reference
+2. Another finding
+
+## Patterns Observed
+- Pattern description
+
+## Open Questions
+- Any uncertainties to clarify`
+```
+
+**环境变量配置**:
+
+```bash
+# 并行探索配置
+LITE_OPENCODE_MAX_EXPLORE_AGENTS=3      # 最大并行数
+LITE_OPENCODE_EXPLORE_TIMEOUT=60000     # 超时时间(ms)
+LITE_OPENCODE_AGGREGATION_STRATEGY=merge # 聚合策略
+```
+
+**验收标准**:
+- [ ] 支持创建最多 3 个 Explore Agent 并行
+- [ ] 每个子代理有独立的上下文隔离
+- [ ] 支持多种结果聚合策略
+- [ ] 可配置超时时间
+- [ ] Plan Mode Prompt 包含并行探索指导
+- [ ] 从消息历史可追踪子代理执行过程
 
 ---
 
