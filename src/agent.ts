@@ -259,7 +259,7 @@ export class Agent {
     const ctx: Context = {
       cwd: this.cwd,
       messages: [],
-      setPlanMode: (enabled) => this.policyEngine.setPlanMode(enabled)
+      setPlanMode: (enabled) => this.setPlanMode(enabled)  // 调用 Agent 方法以触发模型切换
     }
 
     for (const call of toolCalls) {

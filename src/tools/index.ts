@@ -7,6 +7,7 @@ import { grepTool } from "./grep.js"
 import { globTool } from "./glob.js"
 import { enterPlanModeTool } from "./enter-plan-mode.js"
 import { exitPlanModeTool } from "./exit-plan-mode.js"
+import { taskTool, getSubagentResultTool, parallelExploreTool } from "./task.js"
 
 export class ToolRegistry {
   private tools = new Map<string, Tool>()
@@ -22,6 +23,9 @@ export class ToolRegistry {
       globTool,
       enterPlanModeTool,
       exitPlanModeTool,
+      taskTool,
+      getSubagentResultTool,
+      parallelExploreTool,
     ].forEach((tool) => this.register(tool))
   }
 
@@ -55,3 +59,4 @@ export * from "./grep.js"
 export * from "./glob.js"
 export * from "./enter-plan-mode.js"
 export * from "./exit-plan-mode.js"
+export * from "./task.js"
