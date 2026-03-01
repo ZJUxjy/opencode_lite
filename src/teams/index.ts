@@ -321,6 +321,9 @@ export {
   RalphLoop,
   createRalphLoop,
   type RalphLoopConfig,
+  type RalphLoopRunOptions,
+  type RalphLoopStats,
+  type RalphEvent,
   type TaskItem,
   type TaskQueue,
 } from "./ralph-loop.js"

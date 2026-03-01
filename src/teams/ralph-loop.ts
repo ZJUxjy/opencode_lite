@@ -1,9 +1,53 @@
 import * as fs from "fs"
 import * as path from "path"
 import { promisify } from "util"
+import type { TeamManager } from "./team-manager.js"
+import type { TaskContract } from "./types.js"
 
 const readFileAsync = promisify(fs.readFile)
 const writeFileAsync = promisify(fs.writeFile)
+
+/**
+ * Ralph Loop 事件类型
+ */
+export type RalphEvent =
+  | { type: "start"; timestamp: number; config: RalphLoopConfig }
+  | { type: "task_start"; timestamp: number; taskId: string; description: string }
+  | { type: "task_complete"; timestamp: number; taskId: string; success: boolean; duration: number }
+  | { type: "iteration"; timestamp: number; iteration: number; maxIterations: number }
+  | { type: "heartbeat"; timestamp: number; stats: RalphLoopStats }
+  | { type: "error"; timestamp: number; taskId: string; error: string }
+  | { type: "complete"; timestamp: number; stats: RalphLoopStats }
+
+/**
+ * Ralph Loop 统计信息
+ */
+export interface RalphLoopStats {
+  totalTasks: number
+  completedTasks: number
+  failedTasks: number
+  startTime: number
+  endTime?: number
+  totalDuration: number
+}
+
+/**
+ * 运行选项
+ */
+export interface RalphLoopRunOptions {
+  /** Team Manager 实例 */
+  teamManager?: TeamManager
+  /** 任务合约 */
+  taskContract?: Partial<TaskContract>
+  /** 事件回调 */
+  onEvent?: (event: RalphEvent) => void
+  /** 任务开始回调 */
+  onTaskStart?: (task: TaskItem) => void
+  /** 任务完成回调 */
+  onTaskComplete?: (task: TaskItem, success: boolean) => void
+  /** 心跳回调 */
+  onHeartbeat?: (stats: RalphLoopStats) => void
+}
 
 export interface RalphLoopConfig {
   enabled: boolean
@@ -13,6 +57,16 @@ export interface RalphLoopConfig {
   maxIterations: number
   cooldownMs: number
   persistProgress: boolean
+  /** 是否启用心跳 */
+  heartbeatEnabled: boolean
+  /** 心跳间隔（毫秒） */
+  heartbeatIntervalMs: number
+  /** 是否在完成后退出 */
+  exitOnComplete: boolean
+  /** 错误处理策略 */
+  errorHandling: "continue" | "stop" | "retry"
+  /** 最大重试次数 */
+  maxRetries: number
 }
 
 export interface TaskItem {
@@ -36,6 +90,9 @@ export class RalphLoop {
   private isRunning: boolean = false
   private currentIteration: number = 0
   private abortController?: AbortController
+  private stats: RalphLoopStats
+  private eventListeners: Array<(event: RalphEvent) => void> = []
+  private heartbeatTimer?: NodeJS.Timeout
 
   constructor(config: Partial<RalphLoopConfig> = {}) {
     this.config = {
@@ -46,7 +103,19 @@ export class RalphLoop {
       maxIterations: 100,
       cooldownMs: 5000,
       persistProgress: true,
+      heartbeatEnabled: true,
+      heartbeatIntervalMs: 30000,
+      exitOnComplete: true,
+      errorHandling: "continue",
+      maxRetries: 3,
       ...config,
+    }
+    this.stats = {
+      totalTasks: 0,
+      completedTasks: 0,
+      failedTasks: 0,
+      startTime: 0,
+      totalDuration: 0,
     }
   }
 
@@ -273,6 +342,242 @@ export class RalphLoop {
     lines.push("")
 
     return lines.join("\n")
+  }
+
+  /**
+   * Run the Ralph Loop
+   */
+  async run(options: RalphLoopRunOptions = {}): Promise<RalphLoopStats> {
+    if (this.isRunning) {
+      throw new Error("Ralph Loop is already running")
+    }
+
+    if (!this.config.enabled) {
+      throw new Error("Ralph Loop is not enabled")
+    }
+
+    this.isRunning = true
+    this.stats.startTime = Date.now()
+    this.abortController = new AbortController()
+
+    // Emit start event
+    this.emitEvent({ type: "start", timestamp: Date.now(), config: this.config })
+
+    // Start heartbeat
+    if (this.config.heartbeatEnabled) {
+      this.startHeartbeat(options.onHeartbeat)
+    }
+
+    try {
+      const queue = await this.parseTaskFile()
+      this.stats.totalTasks = queue.pending.length
+
+      for (this.currentIteration = 1; this.currentIteration <= this.config.maxIterations; this.currentIteration++) {
+        if (this.abortController?.signal.aborted) {
+          break
+        }
+
+        // Emit iteration event
+        this.emitEvent({
+          type: "iteration",
+          timestamp: Date.now(),
+          iteration: this.currentIteration,
+          maxIterations: this.config.maxIterations,
+        })
+
+        const task = this.getNextTask(queue)
+        if (!task) {
+          break // No more tasks
+        }
+
+        const taskStartTime = Date.now()
+
+        // Emit task start event
+        this.emitEvent({
+          type: "task_start",
+          timestamp: taskStartTime,
+          taskId: task.id,
+          description: task.description,
+        })
+        options.onTaskStart?.(task)
+
+        // Update task status
+        await this.updateTaskStatus(queue, task.id, "in-progress")
+
+        // Execute task
+        let success = false
+        let retries = 0
+        const maxRetries = this.config.errorHandling === "retry" ? this.config.maxRetries : 0
+
+        while (retries <= maxRetries) {
+          try {
+            if (options.teamManager) {
+              // Execute using TeamManager
+              const taskContract: TaskContract = {
+                taskId: task.id,
+                objective: task.description,
+                fileScope: options.taskContract?.fileScope || [],
+                acceptanceChecks: options.taskContract?.acceptanceChecks || [],
+                apiContracts: options.taskContract?.apiContracts,
+              }
+              const result = await options.teamManager.run(taskContract)
+              success = result && typeof result === "object" && "success" in result
+                ? (result as { success: boolean }).success
+                : false
+            } else {
+              // Simple execution without TeamManager
+              success = await this.executeSimpleTask(task)
+            }
+
+            if (success) break
+
+            if (this.config.errorHandling === "stop") {
+              throw new Error(`Task failed: ${task.description}`)
+            }
+
+            retries++
+            if (retries <= maxRetries) {
+              await this.sleep(this.config.cooldownMs)
+            }
+          } catch (error) {
+            if (this.config.errorHandling === "stop") {
+              throw error
+            }
+            retries++
+            if (retries > maxRetries) {
+              break
+            }
+            await this.sleep(this.config.cooldownMs)
+          }
+        }
+
+        const duration = Date.now() - taskStartTime
+
+        // Update task status
+        await this.updateTaskStatus(queue, task.id, success ? "completed" : "failed")
+
+        // Update stats
+        if (success) {
+          this.stats.completedTasks++
+        } else {
+          this.stats.failedTasks++
+        }
+
+        // Emit task complete event
+        this.emitEvent({
+          type: "task_complete",
+          timestamp: Date.now(),
+          taskId: task.id,
+          success,
+          duration,
+        })
+        options.onTaskComplete?.(task, success)
+
+        // Cooldown between tasks
+        if (this.config.cooldownMs > 0 && queue.pending.length > 0) {
+          await this.sleep(this.config.cooldownMs)
+        }
+      }
+
+      this.stats.endTime = Date.now()
+      this.stats.totalDuration = this.stats.endTime - this.stats.startTime
+
+      // Emit complete event
+      this.emitEvent({
+        type: "complete",
+        timestamp: Date.now(),
+        stats: { ...this.stats },
+      })
+
+      return { ...this.stats }
+    } catch (error) {
+      // Emit error event
+      this.emitEvent({
+        type: "error",
+        timestamp: Date.now(),
+        taskId: "loop",
+        error: error instanceof Error ? error.message : String(error),
+      })
+      throw error
+    } finally {
+      this.stop()
+      this.stopHeartbeat()
+    }
+  }
+
+  /**
+   * Execute a simple task without TeamManager
+   */
+  private async executeSimpleTask(task: TaskItem): Promise<boolean> {
+    // Simple task execution - can be overridden or extended
+    // For now, just simulate success
+    await this.sleep(100)
+    return true
+  }
+
+  /**
+   * Add event listener
+   */
+  onEvent(listener: (event: RalphEvent) => void): () => void {
+    this.eventListeners.push(listener)
+    return () => {
+      const index = this.eventListeners.indexOf(listener)
+      if (index > -1) {
+        this.eventListeners.splice(index, 1)
+      }
+    }
+  }
+
+  /**
+   * Emit event to all listeners
+   */
+  private emitEvent(event: RalphEvent): void {
+    for (const listener of this.eventListeners) {
+      try {
+        listener(event)
+      } catch (error) {
+        // Ignore listener errors
+      }
+    }
+  }
+
+  /**
+   * Start heartbeat timer
+   */
+  private startHeartbeat(onHeartbeat?: (stats: RalphLoopStats) => void): void {
+    this.heartbeatTimer = setInterval(() => {
+      const stats = { ...this.stats }
+      this.emitEvent({
+        type: "heartbeat",
+        timestamp: Date.now(),
+        stats,
+      })
+      onHeartbeat?.(stats)
+    }, this.config.heartbeatIntervalMs)
+  }
+
+  /**
+   * Stop heartbeat timer
+   */
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = undefined
+    }
+  }
+
+  /**
+   * Get current stats
+   */
+  getStats(): RalphLoopStats {
+    return { ...this.stats }
+  }
+
+  /**
+   * Sleep for ms
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
   /**
