@@ -11,6 +11,7 @@ import type { TaskContract, WorkArtifact, ReviewArtifact, PlanningArtifact, Deci
 import type { LeaderPlan } from "./modes/leader-workers.js"
 import type { HotfixArtifact } from "./modes/hotfix-guardrail.js"
 import type { TeamRunStats, PlannerExecutorReviewerStats, LeaderWorkersStats, HotfixGuardrailStats, CouncilStats } from "./modes/index.js"
+import { CheckpointStore } from "./checkpoint-store.js"
 
 // ============================================================================
 // TeamManager - 团队管理器
@@ -28,6 +29,7 @@ import type { TeamRunStats, PlannerExecutorReviewerStats, LeaderWorkersStats, Ho
 export class TeamManager extends EventEmitter {
   private config: TeamConfig
   private status: TeamStatus = "initializing"
+  private checkpointStore?: CheckpointStore
 
   // 指标收集
   private metrics: TeamMetrics = {
@@ -43,6 +45,158 @@ export class TeamManager extends EventEmitter {
   constructor(config: TeamConfig) {
     super()
     this.config = config
+
+    // 初始化检查点存储
+    if (config.checkpointEnabled) {
+      this.checkpointStore = new CheckpointStore(config.checkpointDir || ".agent-teams/checkpoints")
+    }
+  }
+
+  /**
+   * 从检查点恢复执行
+   *
+   * 恢复策略:
+   * - restart-task: 重新执行失败的任务
+   * - continue-iteration: 继续当前迭代
+   * - skip-completed: 跳过已完成的任务
+   */
+  async resumeFromCheckpoint(
+    checkpointId: string,
+    strategy: "restart-task" | "continue-iteration" | "skip-completed" = "skip-completed"
+  ): Promise<TeamRunResult> {
+    if (!this.checkpointStore) {
+      throw new Error("Checkpoint store is not initialized. Set checkpointEnabled: true in config.")
+    }
+
+    const checkpoint = this.checkpointStore.getCheckpoint(checkpointId)
+    if (!checkpoint) {
+      throw new Error(`Checkpoint not found: ${checkpointId}`)
+    }
+
+    this.status = "running"
+    this.metrics.startTime = Date.now()
+
+    try {
+      // 从检查点恢复上下文
+      const resumeContext = this.buildResumeContext(checkpoint, strategy)
+
+      // 过滤待执行任务
+      const pendingTasks = this.filterPendingTasks(checkpoint, strategy)
+
+      if (pendingTasks.length === 0) {
+        this.status = "completed"
+        this.metrics.endTime = Date.now()
+        return {
+          success: true,
+          mode: this.config.mode,
+          artifact: undefined,
+        }
+      }
+
+      // 继续执行
+      const result = await this.executeWithResume(resumeContext, pendingTasks)
+
+      this.status = "completed"
+      this.metrics.endTime = Date.now()
+      this.emit("completed", result)
+
+      return result
+    } catch (error) {
+      this.status = "failed"
+      this.metrics.endTime = Date.now()
+      this.emit("error", { error })
+
+      return {
+        success: false,
+        mode: this.config.mode,
+        error: String(error),
+      }
+    }
+  }
+
+  /**
+   * 构建恢复上下文
+   */
+  private buildResumeContext(
+    checkpoint: { blackboardSnapshot?: string; artifactRefs?: string[] },
+    _strategy: string
+  ): ResumeContext {
+    return {
+      blackboardSnapshot: checkpoint.blackboardSnapshot,
+      artifactRefs: checkpoint.artifactRefs || [],
+      previousIteration: true,
+    }
+  }
+
+  /**
+   * 过滤待执行任务
+   */
+  private filterPendingTasks(
+    checkpoint: { metadata?: Record<string, unknown> },
+    strategy: "restart-task" | "continue-iteration" | "skip-completed"
+  ): TaskContract[] {
+    const taskMetadata = checkpoint.metadata?.tasks as Record<string, string> | undefined
+
+    if (!taskMetadata) {
+      return []
+    }
+
+    switch (strategy) {
+      case "skip-completed":
+        // 只返回未完成的任务
+        return Object.entries(taskMetadata)
+          .filter(([, status]) => status !== "completed")
+          .map(([taskId]) => ({
+            taskId,
+            objective: "",
+            fileScope: [],
+            acceptanceChecks: [],
+          }))
+
+      case "restart-task":
+        // 重新执行所有任务
+        return Object.keys(taskMetadata).map((taskId) => ({
+          taskId,
+          objective: "",
+          fileScope: [],
+          acceptanceChecks: [],
+        }))
+
+      case "continue-iteration":
+      default:
+        // 返回当前迭代未完成的任务
+        return Object.entries(taskMetadata)
+          .filter(([, status]) => status === "in_progress" || status === "pending")
+          .map(([taskId]) => ({
+            taskId,
+            objective: "",
+            fileScope: [],
+            acceptanceChecks: [],
+          }))
+    }
+  }
+
+  /**
+   * 使用恢复上下文执行任务
+   */
+  private async executeWithResume(context: ResumeContext, _tasks: TaskContract[]): Promise<TeamRunResult> {
+    // 恢复黑板快照
+    if (context.blackboardSnapshot) {
+      // TODO: 恢复黑板状态
+      this.emit("context-restored", context.blackboardSnapshot)
+    }
+
+    // 恢复产物引用
+    if (context.artifactRefs.length > 0) {
+      // TODO: 重新加载产物
+      this.emit("artifacts-restored", context.artifactRefs)
+    }
+
+    // 继续执行（这里简化处理，实际需要根据模式执行）
+    return {
+      success: true,
+      mode: this.config.mode,
+    }
   }
 
   // ========================================================================
@@ -209,6 +363,15 @@ export interface TeamMetrics {
   iterations: number
   tasksCompleted: number
   tasksFailed: number
+}
+
+/**
+ * 恢复上下文 - 从检查点恢复时使用
+ */
+export interface ResumeContext {
+  blackboardSnapshot?: string
+  artifactRefs: string[]
+  previousIteration: boolean
 }
 
 /**

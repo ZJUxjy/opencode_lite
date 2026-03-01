@@ -70,3 +70,15 @@ export type { TeamRunRecord, TeamRunMessage, TeamRunStoreStats } from "./team-ru
 // Agent Pool
 export { AgentPool } from "./agent-pool.js"
 export type { AgentPoolConfig, AgentInstance, AgentPoolStatus } from "./agent-pool.js"
+
+// Artifact Store
+export { ArtifactStore } from "./artifact-store.js"
+export type { ArtifactStoreOptions, ArtifactFile, TaskArtifacts } from "./artifact-store.js"
+
+// Evaluation
+export { Evaluator, quickEvaluate } from "./evaluation.js"
+export type { EvaluationDimension, EvaluationRubric, EvaluationResult, DimensionScore } from "./evaluation.js"
+
+// Progress Store
+export { ProgressStore } from "./progress-store.js"
+export type { ProgressStoreOptions } from "./progress-store.js"

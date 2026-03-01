@@ -16,6 +16,42 @@ export interface TaskContract {
 }
 
 /**
+ * 上下文契约 - 宽松上下文契约
+ *
+ * 来源: "Context, Not Control" 原则
+ * 用途: 替代严格的 TaskContract，给予 Agent 更多自主判断空间
+ *
+ * 与 TaskContract 的区别:
+ * - 目标 (objective) 而非具体步骤
+ * - 背景知识 (context) 而非强制指令
+ * - 边界 (boundaries) 而非范围限制
+ * - 输出期望 (expectedOutcome) 而非固定格式
+ */
+export interface ContextContract {
+  // 目标 - 描述要达成的目标，而非具体步骤
+  objective: string
+
+  // 背景知识 - Agent 需要了解的信息，而非强制指令
+  context: {
+    background: string
+    constraints: string[]
+    references: string[] // 文件路径、文档链接
+  }
+
+  // 边界 - 禁止事项和建议考虑
+  boundaries: {
+    mustNot: string[] // 禁止事项
+    shouldConsider: string[] // 建议考虑
+  }
+
+  // 输出期望 - 期望的结果，而非固定格式
+  expectedOutcome: {
+    intent: string // 意图描述
+    validationHint: string // 验证提示
+  }
+}
+
+/**
  * Test Result - 单个测试命令的结果
  */
 export interface TestResult {

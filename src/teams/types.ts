@@ -80,6 +80,9 @@ export interface TeamConfig {
   qualityGate: QualityGateConfig
   circuitBreaker: CircuitBreakerConfig
   conflictResolution: "auto" | "manual"
+  // 检查点配置
+  checkpointEnabled?: boolean
+  checkpointDir?: string
 }
 
 // ============================================================================
