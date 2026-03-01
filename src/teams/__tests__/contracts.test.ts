@@ -10,11 +10,13 @@ import {
   validateTaskContract,
   validateWorkArtifact,
   validateReviewArtifact,
+  validateContextContract,
   meetsQualityGate,
   createDefaultTaskContract,
   createEmptyWorkArtifact,
   createApprovalReview,
   createRejectionReview,
+  createLooseContract,
 } from "../contracts.js"
 
 describe("Contracts", () => {
@@ -259,6 +261,46 @@ describe("Contracts", () => {
 
       const result = validateReviewArtifact(data)
       expect(result.status).toBe("approved")
+    })
+  })
+
+  describe("ContextContract", () => {
+    describe("createLooseContract", () => {
+      it("should create a loose context contract", () => {
+        const contract = createLooseContract("task-001", "Refactor auth module", {
+          background: "Current auth is hard to test",
+          constraints: ["Don't break existing API"],
+          references: ["src/auth.ts", "docs/auth.md"],
+          mustNot: ["Change public interface"],
+          shouldConsider: ["Test coverage"],
+          validationHint: "All tests pass",
+        })
+
+        expect(contract.taskId).toBe("task-001")
+        expect(contract.objective).toBe("Refactor auth module")
+        expect(contract.context.background).toBe("Current auth is hard to test")
+        expect(contract.boundaries.mustNot).toContain("Change public interface")
+      })
+
+      it("should use defaults for optional fields", () => {
+        const contract = createLooseContract("task-001", "Simple task")
+
+        expect(contract.context.background).toBe("")
+        expect(contract.context.constraints).toEqual([])
+        expect(contract.boundaries.mustNot).toEqual([])
+      })
+    })
+
+    describe("validateContextContract", () => {
+      it("should validate a valid context contract", () => {
+        const contract = createLooseContract("task-001", "Test")
+        const validated = validateContextContract(contract)
+        expect(validated.taskId).toBe("task-001")
+      })
+
+      it("should throw on invalid data", () => {
+        expect(() => validateContextContract({ invalid: true })).toThrow()
+      })
     })
   })
 })

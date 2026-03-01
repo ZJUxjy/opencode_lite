@@ -181,3 +181,76 @@ export function createRejectionReview(
     suggestions,
   }
 }
+
+// ============================================================================
+// Context Contract (Loose Coupling)
+// ============================================================================
+
+/**
+ * ContextContract defines a looser agreement between agents
+ * Used for exploration, research, and tasks with fluid boundaries
+ */
+export const ContextContractSchema = z.object({
+  taskId: z.string(),
+
+  objective: z.string().describe("Clear goal - what needs to be achieved"),
+
+  context: z.object({
+    background: z.string().describe("Why this task matters"),
+    constraints: z.array(z.string()).describe("Hard constraints that must be followed"),
+    references: z.array(z.string()).describe("File paths, docs, code to reference"),
+  }),
+
+  boundaries: z.object({
+    mustNot: z.array(z.string()).describe("Things that must NOT be done"),
+    shouldConsider: z.array(z.string()).describe("Things to keep in mind"),
+  }),
+
+  expectedOutcome: z.object({
+    intent: z.string().describe("What success looks like"),
+    validationHint: z.string().describe("How to verify the outcome"),
+  }),
+
+  strictContract: TaskContractSchema.optional(),
+})
+
+export type ContextContract = z.infer<typeof ContextContractSchema>
+
+// ============================================================================
+// Context Contract Functions
+// ============================================================================
+
+export function validateContextContract(data: unknown): ContextContract {
+  return ContextContractSchema.parse(data)
+}
+
+export function createLooseContract(
+  taskId: string,
+  objective: string,
+  options: {
+    background?: string
+    constraints?: string[]
+    references?: string[]
+    mustNot?: string[]
+    shouldConsider?: string[]
+    validationHint?: string
+  } = {}
+): ContextContract {
+  return {
+    taskId,
+    objective,
+    context: {
+      background: options.background || "",
+      constraints: options.constraints || [],
+      references: options.references || [],
+    },
+    boundaries: {
+      mustNot: options.mustNot || [],
+      shouldConsider: options.shouldConsider || [],
+    },
+    expectedOutcome: {
+      intent: `Successfully complete: ${objective}`,
+      validationHint: options.validationHint || "Code should work as expected",
+    },
+  }
+}
