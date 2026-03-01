@@ -203,6 +203,7 @@ export {
   type RalphLoopStats,
   type RalphEvent,
   type RalphOutputFormat,
+  type HealthStatus,
 } from "./ralph-loop.js"
 
 // 扩展思考预算

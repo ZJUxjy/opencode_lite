@@ -36,6 +36,20 @@ export type RalphEvent =
   | { type: "complete"; timestamp: number; stats: RalphLoopStats }
 
 /**
+ * 健康状态
+ */
+export interface HealthStatus {
+  /** 运行状态 */
+  status: "running" | "idle" | "stopped"
+  /** 运行时间（毫秒） */
+  uptime: number
+  /** 统计信息 */
+  stats: RalphLoopStats
+  /** 最后心跳时间 */
+  lastHeartbeat: number
+}
+
+/**
  * Ralph Loop 配置
  */
 export interface RalphLoopConfig {
@@ -65,6 +79,8 @@ export interface RalphLoopConfig {
   outputFormat: RalphOutputFormat
   /** 日志文件路径（可选） */
   logFile?: string
+  /** 心跳间隔（毫秒），0 表示禁用 */
+  heartbeatInterval: number
 }
 
 /**
@@ -83,6 +99,7 @@ export const DEFAULT_RALPH_CONFIG: RalphLoopConfig = {
   errorHandling: "continue",
   maxRetries: 3,
   outputFormat: "text",
+  heartbeatInterval: 0,
 }
 
 /**
@@ -148,6 +165,9 @@ export class RalphLoop {
   private stats: RalphLoopStats
   private running: boolean = false
   private iteration: number = 0
+  private startTime: number = 0
+  private lastHeartbeatTime: number = 0
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(
     agent: Agent,
@@ -358,6 +378,7 @@ export class RalphLoop {
 
     // 发送开始事件
     const startTime = Date.now()
+    this.startTime = startTime
     this.emitEvent({
       type: "start",
       timestamp: startTime,
@@ -366,6 +387,9 @@ export class RalphLoop {
 
     this.running = true
     console.log("[RalphLoop] Starting continuous execution loop")
+
+    // 启动心跳
+    this.startHeartbeat()
 
     while (this.running && this.iteration < this.config.maxIterations) {
       this.iteration++
@@ -456,6 +480,9 @@ export class RalphLoop {
     console.log("[RalphLoop] Execution loop completed")
     this.printStats()
 
+    // 停止心跳
+    this.stopHeartbeat()
+
     // 发送完成事件
     this.emitEvent({
       type: "complete",
@@ -506,6 +533,46 @@ export class RalphLoop {
    */
   getIteration(): number {
     return this.iteration
+  }
+
+  /**
+   * 获取健康状态
+   */
+  getHealthStatus(): HealthStatus {
+    return {
+      status: this.running ? "running" : "stopped",
+      uptime: this.startTime > 0 ? Date.now() - this.startTime : 0,
+      stats: { ...this.stats },
+      lastHeartbeat: this.lastHeartbeatTime,
+    }
+  }
+
+  /**
+   * 启动心跳
+   */
+  private startHeartbeat(): void {
+    if (this.config.heartbeatInterval <= 0) return
+
+    this.lastHeartbeatTime = Date.now()
+    this.heartbeatTimer = setInterval(() => {
+      this.lastHeartbeatTime = Date.now()
+      this.emitEvent({
+        type: "heartbeat",
+        timestamp: this.lastHeartbeatTime,
+        stats: this.stats,
+        runningTasks: this.running ? 1 : 0,
+      })
+    }, this.config.heartbeatInterval)
+  }
+
+  /**
+   * 停止心跳
+   */
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = null
+    }
   }
 }
 
