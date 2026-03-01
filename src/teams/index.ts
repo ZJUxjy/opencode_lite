@@ -201,6 +201,8 @@ export {
   type TaskDefinition,
   type TaskExecutionResult,
   type RalphLoopStats,
+  type RalphEvent,
+  type RalphOutputFormat,
 } from "./ralph-loop.js"
 
 // 扩展思考预算

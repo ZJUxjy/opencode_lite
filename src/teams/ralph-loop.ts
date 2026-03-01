@@ -19,6 +19,23 @@ import { ProgressFileManager, type ProgressTask } from "./progress-file.js"
 export type TaskSourceType = "file" | "git-issues" | "stdin" | "api"
 
 /**
+ * 输出格式
+ */
+export type RalphOutputFormat = "text" | "json" | "stream-json"
+
+/**
+ * Ralph Loop 事件（用于 stream-json 输出）
+ */
+export type RalphEvent =
+  | { type: "start"; timestamp: number; config: RalphLoopConfig }
+  | { type: "task_start"; timestamp: number; taskId: string; description: string; priority: string }
+  | { type: "task_complete"; timestamp: number; taskId: string; success: boolean; duration: number; tokens: number; error?: string }
+  | { type: "iteration"; timestamp: number; iteration: number; maxIterations: number }
+  | { type: "heartbeat"; timestamp: number; stats: RalphLoopStats; runningTasks: number }
+  | { type: "error"; timestamp: number; taskId: string; error: string }
+  | { type: "complete"; timestamp: number; stats: RalphLoopStats }
+
+/**
  * Ralph Loop 配置
  */
 export interface RalphLoopConfig {
@@ -44,6 +61,10 @@ export interface RalphLoopConfig {
   errorHandling: "continue" | "stop" | "retry"
   /** 最大重试次数 */
   maxRetries: number
+  /** 输出格式 */
+  outputFormat: RalphOutputFormat
+  /** 日志文件路径（可选） */
+  logFile?: string
 }
 
 /**
@@ -61,6 +82,7 @@ export const DEFAULT_RALPH_CONFIG: RalphLoopConfig = {
   exitOnComplete: true,
   errorHandling: "continue",
   maxRetries: 3,
+  outputFormat: "text",
 }
 
 /**
