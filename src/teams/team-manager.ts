@@ -15,6 +15,8 @@ import { createLeaderWorkersMode } from "./modes/leader-workers.js"
 import { createHotfixGuardrailMode } from "./modes/hotfix-guardrail.js"
 import { createCouncilMode } from "./modes/council.js"
 import { createFallbackHandler, type FallbackAgentInput, type TeamFailureReport } from "./fallback.js"
+import { CheckpointResumer, createCheckpointResumer } from "./checkpoint-resume.js"
+import type { CheckpointResumeConfig } from "./checkpoint-resume.js"
 
 // ============================================================================
 // Team Manager Options
@@ -40,6 +42,8 @@ export class TeamManager {
   private abortController?: AbortController
   private fallbackHandler: ReturnType<typeof createFallbackHandler>
   private failureReport?: TeamFailureReport
+  private checkpointResumer?: CheckpointResumer
+  private checkpointManager?: import("./checkpoint.js").CheckpointManager
 
   constructor(options: TeamManagerOptions) {
     this.config = options.config
@@ -199,6 +203,47 @@ export class TeamManager {
     return this.progressTracker.getStats()
   }
 
+  /**
+   * Resume from a checkpoint
+   */
+  async resumeFromCheckpoint(
+    checkpointId: string,
+    strategy: CheckpointResumeConfig["strategy"] = "continue-iteration"
+  ): Promise<unknown> {
+    if (!this.checkpointManager) {
+      throw new Error("Checkpoint manager not configured")
+    }
+
+    // Load checkpoint
+    const checkpoint = await this.checkpointManager.restoreCheckpoint(checkpointId)
+    if (!checkpoint) {
+      throw new Error(`Checkpoint not found: ${checkpointId}`)
+    }
+
+    // Initialize resumer
+    this.checkpointResumer = createCheckpointResumer()
+
+    // Build resume configuration
+    const resumeConfig: CheckpointResumeConfig = {
+      checkpointId,
+      strategy,
+      contextInjection: {
+        includePreviousThinking: true,
+        includePreviousArtifacts: true,
+        maxContextTokens: 4000,
+      },
+    }
+
+    // Resume execution
+    const resumed = await this.checkpointResumer.resume(checkpoint, resumeConfig)
+
+    // Update internal state
+    this.state = resumed.teamState
+
+    // Continue execution with resumed state
+    return this.continueExecution(resumed)
+  }
+
   // ========================================================================
   // Private Methods
   // ========================================================================
@@ -266,6 +311,25 @@ export class TeamManager {
 
   private updateState(updates: Partial<TeamState>): void {
     this.state = { ...this.state, ...updates }
+  }
+
+  private async continueExecution(
+    resumed: import("./checkpoint-resume.js").ResumedExecution
+  ): Promise<unknown> {
+    // Rebuild blackboard from resumed state
+    for (const [key, value] of resumed.blackboardState) {
+      this.blackboard.set(key, value)
+    }
+
+    // Log resume event
+    this.blackboard.logEvent("resumed-from-checkpoint", {
+      iteration: resumed.teamState.currentIteration,
+      strategy: resumed.resumeStrategy,
+      pendingTasks: resumed.pendingTasks,
+    })
+
+    // Continue with normal execution
+    return this.run()
   }
 }
 
