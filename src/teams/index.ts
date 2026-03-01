@@ -335,6 +335,8 @@ export {
 export {
   ThinkingBudgetManager,
   createThinkingBudgetManager,
+  THINKING_PROMPT_TEMPLATE,
+  DEFAULT_THINKING_CONFIG,
   type ThinkingBudgetConfig,
   type ThinkingArtifact,
 } from "./thinking-budget.js"
