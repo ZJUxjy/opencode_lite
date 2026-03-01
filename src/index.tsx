@@ -11,9 +11,12 @@ import * as os from "os"
 import * as fs from "fs"
 
 // 从 settings.json 加载配置
+import type { MCPGlobalConfig } from "./mcp/config.js"
+
 interface SettingsConfig {
   env?: Record<string, string>
   timeout?: number
+  mcp?: MCPGlobalConfig
 }
 
 function loadSettings(): SettingsConfig {
@@ -176,6 +179,9 @@ program
   .option("--no-stream", "Disable streaming output")
   .option("--compression-threshold <number>", "Context compression threshold (0-1)", "0.92")
   .option("--list-sessions", "List all sessions with metadata")
+  .option("-t, --team <mode>", "Team mode: worker-reviewer, planner-executor-reviewer, leader-workers, hotfix-guardrail, council")
+  .option("--team-strategy <strategy>", "Leader-Workers strategy: collaborative, competitive")
+  .option("--team-workers <number>", "Number of workers for leader-workers mode", "3")
   .action(async (options) => {
     const dbPath = path.join(os.homedir(), ".lite-opencode", "history.db")
 
@@ -226,7 +232,11 @@ program
       },
       enableStream: options.stream !== false,
       compressionThreshold: parseFloat(options.compressionThreshold),
+      mcp: settings.mcp,
     })
+
+    // 初始化 MCP
+    await agent.initializeMCP()
 
     // 渲染 Ink 应用
     // 注意: 不使用 incrementalRendering，因为与 Spinner 动画不兼容
