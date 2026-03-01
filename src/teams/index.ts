@@ -301,3 +301,37 @@ export {
   type ResumeContext,
   type CheckpointResumeConfig,
 } from "./checkpoint-resume.js"
+
+// ============================================================================
+// Git Worktree Isolation Exports
+// ============================================================================
+
+export {
+  WorktreeIsolationManager,
+  createWorktreeIsolationManager,
+  type WorktreeIsolationConfig,
+  type IsolatedWorktree,
+} from "./worktree-isolation.js"
+
+// ============================================================================
+// Ralph Loop Exports
+// ============================================================================
+
+export {
+  RalphLoop,
+  createRalphLoop,
+  type RalphLoopConfig,
+  type TaskItem,
+  type TaskQueue,
+} from "./ralph-loop.js"
+
+// ============================================================================
+// Thinking Budget Exports
+// ============================================================================
+
+export {
+  ThinkingBudgetManager,
+  createThinkingBudgetManager,
+  type ThinkingBudgetConfig,
+  type ThinkingArtifact,
+} from "./thinking-budget.js"
