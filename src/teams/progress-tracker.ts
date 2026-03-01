@@ -6,6 +6,8 @@
  */
 
 import type { TeamConfig } from "./types.js"
+import { ProgressPersistence, createProgressPersistence } from "./progress-persistence.js"
+import type { ProgressReport } from "./progress-persistence.js"
 
 // ============================================================================
 // Progress Tracker Interface
@@ -73,6 +75,9 @@ export class TeamProgressTracker implements ProgressTracker {
   }
   private maxNoProgressRounds: number
   private maxConsecutiveFailures: number
+  private persistence?: ProgressPersistence
+  private teamId?: string
+  private objective?: string
 
   constructor(config: Pick<TeamConfig, "circuitBreaker">) {
     this.maxNoProgressRounds = config.circuitBreaker.maxNoProgressRounds
@@ -237,6 +242,92 @@ export class TeamProgressTracker implements ProgressTracker {
       p0Count: 0,
       p1Count: 0,
       timestamp: Date.now(),
+    }
+  }
+
+  /**
+   * Enable progress persistence for this tracker
+   */
+  enablePersistence(
+    teamId: string,
+    objective: string,
+    config?: Parameters<typeof createProgressPersistence>[0]
+  ): void {
+    this.teamId = teamId
+    this.objective = objective
+    this.persistence = createProgressPersistence(config)
+  }
+
+  /**
+   * Generate a progress report from current state
+   */
+  async generateReport(): Promise<ProgressReport | null> {
+    if (!this.teamId || !this.objective) {
+      return null
+    }
+
+    const stats = this.getStats()
+
+    // Build issues arrays based on counts
+    const p0Issues: string[] = []
+    const p1Issues: string[] = []
+    const p2Issues: string[] = []
+    const p3Issues: string[] = []
+
+    for (let i = 0; i < stats.p0Issues; i++) {
+      p0Issues.push(`P0 issue ${i + 1}`)
+    }
+    for (let i = 0; i < stats.p1Issues; i++) {
+      p1Issues.push(`P1 issue ${i + 1}`)
+    }
+
+    // Build timeline from last 5 rounds
+    const timeline = this.rounds.slice(-5).map(round => ({
+      time: round.timestamp,
+      event: `Round ${round.round + 1}`,
+      details: `${round.filesChanged} files changed`,
+    }))
+
+    return {
+      teamId: this.teamId,
+      timestamp: Date.now(),
+      status: this.shouldCircuitBreak() ? "failed" : "in-progress",
+      currentPhase: `Round ${stats.totalRounds}`,
+      overallProgress: Math.min(100, Math.round((stats.progressRounds / Math.max(1, stats.totalRounds)) * 100)),
+      summary: {
+        objective: this.objective,
+        filesChanged: stats.codeChanges,
+        iterationsCompleted: stats.totalRounds,
+        totalIterations: stats.totalRounds + 5, // Estimate
+      },
+      current: {
+        activeAgent: "team",
+        role: "coordinator",
+        task: "Tracking progress",
+        startedAt: Date.now(),
+      },
+      issues: {
+        p0: p0Issues,
+        p1: p1Issues,
+        p2: p2Issues,
+        p3: p3Issues,
+      },
+      timeline,
+      nextSteps: ["Continue monitoring progress"],
+    }
+  }
+
+  /**
+   * Save progress to persistence
+   */
+  async saveProgress(): Promise<void> {
+    if (!this.persistence) {
+      return
+    }
+
+    const report = await this.generateReport()
+    if (report) {
+      await this.persistence.saveProgress(report)
     }
   }
 
