@@ -81,7 +81,7 @@ export class RalphLoop extends EventEmitter {
   /**
    * 执行单个任务
    */
-  async executeTask(task: ParsedTask): Promise<TaskResult> {
+  async executeTask(task: ParsedTask): Promise<RalphTaskResult> {
     const startTime = Date.now()
     let attempts = 0
     let lastError: string | undefined
@@ -237,7 +237,7 @@ export class RalphLoop extends EventEmitter {
       }
     }
 
-    const results: TaskResult[] = []
+    const results: RalphTaskResult[] = []
 
     // 执行每个任务
     for (let i = 0; i < pendingTasks.length; i++) {
@@ -328,10 +328,10 @@ export interface RalphLoopResult {
   completedTasks: number
   failedTasks: number
   duration: number
-  results: TaskResult[]
+  results: RalphTaskResult[]
 }
 
-export interface TaskResult {
+export interface RalphTaskResult {
   taskName: string
   status: "completed" | "failed" | "skipped"
   workerId?: string

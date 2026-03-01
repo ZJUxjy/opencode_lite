@@ -86,3 +86,7 @@ export type { ProgressStoreOptions } from "./progress-store.js"
 // Worktree Isolation
 export { WorktreeIsolation, createWorktreeIsolation } from "./worktree-isolation.js"
 export type { WorktreeIsolationOptions, WorktreeHandle } from "./worktree-isolation.js"
+
+// Ralph Loop
+export { RalphLoop } from "./ralph-loop.js"
+export type { RalphLoopConfig, RalphLoopResult, RalphTaskResult } from "./ralph-loop.js"
