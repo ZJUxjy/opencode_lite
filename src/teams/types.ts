@@ -134,6 +134,7 @@ export interface TeamResult {
     totalCost: number
     totalTokens: number
   }
+  metadata?: Record<string, unknown>  // 扩展字段，用于存储模式特定信息
 }
 
 /**

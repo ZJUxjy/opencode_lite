@@ -59,6 +59,9 @@ export {
 // 协作模式
 export { WorkerReviewerTeam } from "./modes/worker-reviewer.js"
 export { PlannerExecutorReviewerTeam } from "./modes/planner-executor-reviewer.js"
+export { LeaderWorkersTeam } from "./modes/leader-workers.js"
+export { HotfixGuardrailTeam, type HotfixReport, type SafetyReviewResult } from "./modes/hotfix-guardrail.js"
+export { CouncilTeam, type DecisionOption, type DecisionRecord, type DiscussionRound } from "./modes/council.js"
 
 // 降级机制
 export {
@@ -93,3 +96,9 @@ export {
   type ConflictResolution,
   type ConflictDetectionResult,
 } from "./conflict-detector.js"
+
+// 检查点存储
+export {
+  CheckpointStore,
+  type Checkpoint,
+} from "./checkpoint-store.js"

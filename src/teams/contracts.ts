@@ -35,6 +35,7 @@ export interface WorkArtifact {
   risks: string[]
   assumptions: string[]
   createdAt: number
+  metadata?: Record<string, unknown>  // 扩展字段，用于存储模式特定信息
 }
 
 /**
