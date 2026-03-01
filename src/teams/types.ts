@@ -76,6 +76,13 @@ export interface TeamConfig {
   }
 
   conflictResolution: "auto" | "manual"
+
+  // Thinking budget for complex problem solving
+  thinkingBudget?: {
+    enabled: boolean
+    maxThinkingTokens: number
+    outputThinkingProcess: boolean
+  }
 }
 
 export interface TeamAgentConfig {
