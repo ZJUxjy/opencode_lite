@@ -9,7 +9,7 @@ describe("LeaderWorkersRunner", () => {
     maxIterations: 5,
     timeoutMs: 120000,
     budget: { maxTokens: 50000 },
-    qualityGate: { testsMustPass: true, noP0Issues: true, requiredChecks: [], autoFixOnFail: false },
+    qualityGate: { testsMustPass: true, noP0Issues: true, requiredChecks: [] },
     circuitBreaker: {
       maxConsecutiveFailures: 3,
       maxNoProgressRounds: 5,

@@ -6,6 +6,9 @@ import { Agent } from "./agent.js"
 import { MessageStore } from "./store.js"
 import { SessionStore, formatRelativeTime, type Session } from "./session/index.js"
 import { App } from "./App.js"
+import { TeamManager } from "./teams/manager.js"
+import type { TeamMode } from "./teams/core/types.js"
+import { TEAM_MODES } from "./teams/core/types.js"
 import * as path from "path"
 import * as os from "os"
 import * as fs from "fs"
@@ -179,6 +182,13 @@ program
   .option("--no-stream", "Disable streaming output")
   .option("--compression-threshold <number>", "Context compression threshold (0-1)", "0.92")
   .option("--list-sessions", "List all sessions with metadata")
+  // Team mode options
+  .option("--team <mode>", `Team collaboration mode (${TEAM_MODES.join(", ")})`)
+  .option("--team-objective <objective>", "Objective for team mode")
+  .option("--team-config <path>", "Path to teams configuration file")
+  .option("--team-profile <profile>", "Team configuration profile (default: 'default')")
+  .option("--team-budget <tokens>", "Maximum token budget for team execution")
+  .option("--team-timeout <ms>", "Timeout in milliseconds for team execution")
   .action(async (options) => {
     const dbPath = path.join(os.homedir(), ".lite-opencode", "history.db")
 
@@ -190,6 +200,50 @@ program
       const sessions = sessionStore.list({ includeArchived: true })
       console.log(formatSessionList(sessions, options.directory))
       process.exit(0)
+    }
+
+    // Handle team mode
+    if (options.team) {
+      // Validate team mode
+      if (!TEAM_MODES.includes(options.team as TeamMode)) {
+        console.error(`Error: Invalid team mode "${options.team}". Valid modes: ${TEAM_MODES.join(", ")}`)
+        process.exit(1)
+      }
+
+      // Get objective from option or stdin
+      let objective = options.teamObjective
+      if (!objective) {
+        // Try to read from stdin
+        if (!process.stdin.isTTY) {
+          const chunks: Buffer[] = []
+          for await (const chunk of process.stdin) {
+            chunks.push(chunk)
+          }
+          objective = Buffer.concat(chunks).toString("utf-8").trim()
+        }
+        if (!objective) {
+          console.error("Error: No objective provided. Use --team-objective or pipe input via stdin.")
+          process.exit(1)
+        }
+      }
+
+      const manager = new TeamManager({
+        mode: options.team as TeamMode,
+        objective,
+        configPath: options.teamConfig,
+        profile: options.teamProfile,
+        budget: options.teamBudget ? parseInt(options.teamBudget, 10) : undefined,
+        timeout: options.teamTimeout ? parseInt(options.teamTimeout, 10) : undefined,
+      })
+
+      try {
+        const result = await manager.run()
+        console.log(JSON.stringify(result, null, 2))
+        process.exit(result.status === "completed" ? 0 : 1)
+      } catch (error) {
+        console.error("Team execution failed:", error instanceof Error ? error.message : String(error))
+        process.exit(1)
+      }
     }
 
     // 解析会话参数
