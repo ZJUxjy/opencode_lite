@@ -213,8 +213,88 @@ export class RalphLoop extends EventEmitter {
    * 运行 Ralph Loop
    */
   async run(): Promise<RalphLoopResult> {
-    // TODO: 实现
-    throw new Error("Not implemented")
+    const startTime = Date.now()
+    console.log("[Ralph] Starting Ralph Loop...")
+    console.log(`[Ralph] Task file: ${this.config.taskFilePath}`)
+    console.log(`[Ralph] Team mode: ${this.config.teamMode}`)
+    console.log("")
+
+    // 解析任务
+    const tasks = await this.parseTasksFile()
+    const pendingTasks = tasks.filter(t => t.status === "pending")
+
+    console.log(`[Ralph] Found ${pendingTasks.length} pending tasks`)
+
+    if (pendingTasks.length === 0) {
+      console.log("[Ralph] No pending tasks")
+      return {
+        timestamp: new Date().toISOString(),
+        totalTasks: 0,
+        completedTasks: 0,
+        failedTasks: 0,
+        duration: 0,
+        results: [],
+      }
+    }
+
+    const results: TaskResult[] = []
+
+    // 执行每个任务
+    for (let i = 0; i < pendingTasks.length; i++) {
+      const task = pendingTasks[i]
+
+      // 检查最大迭代次数
+      if (this.config.maxIterations && i >= this.config.maxIterations) {
+        console.log(`[Ralph] Reached max iterations: ${this.config.maxIterations}`)
+        break
+      }
+
+      console.log(`\n[Ralph] Task ${i + 1}/${pendingTasks.length}: ${task.name}`)
+
+      const result = await this.executeTask(task)
+      results.push(result)
+
+      // 任务间隔
+      if (this.config.cooldownMs && this.config.cooldownMs > 0 && i < pendingTasks.length - 1) {
+        console.log(`[Ralph] Cooldown: ${this.config.cooldownMs}ms`)
+        await this.sleep(this.config.cooldownMs)
+      }
+    }
+
+    const duration = Date.now() - startTime
+    const completedTasks = results.filter(r => r.status === "completed").length
+    const failedTasks = results.filter(r => r.status === "failed").length
+
+    // 生成结果
+    const result: RalphLoopResult = {
+      timestamp: new Date().toISOString(),
+      totalTasks: pendingTasks.length,
+      completedTasks,
+      failedTasks,
+      duration,
+      results,
+    }
+
+    // 输出结果
+    console.log("\n" + "=".repeat(50))
+    console.log("[Ralph] Loop Complete")
+    console.log("=".repeat(50))
+    console.log(`Total: ${pendingTasks.length} | Completed: ${completedTasks} | Failed: ${failedTasks}`)
+    console.log(`Duration: ${(duration / 1000).toFixed(1)}s`)
+
+    // 保存 JSON 结果
+    await this.saveJsonResult(result)
+
+    return result
+  }
+
+  /**
+   * 保存 JSON 结果
+   */
+  private async saveJsonResult(result: RalphLoopResult): Promise<void> {
+    const outputPath = "ralph-loop-result.json"
+    await fs.writeFile(outputPath, JSON.stringify(result, null, 2), "utf-8")
+    console.log(`Results saved to: ${outputPath}`)
   }
 }
 
