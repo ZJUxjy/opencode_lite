@@ -50,6 +50,18 @@ export interface HealthStatus {
 }
 
 /**
+ * 并行执行配置
+ */
+export interface ParallelConfig {
+  /** 是否启用 */
+  enabled: boolean
+  /** 最大 worker 数量 */
+  maxWorkers: number
+  /** 是否启用 worktree 隔离 */
+  worktreeEnabled: boolean
+}
+
+/**
  * Ralph Loop 配置
  */
 export interface RalphLoopConfig {
@@ -81,6 +93,10 @@ export interface RalphLoopConfig {
   logFile?: string
   /** 心跳间隔（毫秒），0 表示禁用 */
   heartbeatInterval: number
+  /** 并行 worker 数量 */
+  parallelWorkers: number
+  /** 是否启用 worktree 隔离 */
+  worktreeEnabled: boolean
 }
 
 /**
@@ -100,6 +116,8 @@ export const DEFAULT_RALPH_CONFIG: RalphLoopConfig = {
   maxRetries: 3,
   outputFormat: "text",
   heartbeatInterval: 0,
+  parallelWorkers: 1,
+  worktreeEnabled: false,
 }
 
 /**
@@ -152,6 +170,62 @@ export interface RalphLoopStats {
   totalCost: number
   /** 总 token 数 */
   totalTokens: number
+}
+
+/**
+ * 并行任务结果
+ */
+export interface ParallelTaskResult {
+  taskId: string
+  success: boolean
+  result?: string
+  error?: string
+  workerId?: number
+}
+
+/**
+ * 并行执行器
+ */
+export class ParallelExecutor {
+  private config: { maxWorkers: number; worktreeEnabled: boolean }
+
+  constructor(config: { maxWorkers: number; worktreeEnabled: boolean }) {
+    this.config = config
+  }
+
+  /**
+   * 并行执行任务
+   */
+  async executeParallel<T>(
+    tasks: TaskDefinition[],
+    executor: (task: TaskDefinition, workerId: number) => Promise<T>
+  ): Promise<T[]> {
+    if (tasks.length === 0) return []
+
+    const results: T[] = new Array(tasks.length)
+    let taskIndex = 0
+
+    const runWorker = async (workerId: number): Promise<void> => {
+      while (taskIndex < tasks.length) {
+        const currentIndex = taskIndex++
+        const task = tasks[currentIndex]
+
+        try {
+          const result = await executor(task, workerId)
+          results[currentIndex] = result
+        } catch (error) {
+          throw error
+        }
+      }
+    }
+
+    // Start workers
+    const workerCount = Math.min(this.config.maxWorkers, tasks.length)
+    const workers = Array.from({ length: workerCount }, (_, i) => runWorker(i))
+
+    await Promise.all(workers)
+    return results
+  }
 }
 
 /**
@@ -519,6 +593,13 @@ export class RalphLoop {
    */
   getStats(): RalphLoopStats {
     return { ...this.stats }
+  }
+
+  /**
+   * 获取配置
+   */
+  getConfig(): RalphLoopConfig {
+    return { ...this.config }
   }
 
   /**

@@ -194,6 +194,7 @@ export {
 // Ralph Loop 持续执行
 export {
   RalphLoop,
+  ParallelExecutor,
   createRalphLoop,
   DEFAULT_RALPH_CONFIG,
   type RalphLoopConfig,
@@ -204,6 +205,8 @@ export {
   type RalphEvent,
   type RalphOutputFormat,
   type HealthStatus,
+  type ParallelConfig,
+  type ParallelTaskResult,
 } from "./ralph-loop.js"
 
 // 扩展思考预算
