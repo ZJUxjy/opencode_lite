@@ -6,6 +6,8 @@ export interface Tool<T extends z.ZodType = z.ZodType> {
   description: string
   parameters: T
   execute: (params: z.infer<T>, ctx: Context) => Promise<string>
+  /** 标记该工具来自哪个 MCP 服务器（用于服务器断开时清理） */
+  mcpServer?: string
 }
 
 // 上下文

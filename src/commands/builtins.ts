@@ -55,6 +55,10 @@ const helpCommand: Command = {
   description: "Show available commands",
   handler: (_args: string, ctx: CommandContext) => {
     const yoloStatus = ctx.agent.isYoloMode() ? "ON 🚀" : "OFF"
+    const mcpStatus = ctx.agent.getMCPStatus()
+    const mcpText = mcpStatus.length > 0
+      ? `  /mcp          - Show MCP server status (${mcpStatus.filter(s => s.connected).length}/${mcpStatus.length} connected)\n`
+      : ""
     const helpMessage = createSystemMessage(
       `Available commands:
   /exit, /quit  - Exit the program
@@ -67,7 +71,7 @@ const helpCommand: Command = {
   /yolo         - Toggle YOLO mode (auto-approve all)
   /sessions, /resume  - Show session list and switch sessions
   /skills       - List and manage skills
-
+${mcpText}
 Current status:
   YOLO Mode: ${yoloStatus}
 
@@ -339,6 +343,61 @@ Each skill is a directory containing a SKILL.md file with YAML frontmatter.`
 }
 
 /**
+ * MCP command - shows MCP server status and available tools
+ */
+const mcpCommand: Command = {
+  name: "/mcp",
+  description: "Show MCP server status",
+  handler: (_args: string, ctx: CommandContext) => {
+    const status = ctx.agent.getMCPStatus()
+
+    if (status.length === 0) {
+      const message = createSystemMessage(
+        `No MCP servers configured.
+
+To configure MCP servers, add to your settings.json:
+{
+  "mcp": {
+    "enabled": true,
+    "servers": [
+      {
+        "name": "filesystem",
+        "transport": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"]
+      }
+    ]
+  }
+}`
+      )
+      ctx.setMessages((prev) => [...prev, message])
+      return
+    }
+
+    const lines: string[] = []
+    const connectedCount = status.filter((s) => s.connected).length
+    const totalTools = status.reduce((sum, s) => sum + s.tools, 0)
+
+    lines.push(`# MCP Servers (${connectedCount}/${status.length} connected)`)
+    lines.push(``)
+
+    for (const server of status) {
+      const emoji = server.connected ? "🟢" : "🔴"
+      lines.push(`${emoji} **${server.name}**`)
+      lines.push(`  Status: ${server.connected ? "Connected" : "Disconnected"}`)
+      lines.push(`  Tools: ${server.tools}`)
+      lines.push(``)
+    }
+
+    lines.push(`---`)
+    lines.push(`Total MCP tools available: ${totalTools}`)
+
+    const message = createSystemMessage(lines.join("\n"))
+    ctx.setMessages((prev) => [...prev, message])
+  },
+}
+
+/**
  * All builtin commands
  * Exported as array for easy registration in CommandRegistry
  */
@@ -352,4 +411,5 @@ export const builtinCommands: Command[] = [
   yoloCommand,
   sessionsCommand,
   skillsCommand,
+  mcpCommand,
 ]

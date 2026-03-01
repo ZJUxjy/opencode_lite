@@ -11,9 +11,12 @@ import * as os from "os"
 import * as fs from "fs"
 
 // 从 settings.json 加载配置
+import type { MCPGlobalConfig } from "./mcp/config.js"
+
 interface SettingsConfig {
   env?: Record<string, string>
   timeout?: number
+  mcp?: MCPGlobalConfig
 }
 
 function loadSettings(): SettingsConfig {
@@ -226,7 +229,11 @@ program
       },
       enableStream: options.stream !== false,
       compressionThreshold: parseFloat(options.compressionThreshold),
+      mcp: settings.mcp,
     })
+
+    // 初始化 MCP
+    await agent.initializeMCP()
 
     // 渲染 Ink 应用
     // 注意: 不使用 incrementalRendering，因为与 Spinner 动画不兼容

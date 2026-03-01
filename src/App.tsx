@@ -175,6 +175,15 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   // 输入历史（从数据库加载）
   const [inputHistory, setInputHistory] = useState<string[]>([])
 
+  // MCP 状态
+  const [mcpStatus, setMcpStatus] = useState<{ connected: number; total: number }>(() => {
+    const status = agent.getMCPStatus()
+    return {
+      connected: status.filter((s) => s.connected).length,
+      total: status.length,
+    }
+  })
+
   // =========================================================================
   // Session 恢复和历史消息加载
   // =========================================================================
@@ -207,6 +216,25 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       }
     }
     loadSkills()
+
+    // 加载 MCP 状态
+    const loadMCPStatus = () => {
+      const status = agent.getMCPStatus()
+      if (status.length > 0) {
+        setMcpStatus({
+          connected: status.filter((s) => s.connected).length,
+          total: status.length,
+        })
+        const toolCount = status.reduce((sum, s) => sum + s.tools, 0)
+        setMessages((prev) => [
+          ...prev,
+          createSystemMessage(
+            `🔌 MCP: ${status.length} servers, ${toolCount} tools. Use /mcp to view details.`
+          ),
+        ])
+      }
+    }
+    loadMCPStatus()
 
     if (isResumed) {
       // 加载历史消息
@@ -785,6 +813,11 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
             <Text dimColor> | {modelDisplayName}</Text>
             {agent.isYoloMode() && <Text color="yellow" bold> 🚀 YOLO</Text>}
             {agent.isPlanMode() && <Text color="magenta" bold> 📋 PLAN</Text>}
+            {mcpStatus.total > 0 && (
+              <Text color={mcpStatus.connected === mcpStatus.total ? "green" : "yellow"}>
+                {' '}🔌 MCP {mcpStatus.connected}/{mcpStatus.total}
+              </Text>
+            )}
             {isProcessing && <Text color="cyan"> ● Processing...</Text>}
           </Text>
         </Box>
