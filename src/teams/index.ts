@@ -54,3 +54,19 @@ export type { CouncilTopic, MemberOpinion, DecisionOption, CouncilStats } from "
 // Checkpoint Store
 export { CheckpointStore } from "./checkpoint-store.js"
 export type { Checkpoint, CreateCheckpointParams, RollbackResult, MergeParams, MergeResult, CheckpointStats } from "./checkpoint-store.js"
+
+// Team Manager
+export { TeamManager } from "./manager.js"
+export type { TeamRunResult, TeamMetrics, TeamStats } from "./manager.js"
+
+// Benchmark
+export { TeamBenchmark, quickBenchmark } from "./benchmark.js"
+export type { BenchmarkParams, BenchmarkTask, BenchmarkReport, TaskResult, StatSummary, BenchmarkResult } from "./benchmark.js"
+
+// TeamRunStore
+export { TeamRunStore } from "./team-run-store.js"
+export type { TeamRunRecord, TeamRunMessage, TeamRunStoreStats } from "./team-run-store.js"
+
+// Agent Pool
+export { AgentPool } from "./agent-pool.js"
+export type { AgentPoolConfig, AgentInstance, AgentPoolStatus } from "./agent-pool.js"
