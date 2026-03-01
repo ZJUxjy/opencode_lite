@@ -81,9 +81,7 @@ export class ProgressPersistence {
   async saveProgress(report: ProgressReport): Promise<void> {
     // Ensure parent directory exists
     const parentDir = path.dirname(this.config.outputPath)
-    if (!fs.existsSync(parentDir)) {
-      fs.mkdirSync(parentDir, { recursive: true })
-    }
+    await fs.promises.mkdir(parentDir, { recursive: true })
 
     const format = this.config.format
 
