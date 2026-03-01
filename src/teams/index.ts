@@ -58,3 +58,4 @@ export {
 
 // 协作模式
 export { WorkerReviewerTeam } from "./modes/worker-reviewer.js"
+export { PlannerExecutorReviewerTeam } from "./modes/planner-executor-reviewer.js"
