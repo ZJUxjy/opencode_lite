@@ -13,7 +13,7 @@ npm run start          # node dist/index.js
 node dist/index.js     # direct execution
 
 # Development
-npm run dev            # tsx src/index.ts (uncompiled, for quick testing)
+npm run dev            # tsx src/index.tsx (uncompiled, for quick testing)
 
 # Test
 npm run test           # vitest run
@@ -22,7 +22,17 @@ npm run test:watch     # vitest watch mode
 # CLI Options
 node dist/index.js --help
 node dist/index.js -m <model> --base-url <url> -d <working-directory>
-node dist/index.js --list-sessions
+
+# Session Management
+node dist/index.js --list-sessions                    # List all sessions
+node dist/index.js --resume                           # Resume latest session
+node dist/index.js --resume <session-id>              # Resume specific session
+node dist/index.js --continue                         # Continue last session for current directory
+node dist/index.js --session <id>                     # Use/create specific session ID
+
+# Advanced Options
+node dist/index.js --no-stream                        # Disable streaming output
+node dist/index.js --compression-threshold <0-1>      # Set context compression threshold (default: 0.92)
 ```
 
 ## Architecture
@@ -63,9 +73,11 @@ This is a lightweight AI coding agent implementing the ReAct (Reasoning + Acting
 | `src/agent.ts` | Core Agent class, session management, integrates all components |
 | `src/llm.ts` | LLM client using Vercel AI SDK, supports Anthropic/OpenAI-compatible APIs |
 | `src/store.ts` | Message persistence using better-sqlite3 |
+| `src/session/` | Session management (create, resume, list, archive) |
 | `src/compression.ts` | Progressive context compression (light → moderate → aggressive) |
 | `src/loopDetection.ts` | Three-layer loop detection (tool calls, content repetition, LLM-assisted) |
 | `src/policy.ts` | Policy engine for permission control |
+| `src/mcp/` | Model Context Protocol integration for external tools |
 | `src/App.tsx` | Ink-based TUI with Static/dynamic separation for proper scrolling |
 | `src/index.tsx` | CLI entry point with commander |
 
@@ -178,9 +190,45 @@ Config loaded from `settings.json` (search order):
     "ANTHROPIC_BASE_URL": "...",
     "ANTHROPIC_MODEL": "...",
     "API_TIMEOUT_MS": "120000"
+  },
+  "mcp": {
+    "servers": {
+      "server-name": {
+        "command": "node",
+        "args": ["path/to/server.js"],
+        "env": {}
+      }
+    }
   }
 }
 ```
+
+**Priority**: CLI arguments > settings.json > environment variables > defaults
+
+### Session Management
+
+Sessions are stored in `~/.lite-opencode/history.db` with metadata:
+- **Session ID**: Unique identifier (auto-generated or user-specified)
+- **Working directory**: Associated cwd for each session
+- **Title**: Auto-generated from first user message
+- **Message count**: Number of messages in session
+- **Timestamps**: Created/updated times
+- **Archive status**: Sessions can be archived
+
+**Session resolution priority**:
+1. `--resume <id>` - Resume specific session
+2. `--resume` - Resume latest session
+3. `--continue` - Continue last session for current directory
+4. `--session <id>` - Use/create specific session
+5. New session (auto-generated ID)
+
+### MCP Integration
+
+Model Context Protocol support for external tools via `settings.json`:
+- Servers defined in `mcp.servers` configuration
+- Each server runs as a subprocess with stdio communication
+- Tools from MCP servers are automatically registered and available to the agent
+- See `src/mcp/` for implementation details
 
 ### Context Management
 
