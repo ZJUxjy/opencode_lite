@@ -70,3 +70,26 @@ export {
   type FallbackResult,
   type FallbackConfig,
 } from "./fallback.js"
+
+// 任务 DAG
+export {
+  TaskDAG,
+  createTaskNode,
+  createDAGFromContracts,
+  type TaskNode,
+  type ParallelLevel,
+  type ExecutionPlan,
+} from "./task-dag.js"
+
+// 冲突检测器
+export {
+  ConflictDetector,
+  createFileChange,
+  formatConflictReport,
+  type FileChange,
+  type ChangeRegion,
+  type ConflictType,
+  type Conflict,
+  type ConflictResolution,
+  type ConflictDetectionResult,
+} from "./conflict-detector.js"
