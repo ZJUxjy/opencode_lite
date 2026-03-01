@@ -79,6 +79,137 @@ export class RalphLoop extends EventEmitter {
   }
 
   /**
+   * 执行单个任务
+   */
+  async executeTask(task: ParsedTask): Promise<TaskResult> {
+    const startTime = Date.now()
+    let attempts = 0
+    let lastError: string | undefined
+
+    while (attempts < (this.config.maxRetries ?? 1)) {
+      attempts++
+
+      try {
+        // 更新任务状态为 in_progress
+        await this.updateTaskStatus(task.name, "in_progress")
+
+        // 执行任务 (调用 Agent)
+        const response = await this.runAgentTask(task.name)
+
+        // 检查完成关键词
+        if (this.isCompleted(response)) {
+          await this.updateTaskStatus(task.name, "completed")
+
+          return {
+            taskName: task.name,
+            status: "completed",
+            duration: Date.now() - startTime,
+            attempts,
+          }
+        }
+
+        // 未完成，标记为失败
+        throw new Error("Task not completed")
+
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error)
+
+        // 如果还有重试次数，等待后重试
+        if (attempts < (this.config.maxRetries ?? 1)) {
+          console.log(`Task failed, retrying... (${attempts}/${this.config.maxRetries})`)
+          await this.sleep(1000)
+        }
+      }
+    }
+
+    // 重试耗尽，失败处理
+    if (this.config.notifyOnFailure) {
+      await this.notifyFailure(task.name, lastError!)
+    }
+
+    await this.updateTaskStatus(task.name, "failed", lastError)
+
+    return {
+      taskName: task.name,
+      status: "failed",
+      duration: Date.now() - startTime,
+      error: lastError,
+      attempts,
+    }
+  }
+
+  /**
+   * 运行 Agent 任务 (placeholder - 需要集成 Agent)
+   */
+  private async runAgentTask(taskName: string): Promise<string> {
+    // TODO: 集成 Agent 执行器
+    console.log(`[Ralph] Executing task: ${taskName}`)
+    return ""
+  }
+
+  /**
+   * 检查 Agent 响应是否完成
+   */
+  private isCompleted(response: string): boolean {
+    const keywords = [
+      "task completed",
+      "task done",
+      "completed successfully",
+      "all done",
+      "done!",
+    ]
+
+    const lowerResponse = response.toLowerCase()
+    return keywords.some(keyword => lowerResponse.includes(keyword))
+  }
+
+  /**
+   * 通知失败
+   */
+  private async notifyFailure(taskName: string, error: string): Promise<void> {
+    console.log(`[Ralph] Task failed: ${taskName}`)
+    console.log(`[Ralph] Error: ${error}`)
+    console.log(`[Ralph] Waiting for main agent assessment...`)
+    // TODO: 通知主Agent评估
+  }
+
+  /**
+   * 更新任务状态
+   */
+  private async updateTaskStatus(
+    taskName: string,
+    status: "in_progress" | "completed" | "failed",
+    error?: string
+  ): Promise<void> {
+    if (!this.config.taskFilePath) return
+
+    // 读取当前 TASKS.md
+    let content = await fs.readFile(this.config.taskFilePath, "utf-8")
+
+    // 替换状态标记
+    const newPattern = status === "in_progress"
+      ? `- [~] ${taskName}`
+      : status === "completed"
+      ? `- [x] ${taskName}`
+      : `[-] ${taskName}${error ? ` (${error})` : ""}`
+
+    // 简单替换：找到第一个匹配的任务
+    const lines = content.split("\n")
+    const newLines = lines.map(line => {
+      if (line.includes(`- [ ] ${taskName}`) || line.includes(`- [~] ${taskName}`)) {
+        return newPattern
+      }
+      return line
+    })
+
+    await fs.writeFile(this.config.taskFilePath, newLines.join("\n"), "utf-8")
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  /**
    * 运行 Ralph Loop
    */
   async run(): Promise<RalphLoopResult> {
