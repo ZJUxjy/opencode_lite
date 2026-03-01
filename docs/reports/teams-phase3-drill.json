@@ -1,0 +1,59 @@
+{
+  "generatedAt": "2026-03-01T14:05:43.829Z",
+  "scenarios": [
+    {
+      "id": "drill-timeout-fallback",
+      "passed": true,
+      "expected": "fallbackUsed=true and session survives timeout",
+      "observed": "fallbackUsed=true, status=success",
+      "metrics": {
+        "fallbackUsed": true,
+        "durationMs": 0
+      }
+    },
+    {
+      "id": "drill-budget-fallback",
+      "passed": true,
+      "expected": "budget exceeded triggers fallback",
+      "observed": "fallbackUsed=true, tokens=3",
+      "metrics": {
+        "fallbackUsed": true,
+        "tokensUsed": 3
+      }
+    },
+    {
+      "id": "drill-quality-gate",
+      "passed": true,
+      "expected": "failed required check triggers fallback",
+      "observed": "fallbackUsed=true, output=fallback-output",
+      "metrics": {
+        "fallbackUsed": true
+      }
+    },
+    {
+      "id": "drill-conflict-strategy",
+      "passed": true,
+      "expected": "manual has mustFix, auto resolves to 0 mustFix",
+      "observed": "manual.mustFix=1, auto.mustFix=0",
+      "metrics": {
+        "manualMustFix": 1,
+        "autoMustFix": 0
+      }
+    },
+    {
+      "id": "drill-checkpoint-rollback",
+      "passed": true,
+      "expected": "rollback plan returns baseRef and reverse patch order",
+      "observed": "baseRef=base-123, reverse=p3,p2,p1",
+      "metrics": {
+        "patches": 3
+      }
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "passRate": 1
+  }
+}

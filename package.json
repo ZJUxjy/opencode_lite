@@ -12,7 +12,9 @@
     "dev": "tsx src/index.tsx",
     "start": "node dist/index.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "benchmark:teams": "tsx src/teams/benchmark.ts",
+    "drill:teams": "tsx src/teams/drill.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.0.0",

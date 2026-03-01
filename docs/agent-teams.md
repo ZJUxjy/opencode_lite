@@ -442,6 +442,69 @@ Phase 1 暂不实现：`planner-executor-reviewer`、`leader-workers`、`hotfix-
 3. `src/teams/checkpoint-store.ts`
 4. 完整文档与故障演练
 
+### Phase 3 当前状态（2026-03-01）
+
+1. 已实现：`hotfix-guardrail` 模式（Fixer + Safety Reviewer 审核闭环）。
+2. 已实现：`council` 模式（多成员观点收集 + Speaker 综合决策）。
+3. 已实现：`checkpoint-store`（create/list/get/prune/buildRollbackPlan）。
+4. 已实现：`/team mode` 对 `hotfix-guardrail`、`council` 的切换支持。
+5. 待收尾：演练记录模板、故障复盘流程标准化（见下方 Runbook）。
+
+---
+
+## 故障演练 Runbook（Phase 3）
+
+目标：验证 Team 模式在超时、预算、质量门失败、并发冲突下可预测退化，不中断主任务。
+
+### 演练 1：超时降级（Timeout -> Fallback）
+
+1. 设置极短 `timeoutMs`（例如 10ms），保持 `mode=worker-reviewer`。
+2. 触发一个明显超过超时阈值的任务。
+3. 预期结果：返回成功响应但 `fallbackUsed=true`，输出来自单 Agent 降级路径。
+4. 验收点：会话不中断；失败原因归类为 `timeout`；后续任务可继续执行。
+
+### 演练 2：预算超限降级（Budget Exceeded）
+
+1. 设置 `budget.maxTokens` 为很小值（例如 1）。
+2. 执行任意 Team 任务（建议 `planner-executor-reviewer`）。
+3. 预期结果：触发 `budget_exceeded` 并自动走 fallback。
+4. 验收点：无未捕获异常；结果可见；统计中 fallback 计数增加。
+
+### 演练 3：质量门阻断（Quality Gate Fail）
+
+1. 开启 `qualityGate.requiredChecks`，模拟检查返回 `false`。
+2. 执行 `hotfix-guardrail` 任务。
+3. 预期结果：Team 主路径被阻断并降级，主任务继续。
+4. 验收点：错误原因明确为 check 未通过；不会出现 silent failure。
+
+### 演练 4：并发冲突治理（Manual/Auto）
+
+1. `leader-workers` 下构造多个 Worker 修改同一 `FILE:`。
+2. `conflictResolution=manual`：预期 `mustFixCount > 0`，冲突需人工处理。
+3. `conflictResolution=auto`：预期生成 `AUTO_MERGED_OUTPUTS` 与 `AUTO_MERGE_DECISIONS`。
+4. 验收点：两种策略行为稳定且可区分，输出中保留冲突处理证据。
+
+### 演练 5：检查点回滚计划（Checkpoint Rollback Plan）
+
+1. 创建多条 checkpoint（包含 `baseRef` + `patchRefs`）。
+2. 对目标 checkpoint 执行 `buildRollbackPlan`。
+3. 预期结果：返回 `baseRef` 与逆序 `reversePatchRefs`。
+4. 验收点：回滚计划可复现，且 `prune` 后最新 N 条仍可查询。
+
+### 演练输出要求（每次必填）
+
+1. 演练编号、日期、执行人、代码版本（commit SHA）。
+2. 输入配置（mode、budget、timeout、qualityGate、conflictResolution）。
+3. 观测结果（status、fallbackUsed、mustFixCount、p0Count、duration、tokens）。
+4. 偏差与结论（是否通过、阻塞项、修复 owner、目标完成时间）。
+
+### 自动化演练命令
+
+1. 执行命令：`npm run drill:teams`
+2. 产出报告：`docs/reports/teams-phase3-drill.json`
+3. 辅助文件：`docs/reports/phase3-drill-checkpoints.json`（用于回滚计划演练样本）
+4. 验收口径：报告中 `summary.passRate` 应为 `1`，否则阻断上线并进入复盘。
+
 ---
 
 ## 配置示例（修正版）

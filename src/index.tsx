@@ -12,11 +12,13 @@ import * as fs from "fs"
 
 // 从 settings.json 加载配置
 import type { MCPGlobalConfig } from "./mcp/config.js"
+import type { TeamConfig } from "./teams/index.js"
 
 interface SettingsConfig {
   env?: Record<string, string>
   timeout?: number
   mcp?: MCPGlobalConfig
+  teams?: Partial<TeamConfig>
 }
 
 function loadSettings(): SettingsConfig {
@@ -229,6 +231,7 @@ program
       },
       enableStream: options.stream !== false,
       compressionThreshold: parseFloat(options.compressionThreshold),
+      teams: settings.teams,
       mcp: settings.mcp,
     })
 

@@ -8,7 +8,21 @@ import { PromptProvider } from "./prompts/index.js"
 import { ReActRunner, type Strategy, type ReActEvents } from "./react/index.js"
 import { CompressionService, type CompressionLevel, type CompressionPreview, type CompressionResult } from "./compression.js"
 import { SkillRegistry, getSkillRegistry } from "./skills/index.js"
+import {
+  ArtifactStore,
+  CheckpointStore,
+  TeamManager,
+  TeamRunStore,
+  defaultTeamConfig,
+  type TeamConfig,
+  type TeamExecutionResult,
+  type BaselineComparison,
+  type BaselineBatchSummary,
+  type TeamMode,
+  type LeaderWorkersStrategy,
+} from "./teams/index.js"
 import { MCPManager, type MCPManagerOptions } from "./mcp/manager.js"
+import { dirname, join } from "node:path"
 
 export interface AgentConfig {
   cwd: string
@@ -20,6 +34,8 @@ export interface AgentConfig {
   policy?: PolicyConfig
   /** ReAct 策略: auto | fc | cot */
   strategy?: Strategy
+  /** Teams 配置 */
+  teams?: Partial<TeamConfig>
   /** MCP 配置 */
   mcp?: MCPManagerOptions
 }
@@ -60,6 +76,7 @@ export class Agent {
   private reactRunner: ReActRunner
   private compressionService: CompressionService
   private skillRegistry: SkillRegistry
+  private teamManager: TeamManager
   private mcpManager?: MCPManager
   private sessionId: string
   private cwd: string
@@ -88,6 +105,36 @@ export class Agent {
     this.enableStream = config.enableStream ?? true
     this.compressionThreshold = config.compressionThreshold ?? 0.92
     this.strategy = config.strategy || "auto"
+
+    const mergedTeamConfig: TeamConfig = {
+      ...defaultTeamConfig,
+      ...config.teams,
+      mode: config.teams?.mode || defaultTeamConfig.mode,
+      strategy: config.teams?.strategy || defaultTeamConfig.strategy,
+      qualityGate: {
+        ...defaultTeamConfig.qualityGate,
+        ...config.teams?.qualityGate,
+      },
+      circuitBreaker: {
+        ...defaultTeamConfig.circuitBreaker,
+        ...config.teams?.circuitBreaker,
+      },
+      budget: {
+        ...(defaultTeamConfig.budget || { maxTokens: 200_000 }),
+        ...config.teams?.budget,
+        maxTokens:
+          config.teams?.budget?.maxTokens ??
+          defaultTeamConfig.budget?.maxTokens ??
+          200_000,
+      },
+      agents: config.teams?.agents || defaultTeamConfig.agents,
+    }
+    const teamRunDbPath = join(dirname(config.dbPath), "team-runs.db")
+    const checkpointFilePath = join(dirname(config.dbPath), "team-checkpoints.json")
+    const artifactStore = new ArtifactStore(join(config.cwd, ".agent-teams", "artifacts"))
+    const teamRunStore = new TeamRunStore(teamRunDbPath)
+    const checkpointStore = new CheckpointStore({ filePath: checkpointFilePath })
+    this.teamManager = new TeamManager(mergedTeamConfig, teamRunStore, artifactStore, checkpointStore)
 
     // 初始化 MCP Manager
     if (config.mcp?.servers && config.mcp.servers.length > 0) {
@@ -603,6 +650,146 @@ export class Agent {
    */
   getActiveSkills(): ReturnType<SkillRegistry["getActive"]> {
     return this.skillRegistry.getActive()
+  }
+
+  // ==========================================================================
+  // Teams 方法 (Phase 1 + Phase 2 modes)
+  // ==========================================================================
+
+  setTeamEnabled(enabled: boolean): void {
+    this.teamManager.setEnabled(enabled)
+  }
+
+  isTeamEnabled(): boolean {
+    return this.teamManager.isEnabled()
+  }
+
+  getTeamStatus() {
+    return this.teamManager.getStatus()
+  }
+
+  setTeamMode(mode: TeamMode, strategy?: LeaderWorkersStrategy): void {
+    this.teamManager.setMode(mode, strategy)
+  }
+
+  getTeamMode(): { mode: TeamMode; strategy?: LeaderWorkersStrategy } {
+    return this.teamManager.getMode()
+  }
+
+  async runTeamTask(task: string): Promise<TeamExecutionResult> {
+    const previousEnabled = this.teamManager.isEnabled()
+    this.teamManager.setEnabled(false)
+
+    try {
+      return await this.teamManager.runTask(task, {
+        askWorker: (prompt, workerIndex = 0) => this.runAsRole(prompt, workerIndex),
+        askReviewer: (prompt) => this.runAsRole(prompt),
+        askJudge: (prompt) => this.runAsRole(prompt),
+        askPlanner: (prompt) => this.runAsRole(prompt),
+        askExecutor: (prompt) => this.runAsRole(prompt),
+        askLeader: (prompt) => this.runAsRole(prompt),
+        runFallbackSingleAgent: (prompt) => this.runAsRole(prompt),
+        runQualityCheck: async (_command) => true,
+      })
+    } finally {
+      this.teamManager.setEnabled(previousEnabled)
+    }
+  }
+
+  async runTeamBaseline(task: string): Promise<BaselineComparison> {
+    const previousEnabled = this.teamManager.isEnabled()
+    this.teamManager.setEnabled(false)
+
+    const singleStartedAt = Date.now()
+    const single = await this.runAsRole(task)
+    const singleDurationMs = Date.now() - singleStartedAt
+
+    const teamStartedAt = Date.now()
+    const teamResult = await this.runTeamTask(task)
+    const teamDurationMs = Date.now() - teamStartedAt
+
+    this.teamManager.setEnabled(previousEnabled)
+
+    const comparison: BaselineComparison = {
+      task,
+      single: {
+        output: single.output,
+        tokensUsed: single.tokensUsed,
+        durationMs: singleDurationMs,
+      },
+      team: {
+        output: teamResult.output,
+        tokensUsed: teamResult.stats.tokensUsed,
+        durationMs: teamDurationMs,
+        reviewRounds: teamResult.reviewRounds,
+        mustFixCount: teamResult.mustFixCount,
+        p0Count: teamResult.p0Count,
+        fallbackUsed: !!teamResult.fallbackUsed,
+      },
+    }
+
+    this.teamManager.addBaseline(comparison)
+    return comparison
+  }
+
+  async runTeamBaselineBatch(tasks: string[]): Promise<{
+    comparisons: BaselineComparison[]
+    summary: BaselineBatchSummary
+  }> {
+    const comparisons: BaselineComparison[] = []
+
+    for (const task of tasks) {
+      const trimmed = task.trim()
+      if (!trimmed) continue
+      const comparison = await this.runTeamBaseline(trimmed)
+      comparisons.push(comparison)
+    }
+
+    return {
+      comparisons,
+      summary: this.teamManager.summarizeBaselines(comparisons),
+    }
+  }
+
+  getTeamBaselines(): BaselineComparison[] {
+    return this.teamManager.getProgressTracker().getBaselines()
+  }
+
+  getTeamCheckpoints(limit = 20) {
+    return this.teamManager.listCheckpoints(limit)
+  }
+
+  async resumeTeamFromCheckpoint(
+    checkpointId: string,
+    strategy: "restart-task" | "continue-iteration" | "skip-completed" = "continue-iteration"
+  ): Promise<TeamExecutionResult> {
+    const previousEnabled = this.teamManager.isEnabled()
+    this.teamManager.setEnabled(false)
+    try {
+      return await this.teamManager.resumeFromCheckpoint(checkpointId, strategy, {
+        askWorker: (prompt, workerIndex = 0) => this.runAsRole(prompt, workerIndex),
+        askReviewer: (prompt) => this.runAsRole(prompt),
+        askJudge: (prompt) => this.runAsRole(prompt),
+        askPlanner: (prompt) => this.runAsRole(prompt),
+        askExecutor: (prompt) => this.runAsRole(prompt),
+        askLeader: (prompt) => this.runAsRole(prompt),
+        runFallbackSingleAgent: (prompt) => this.runAsRole(prompt),
+        runQualityCheck: async (_command) => true,
+      })
+    } finally {
+      this.teamManager.setEnabled(previousEnabled)
+    }
+  }
+
+  private async runAsRole(prompt: string, _workerIndex = 0): Promise<{ output: string; tokensUsed: number }> {
+    const before = this.getContextUsage().used
+    const output = await this.run(prompt)
+    const after = this.getContextUsage().used
+
+    return {
+      output,
+      tokensUsed: Math.max(0, after - before),
+    }
   }
 
   // ==========================================================================

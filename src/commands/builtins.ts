@@ -71,6 +71,7 @@ const helpCommand: Command = {
   /yolo         - Toggle YOLO mode (auto-approve all)
   /sessions, /resume  - Show session list and switch sessions
   /skills       - List and manage skills
+  /team         - Team mode control and baseline
 ${mcpText}
 Current status:
   YOLO Mode: ${yoloStatus}
@@ -398,6 +399,201 @@ To configure MCP servers, add to your settings.json:
 }
 
 /**
+ * Team command - manage team execution modes and baselines
+ */
+const teamCommand: Command = {
+  name: "/team",
+  description: "Manage Team mode (status/mode/on/off/run/baseline/batch/checkpoints/resume)",
+  handler: async (args: string, ctx: CommandContext) => {
+    const [subcommand, ...rest] = args.trim().split(/\s+/).filter(Boolean)
+    const payload = rest.join(" ").trim()
+
+    if (!subcommand || subcommand === "status") {
+      const status = ctx.agent.getTeamStatus()
+      const mode = ctx.agent.getTeamMode()
+      const message = createSystemMessage(
+        `Team status:\n  Enabled: ${status.enabled ? "yes" : "no"}\n  Mode: ${mode.mode}${mode.strategy ? ` (${mode.strategy})` : ""}\n  Runtime: ${status.status}`
+      )
+      ctx.setMessages((prev) => [...prev, message])
+      return
+    }
+
+    if (subcommand === "mode") {
+      const [modeArg, strategyArg] = rest
+      if (!modeArg) {
+        const current = ctx.agent.getTeamMode()
+        const message = createSystemMessage(
+          `Current team mode: ${current.mode}${current.strategy ? ` (${current.strategy})` : ""}\n` +
+          "Usage: /team mode worker-reviewer|planner-executor-reviewer|leader-workers|hotfix-guardrail|council [collaborative|competitive]"
+        )
+        ctx.setMessages((prev) => [...prev, message])
+        return
+      }
+
+      if (!["worker-reviewer", "planner-executor-reviewer", "leader-workers", "hotfix-guardrail", "council"].includes(modeArg)) {
+        const message = createSystemMessage(
+          "Unsupported mode. Allowed: worker-reviewer, planner-executor-reviewer, leader-workers, hotfix-guardrail, council"
+        )
+        ctx.setMessages((prev) => [...prev, message])
+        return
+      }
+
+      const strategy = strategyArg === "competitive" ? "competitive" : "collaborative"
+      ctx.agent.setTeamMode(
+        modeArg as "worker-reviewer" | "planner-executor-reviewer" | "leader-workers" | "hotfix-guardrail" | "council",
+        strategy
+      )
+      const message = createSystemMessage(
+        `✅ Team mode switched to ${modeArg}${modeArg === "leader-workers" ? ` (${strategy})` : ""}`
+      )
+      ctx.setMessages((prev) => [...prev, message])
+      return
+    }
+
+    if (subcommand === "on") {
+      ctx.agent.setTeamEnabled(true)
+      const message = createSystemMessage("✅ Team mode enabled (worker-reviewer)")
+      ctx.setMessages((prev) => [...prev, message])
+      return
+    }
+
+    if (subcommand === "off") {
+      ctx.agent.setTeamEnabled(false)
+      const message = createSystemMessage("✅ Team mode disabled")
+      ctx.setMessages((prev) => [...prev, message])
+      return
+    }
+
+    if (subcommand === "run") {
+      if (!payload) {
+        const message = createSystemMessage("Usage: /team run <task>")
+        ctx.setMessages((prev) => [...prev, message])
+        return
+      }
+
+      const teamMode = ctx.agent.getTeamMode()
+      const running = createSystemMessage(
+        `👥 Team running in ${teamMode.mode}${teamMode.strategy ? ` (${teamMode.strategy})` : ""}...`
+      )
+      ctx.setMessages((prev) => [...prev, running])
+      const result = await ctx.agent.runTeamTask(payload)
+      const summary = createSystemMessage(
+        `Team result: ${result.status}\n  Rounds: ${result.reviewRounds}\n  MustFix: ${result.mustFixCount}\n  P0: ${result.p0Count}\n  Tokens: ${result.stats.tokensUsed}\n  Fallback: ${result.fallbackUsed ? "yes" : "no"}\n\nOutput:\n${result.output}`
+      )
+      ctx.setMessages((prev) => [...prev.filter((m) => m.id !== running.id), summary])
+      ctx.updateContextUsage()
+      return
+    }
+
+    if (subcommand === "baseline") {
+      if (!payload) {
+        const message = createSystemMessage("Usage: /team baseline <task>")
+        ctx.setMessages((prev) => [...prev, message])
+        return
+      }
+
+      const running = createSystemMessage("📊 Running baseline comparison (single-agent vs team)...")
+      ctx.setMessages((prev) => [...prev, running])
+      const baseline = await ctx.agent.runTeamBaseline(payload)
+      const summary = createSystemMessage(
+        `Baseline comparison:\nSingle: tokens=${baseline.single.tokensUsed}, duration=${baseline.single.durationMs}ms\nTeam: tokens=${baseline.team.tokensUsed}, duration=${baseline.team.durationMs}ms, rounds=${baseline.team.reviewRounds}, mustFix=${baseline.team.mustFixCount}, p0=${baseline.team.p0Count}, fallback=${baseline.team.fallbackUsed ? "yes" : "no"}`
+      )
+      ctx.setMessages((prev) => [...prev.filter((m) => m.id !== running.id), summary])
+      ctx.updateContextUsage()
+      return
+    }
+
+    if (subcommand === "baseline-batch") {
+      if (!payload) {
+        const message = createSystemMessage(
+          "Usage: /team baseline-batch <task1 || task2 || ...> (recommend >= 10 tasks)"
+        )
+        ctx.setMessages((prev) => [...prev, message])
+        return
+      }
+
+      const tasks = payload.split("||").map((t) => t.trim()).filter(Boolean)
+      const running = createSystemMessage(
+        `📊 Running batch baseline for ${tasks.length} task(s)...`
+      )
+      ctx.setMessages((prev) => [...prev, running])
+
+      const { summary } = await ctx.agent.runTeamBaselineBatch(tasks)
+      const warning = summary.sampleSize < 10
+        ? `\n⚠️ Sample size ${summary.sampleSize} < 10 (recommended minimum for rollout gate).`
+        : ""
+
+      const report = createSystemMessage(
+        `Batch baseline summary (n=${summary.sampleSize})${warning}\n\n` +
+        `Single-agent:\n` +
+        `  avg tokens=${summary.single.avgTokens}, p50=${summary.single.p50Tokens}, p90=${summary.single.p90Tokens}\n` +
+        `  avg duration=${summary.single.avgDurationMs}ms, p50=${summary.single.p50DurationMs}ms, p90=${summary.single.p90DurationMs}ms\n\n` +
+        `Team(current mode):\n` +
+        `  avg tokens=${summary.team.avgTokens}, p50=${summary.team.p50Tokens}, p90=${summary.team.p90Tokens}\n` +
+        `  avg duration=${summary.team.avgDurationMs}ms, p50=${summary.team.p50DurationMs}ms, p90=${summary.team.p90DurationMs}ms\n` +
+        `  avg rounds=${summary.team.avgReviewRounds}, avg mustFix=${summary.team.avgMustFixCount}, avg P0=${summary.team.avgP0Count}, fallback rate=${summary.team.fallbackRate}`
+      )
+
+      ctx.setMessages((prev) => [...prev.filter((m) => m.id !== running.id), report])
+      ctx.updateContextUsage()
+      return
+    }
+
+    if (subcommand === "checkpoints") {
+      const checkpoints = ctx.agent.getTeamCheckpoints(20)
+      if (checkpoints.length === 0) {
+        const message = createSystemMessage("No checkpoints found.")
+        ctx.setMessages((prev) => [...prev, message])
+        return
+      }
+
+      const lines = checkpoints.map((cp) => {
+        const mode = cp.context?.mode || "unknown"
+        const task = (cp.context?.task || cp.description).slice(0, 80)
+        return `- ${cp.id} | mode=${mode} | ${new Date(cp.timestamp).toISOString()} | ${task}`
+      })
+      const message = createSystemMessage(`Checkpoints (${checkpoints.length}):\n${lines.join("\n")}`)
+      ctx.setMessages((prev) => [...prev, message])
+      return
+    }
+
+    if (subcommand === "resume") {
+      const [checkpointId, strategyArg] = rest
+      if (!checkpointId) {
+        const message = createSystemMessage(
+          "Usage: /team resume <checkpoint-id> [continue-iteration|restart-task|skip-completed]"
+        )
+        ctx.setMessages((prev) => [...prev, message])
+        return
+      }
+      const strategy =
+        strategyArg === "restart-task" || strategyArg === "skip-completed"
+          ? strategyArg
+          : "continue-iteration"
+      const running = createSystemMessage(`♻️ Resuming from checkpoint ${checkpointId} (${strategy})...`)
+      ctx.setMessages((prev) => [...prev, running])
+      try {
+        const result = await ctx.agent.resumeTeamFromCheckpoint(checkpointId, strategy)
+        const summary = createSystemMessage(
+          `Resume result: ${result.status}\n  Rounds: ${result.reviewRounds}\n  MustFix: ${result.mustFixCount}\n  P0: ${result.p0Count}\n  Tokens: ${result.stats.tokensUsed}\n  Fallback: ${result.fallbackUsed ? "yes" : "no"}\n\nOutput:\n${result.output}`
+        )
+        ctx.setMessages((prev) => [...prev.filter((m) => m.id !== running.id), summary])
+      } catch (error: any) {
+        const message = createSystemMessage(`❌ Resume failed: ${error.message}`)
+        ctx.setMessages((prev) => [...prev.filter((m) => m.id !== running.id), message])
+      }
+      ctx.updateContextUsage()
+      return
+    }
+
+    const message = createSystemMessage(
+      "Unknown /team subcommand. Use: /team status|mode <mode> [strategy]|on|off|run <task>|baseline <task>|baseline-batch <task1 || task2 ...>|checkpoints|resume <checkpoint-id> [strategy]"
+    )
+    ctx.setMessages((prev) => [...prev, message])
+  },
+}
+
+/**
  * All builtin commands
  * Exported as array for easy registration in CommandRegistry
  */
@@ -411,5 +607,6 @@ export const builtinCommands: Command[] = [
   yoloCommand,
   sessionsCommand,
   skillsCommand,
+  teamCommand,
   mcpCommand,
 ]

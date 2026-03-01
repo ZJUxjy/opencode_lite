@@ -1,0 +1,124 @@
+{
+  "generatedAt": "2026-03-01T10:28:06.401Z",
+  "sampleSize": 10,
+  "tasks": [
+    "Refactor config loading flow and preserve backward compatibility",
+    "Implement robust retry policy for HTTP tool calls",
+    "Add validation and error mapping for MCP transport setup",
+    "Improve parser fallback branch for malformed tool responses",
+    "Optimize prompt assembly and remove duplicate context fields",
+    "Introduce baseline report formatter with percentile sections",
+    "Harden policy checks for dangerous file operations",
+    "Add test coverage for timeout and fallback interactions",
+    "Implement command handler for mode switch and status output",
+    "Stabilize task decomposition with deterministic ordering"
+  ],
+  "results": [
+    {
+      "mode": "worker-reviewer",
+      "summary": {
+        "sampleSize": 10,
+        "single": {
+          "avgTokens": 29.3,
+          "p50Tokens": 29,
+          "p90Tokens": 30,
+          "avgDurationMs": 2.7,
+          "p50DurationMs": 2,
+          "p90DurationMs": 3
+        },
+        "team": {
+          "avgTokens": 39,
+          "p50Tokens": 39,
+          "p90Tokens": 39,
+          "avgDurationMs": 4.9,
+          "p50DurationMs": 4,
+          "p90DurationMs": 6,
+          "avgReviewRounds": 1,
+          "avgMustFixCount": 0,
+          "avgP0Count": 0,
+          "fallbackRate": 0
+        }
+      }
+    },
+    {
+      "mode": "planner-executor-reviewer",
+      "summary": {
+        "sampleSize": 10,
+        "single": {
+          "avgTokens": 29.3,
+          "p50Tokens": 29,
+          "p90Tokens": 30,
+          "avgDurationMs": 2.5,
+          "p50DurationMs": 2,
+          "p90DurationMs": 3
+        },
+        "team": {
+          "avgTokens": 78,
+          "p50Tokens": 78,
+          "p90Tokens": 78,
+          "avgDurationMs": 8.6,
+          "p50DurationMs": 7,
+          "p90DurationMs": 12,
+          "avgReviewRounds": 1,
+          "avgMustFixCount": 0,
+          "avgP0Count": 0,
+          "fallbackRate": 0
+        }
+      }
+    },
+    {
+      "mode": "leader-workers",
+      "strategy": "collaborative",
+      "summary": {
+        "sampleSize": 10,
+        "single": {
+          "avgTokens": 29.3,
+          "p50Tokens": 29,
+          "p90Tokens": 30,
+          "avgDurationMs": 3.2,
+          "p50DurationMs": 2,
+          "p90DurationMs": 4
+        },
+        "team": {
+          "avgTokens": 95.5,
+          "p50Tokens": 95,
+          "p90Tokens": 96,
+          "avgDurationMs": 10.9,
+          "p50DurationMs": 11,
+          "p90DurationMs": 15,
+          "avgReviewRounds": 1,
+          "avgMustFixCount": 0,
+          "avgP0Count": 0,
+          "fallbackRate": 0
+        }
+      }
+    },
+    {
+      "mode": "leader-workers",
+      "strategy": "competitive",
+      "summary": {
+        "sampleSize": 10,
+        "single": {
+          "avgTokens": 29.3,
+          "p50Tokens": 29,
+          "p90Tokens": 30,
+          "avgDurationMs": 2.2,
+          "p50DurationMs": 2,
+          "p90DurationMs": 3
+        },
+        "team": {
+          "avgTokens": 82.7,
+          "p50Tokens": 82,
+          "p90Tokens": 84,
+          "avgDurationMs": 9.4,
+          "p50DurationMs": 8,
+          "p90DurationMs": 12,
+          "avgReviewRounds": 1,
+          "avgMustFixCount": 0,
+          "avgP0Count": 0,
+          "fallbackRate": 0
+        }
+      }
+    }
+  ]
+}

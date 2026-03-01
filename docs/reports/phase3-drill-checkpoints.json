@@ -1,0 +1,92 @@
+[
+  {
+    "id": "cp-1772367639099-f4xy",
+    "timestamp": 1772367639099,
+    "description": "drill checkpoint",
+    "baseRef": "base-123",
+    "patchRefs": [
+      "p1",
+      "p2",
+      "p3"
+    ],
+    "artifactRefs": [
+      "a1"
+    ],
+    "blackboardSnapshotRef": "bb1"
+  },
+  {
+    "id": "cp-1772370856430-vh2e",
+    "timestamp": 1772370856430,
+    "description": "drill checkpoint",
+    "baseRef": "base-123",
+    "patchRefs": [
+      "p1",
+      "p2",
+      "p3"
+    ],
+    "artifactRefs": [
+      "a1"
+    ],
+    "blackboardSnapshotRef": "bb1"
+  },
+  {
+    "id": "cp-1772370908704-j41g",
+    "timestamp": 1772370908704,
+    "description": "drill checkpoint",
+    "baseRef": "base-123",
+    "patchRefs": [
+      "p1",
+      "p2",
+      "p3"
+    ],
+    "artifactRefs": [
+      "a1"
+    ],
+    "blackboardSnapshotRef": "bb1"
+  },
+  {
+    "id": "cp-1772372280908-io3w",
+    "timestamp": 1772372280908,
+    "description": "drill checkpoint",
+    "baseRef": "base-123",
+    "patchRefs": [
+      "p1",
+      "p2",
+      "p3"
+    ],
+    "artifactRefs": [
+      "a1"
+    ],
+    "blackboardSnapshotRef": "bb1"
+  },
+  {
+    "id": "cp-1772373151676-yw3x",
+    "timestamp": 1772373151676,
+    "description": "drill checkpoint",
+    "baseRef": "base-123",
+    "patchRefs": [
+      "p1",
+      "p2",
+      "p3"
+    ],
+    "artifactRefs": [
+      "a1"
+    ],
+    "blackboardSnapshotRef": "bb1"
+  },
+  {
+    "id": "cp-1772373943828-7jsk",
+    "timestamp": 1772373943828,
+    "description": "drill checkpoint",
+    "baseRef": "base-123",
+    "patchRefs": [
+      "p1",
+      "p2",
+      "p3"
+    ],
+    "artifactRefs": [
+      "a1"
+    ],
+    "blackboardSnapshotRef": "bb1"
+  }
+]
