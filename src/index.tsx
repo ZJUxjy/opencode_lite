@@ -13,11 +13,24 @@ import * as fs from "fs"
 // 从 settings.json 加载配置
 import type { MCPGlobalConfig } from "./mcp/config.js"
 import type { TeamManagerOptions } from "./teams/team-manager.js"
+import type { AgentRole, TeamMode, LeaderWorkersStrategy, TeamConfig } from "./teams/types.js"
+
+/**
+ * Settings.json 中的 Team 配置
+ */
+interface TeamSettingsConfig {
+  /** 默认配置 */
+  default?: Partial<TeamConfig>
+  /** 具名配置 */
+  [name: string]: Partial<TeamConfig> | undefined
+}
 
 interface SettingsConfig {
   env?: Record<string, string>
   timeout?: number
   mcp?: MCPGlobalConfig
+  /** Team 配置 */
+  teams?: TeamSettingsConfig
 }
 
 function loadSettings(): SettingsConfig {
@@ -180,9 +193,14 @@ program
   .option("--no-stream", "Disable streaming output")
   .option("--compression-threshold <number>", "Context compression threshold (0-1)", "0.92")
   .option("--list-sessions", "List all sessions with metadata")
-  .option("--team <mode>", "Agent team mode (worker-reviewer, planner-executor-reviewer)")
+  .option("--team <mode>", "Agent team mode (worker-reviewer, planner-executor-reviewer, leader-workers, hotfix-guardrail, council)")
+  .option("--team-strategy <strategy>", "Leader-workers strategy (collaborative, competitive)", "collaborative")
+  .option("--team-workers <n>", "Number of workers for leader-workers mode", "2")
   .option("--objective <text>", "Team objective/task description")
   .option("--scope <files>", "File scope for team (comma-separated patterns)")
+  .option("--iterations <n>", "Max iterations for team mode", "3")
+  .option("--team-timeout <ms>", "Timeout for team execution in ms", "300000")
+  .option("--max-tokens <n>", "Max tokens budget for team", "200000")
   .action(async (options) => {
     const dbPath = path.join(os.homedir(), ".lite-opencode", "history.db")
 
@@ -224,36 +242,7 @@ program
 
     // Parse team configuration if --team is specified
     const teamConfig = options.team
-      ? {
-          config: {
-            mode: options.team as "worker-reviewer" | "planner-executor-reviewer",
-            agents:
-              options.team === "worker-reviewer"
-                ? [
-                    { role: "worker" as const, model },
-                    { role: "reviewer" as const, model },
-                  ]
-                : [
-                    { role: "planner" as const, model },
-                    { role: "executor" as const, model },
-                    { role: "reviewer" as const, model },
-                  ],
-            maxIterations: 3,
-            timeoutMs: 300000,
-            qualityGate: {
-              testsMustPass: true,
-              noP0Issues: true,
-            },
-            circuitBreaker: {
-              maxConsecutiveFailures: 3,
-              maxNoProgressRounds: 2,
-              cooldownMs: 60000,
-            },
-            conflictResolution: "auto" as const,
-          },
-          objective: options.objective,
-          fileScope: options.scope?.split(",") ?? [],
-        }
+      ? buildTeamConfig(options, settings.teams, model)
       : undefined
 
     const agent = new Agent(sessionId, {
@@ -287,8 +276,111 @@ program
         dbPath={dbPath}
         isResumed={!isNewSession}
         resumedSessionTitle={resumedSession?.title}
+        teamConfig={teamConfig}
       />
     )
   })
+
+/**
+ * 构建 Team 配置
+ * 优先级：CLI 参数 > settings.json 中的具名配置 > settings.json 中的 default 配置 > 内置默认值
+ */
+function buildTeamConfig(
+  options: {
+    team: string
+    teamStrategy?: string
+    teamWorkers?: string
+    iterations?: string
+    teamTimeout?: string
+    maxTokens?: string
+    objective?: string
+    scope?: string
+  },
+  teamsConfig: TeamSettingsConfig | undefined,
+  defaultModel: string
+): TeamManagerOptions {
+  const mode = options.team as TeamMode
+
+  // 从 settings.json 获取配置
+  const namedConfig = teamsConfig?.[mode] ?? {}
+  const defaultTeamConfig = teamsConfig?.default ?? {}
+
+  // 合并配置：具名配置覆盖默认配置
+  const settingsTeamConfig = { ...defaultTeamConfig, ...namedConfig }
+
+  // 构建 agents
+  let agents: { role: AgentRole; model: string; skills?: string[]; systemPrompt?: string }[] =
+    settingsTeamConfig.agents as any ?? []
+
+  // 如果 settings.json 中没有定义 agents，使用默认值
+  if (agents.length === 0) {
+    switch (mode) {
+      case "worker-reviewer":
+        agents = [
+          { role: "worker" as AgentRole, model: defaultModel },
+          { role: "reviewer" as AgentRole, model: defaultModel },
+        ]
+        break
+      case "planner-executor-reviewer":
+        agents = [
+          { role: "planner" as AgentRole, model: defaultModel },
+          { role: "executor" as AgentRole, model: defaultModel },
+          { role: "reviewer" as AgentRole, model: defaultModel },
+        ]
+        break
+      case "leader-workers": {
+        const workerCount = parseInt(options.teamWorkers ?? "2", 10)
+        agents = [
+          { role: "leader" as AgentRole, model: defaultModel },
+          ...Array.from({ length: workerCount }, () => ({ role: "worker" as AgentRole, model: defaultModel })),
+        ]
+        break
+      }
+      case "hotfix-guardrail":
+        agents = [
+          { role: "fixer" as AgentRole, model: defaultModel },
+          { role: "safety-reviewer" as AgentRole, model: defaultModel },
+        ]
+        break
+      case "council":
+        agents = [
+          { role: "speaker" as AgentRole, model: defaultModel },
+          { role: "member" as AgentRole, model: defaultModel },
+          { role: "member" as AgentRole, model: defaultModel },
+        ]
+        break
+    }
+  }
+
+  // 构建最终配置
+  return {
+    config: {
+      mode,
+      strategy: mode === "leader-workers"
+        ? (options.teamStrategy as LeaderWorkersStrategy) ?? (settingsTeamConfig.strategy as LeaderWorkersStrategy) ?? "collaborative"
+        : undefined,
+      agents,
+      maxIterations: parseInt(options.iterations ?? "3", 10) ?? (settingsTeamConfig.maxIterations as number) ?? 3,
+      timeoutMs: parseInt(options.teamTimeout ?? "300000", 10) ?? (settingsTeamConfig.timeoutMs as number) ?? 300000,
+      budget: {
+        maxTokens: parseInt(options.maxTokens ?? "200000", 10) ?? (settingsTeamConfig.budget?.maxTokens as number) ?? 200000,
+        maxCostUsd: settingsTeamConfig.budget?.maxCostUsd,
+        maxParallelAgents: settingsTeamConfig.budget?.maxParallelAgents,
+      },
+      qualityGate: settingsTeamConfig.qualityGate ?? {
+        testsMustPass: true,
+        noP0Issues: true,
+      },
+      circuitBreaker: settingsTeamConfig.circuitBreaker ?? {
+        maxConsecutiveFailures: 3,
+        maxNoProgressRounds: 2,
+        cooldownMs: 60000,
+      },
+      conflictResolution: (settingsTeamConfig.conflictResolution as "auto" | "manual") ?? "auto",
+    },
+    objective: options.objective,
+    fileScope: options.scope?.split(",") ?? [],
+  }
+}
 
 program.parse()

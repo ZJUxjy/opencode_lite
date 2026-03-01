@@ -12,6 +12,8 @@ import { createProgressTracker } from "./progress-tracker.js"
 import { createWorkerReviewerMode } from "./modes/worker-reviewer.js"
 import { createPlannerExecutorReviewerMode } from "./modes/planner-executor-reviewer.js"
 import { createLeaderWorkersMode } from "./modes/leader-workers.js"
+import { createHotfixGuardrailMode } from "./modes/hotfix-guardrail.js"
+import { createCouncilMode } from "./modes/council.js"
 import { createFallbackHandler, type FallbackAgentInput, type TeamFailureReport } from "./fallback.js"
 
 // ============================================================================
@@ -209,6 +211,10 @@ export class TeamManager {
         return createPlannerExecutorReviewerMode()
       case "leader-workers":
         return createLeaderWorkersMode(this.config.strategy || "collaborative")
+      case "hotfix-guardrail":
+        return createHotfixGuardrailMode()
+      case "council":
+        return createCouncilMode()
       default:
         throw new Error(`Mode '${mode}' not implemented yet`)
     }

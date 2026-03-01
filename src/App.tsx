@@ -12,6 +12,7 @@ import type { ToolCall } from "./types.js"
 import type { PolicyDecision } from "./policy.js"
 import { getPlanFilePath, readPlanFile, exitPlanMode } from "./plan/manager.js"
 import { buildNewSessionPrompt, buildContinueSessionPrompt } from "./plan/handover.js"
+import type { TeamManagerOptions } from "./teams/team-manager.js"
 
 /**
  * 方案 A 实现：最小改动修复滚动问题
@@ -36,6 +37,7 @@ interface Props {
   dbPath: string
   isResumed?: boolean
   resumedSessionTitle?: string
+  teamConfig?: TeamManagerOptions
 }
 
 interface Message {
@@ -152,7 +154,7 @@ function MessageItem({ message }: MessageItemProps) {
 // 主组件
 // ============================================================================
 
-export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isResumed, resumedSessionTitle }: Props) {
+export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isResumed, resumedSessionTitle, teamConfig }: Props) {
   const { exit } = useApp()
   const { stdout } = useStdout()
 
@@ -816,6 +818,12 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
             {mcpStatus.total > 0 && (
               <Text color={mcpStatus.connected === mcpStatus.total ? "green" : "yellow"}>
                 {' '}🔌 MCP {mcpStatus.connected}/{mcpStatus.total}
+              </Text>
+            )}
+            {teamConfig && (
+              <Text color="blue">
+                {' '}👥 {teamConfig.config.mode}
+                {teamConfig.config.strategy && `(${teamConfig.config.strategy})`}
               </Text>
             )}
             {isProcessing && <Text color="cyan"> ● Processing...</Text>}

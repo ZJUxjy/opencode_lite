@@ -38,7 +38,6 @@ export type {
   WorkArtifact,
   ReviewArtifact,
   AgentMessage,
-  Checkpoint,
   PricingTable,
   ModeRunner,
 } from "./types.js"
@@ -122,6 +121,16 @@ export {
   createLeaderWorkersMode,
 } from "./modes/leader-workers.js"
 
+export {
+  HotfixGuardrailMode,
+  createHotfixGuardrailMode,
+} from "./modes/hotfix-guardrail.js"
+
+export {
+  CouncilMode,
+  createCouncilMode,
+} from "./modes/council.js"
+
 // ============================================================================
 // Task DAG Exports
 // ============================================================================
@@ -156,6 +165,18 @@ export {
 } from "./conflict-detector.js"
 
 // ============================================================================
+// Checkpoint Exports
+// ============================================================================
+
+export {
+  CheckpointManager,
+  createCheckpointManager,
+  type Checkpoint,
+  type CheckpointConfig,
+  type ResumableTaskRunner,
+} from "./checkpoint.js"
+
+// ============================================================================
 // Fallback Exports
 // ============================================================================
 
@@ -176,3 +197,30 @@ export {
   createTeamManager,
   type TeamManagerOptions,
 } from "./team-manager.js"
+
+// ============================================================================
+// Team Run Store Exports
+// ============================================================================
+
+export {
+  TeamRunStore,
+  createTeamRunStore,
+  type TeamRun,
+  type CreateTeamRunParams,
+  type UpdateTeamRunParams,
+  type CheckpointRef,
+  type CreateCheckpointRefParams,
+  type ListTeamRunsOptions,
+} from "./team-run-store.js"
+
+// ============================================================================
+// Agent Pool Exports
+// ============================================================================
+
+export {
+  AgentPool,
+  createAgentPool,
+  type AgentInstance,
+  type AgentPoolConfig,
+  type InstanceRequest,
+} from "./agent-pool.js"
