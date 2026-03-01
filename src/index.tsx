@@ -201,6 +201,8 @@ program
   .option("--iterations <n>", "Max iterations for team mode", "3")
   .option("--team-timeout <ms>", "Timeout for team execution in ms", "300000")
   .option("--max-tokens <n>", "Max tokens budget for team", "200000")
+  .option("--non-interactive", "Run in non-interactive mode (CI/CD)")
+  .option("--output-format <format>", "Output format for non-interactive mode (text, json)", "text")
   .action(async (options) => {
     const dbPath = path.join(os.homedir(), ".lite-opencode", "history.db")
 
@@ -262,6 +264,12 @@ program
 
     // 初始化 MCP
     await agent.initializeMCP()
+
+    // 非交互模式：直接运行并输出到 stdout
+    if (options.nonInteractive) {
+      await runNonInteractive(agent, options, teamConfig)
+      return
+    }
 
     // 渲染 Ink 应用
     // 注意: 不使用 incrementalRendering，因为与 Spinner 动画不兼容
@@ -380,6 +388,131 @@ function buildTeamConfig(
     },
     objective: options.objective,
     fileScope: options.scope?.split(",") ?? [],
+  }
+}
+
+/**
+ * Run agent in non-interactive mode for CI/CD
+ */
+async function runNonInteractive(
+  agent: Agent,
+  options: {
+    objective?: string
+    outputFormat: string
+    directory: string
+    team?: string
+  },
+  teamConfig?: TeamManagerOptions
+): Promise<void> {
+  const outputFormat = options.outputFormat || "text"
+
+  // Get user input from objective or stdin
+  let userInput = options.objective || ""
+
+  if (!userInput && !options.team) {
+    // Read from stdin if no objective provided and not in team mode
+    const chunks: Buffer[] = []
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk)
+    }
+    userInput = Buffer.concat(chunks).toString("utf-8").trim()
+  }
+
+  if (!userInput && !options.team) {
+    console.error("Error: No input provided. Use --objective or pipe input via stdin.")
+    process.exit(1)
+  }
+
+  const startTime = Date.now()
+  const results: {
+    success: boolean
+    output: string
+    duration: number
+    toolCalls?: number
+    tokensUsed?: { input: number; output: number }
+    teamResult?: unknown
+  } = {
+    success: false,
+    output: "",
+    duration: 0,
+  }
+
+  try {
+    if (outputFormat === "text") {
+      console.log(`🔧 Working directory: ${options.directory}`)
+      if (userInput) {
+        console.log(`📝 Task: ${userInput.slice(0, 100)}${userInput.length > 100 ? "..." : ""}`)
+      }
+      if (options.team) {
+        console.log(`👥 Team mode: ${options.team}`)
+      }
+      console.log("⏳ Processing...\n")
+    }
+
+    // Set up event handlers for progress tracking
+    let toolCallCount = 0
+    agent.setEvents({
+      onToolCall: () => {
+        toolCallCount++
+      },
+      onTextDelta: outputFormat === "text" ? (text) => process.stdout.write(text) : undefined,
+    })
+
+    // Run agent or team
+    if (teamConfig && options.team) {
+      // Team mode
+      const teamManager = agent.getTeamManager()
+      if (teamManager) {
+        results.teamResult = await teamManager.run()
+        results.success = true
+      }
+    } else if (userInput) {
+      // Single agent mode
+      results.output = await agent.run(userInput)
+      results.success = true
+    }
+
+    const stats = agent.getSessionStats()
+    results.duration = Date.now() - startTime
+    results.toolCalls = toolCallCount
+    results.tokensUsed = {
+      input: stats.contextUsage.used,
+      output: stats.contextUsage.used,
+    }
+
+    if (outputFormat === "text") {
+      console.log("\n\n✅ Completed successfully")
+      console.log(`⏱️  Duration: ${(results.duration / 1000).toFixed(2)}s`)
+      console.log(`🔧 Tool calls: ${results.toolCalls}`)
+      console.log(`📊 Tokens: ${results.tokensUsed?.input || 0} in / ${results.tokensUsed?.output || 0} out`)
+    } else if (outputFormat === "json") {
+      console.log(JSON.stringify({
+        success: results.success,
+        output: results.output,
+        teamResult: results.teamResult,
+        duration: results.duration,
+        toolCalls: results.toolCalls,
+        tokensUsed: results.tokensUsed,
+      }, null, 2))
+    }
+
+    process.exit(0)
+  } catch (error) {
+    results.duration = Date.now() - startTime
+    results.success = false
+    results.output = error instanceof Error ? error.message : String(error)
+
+    if (outputFormat === "text") {
+      console.error("\n\n❌ Failed:", results.output)
+    } else if (outputFormat === "json") {
+      console.log(JSON.stringify({
+        success: false,
+        error: results.output,
+        duration: results.duration,
+      }, null, 2))
+    }
+
+    process.exit(1)
   }
 }
 
