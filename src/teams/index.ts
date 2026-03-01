@@ -224,3 +224,37 @@ export {
   type AgentPoolConfig,
   type InstanceRequest,
 } from "./agent-pool.js"
+
+// ============================================================================
+// Artifact Store Exports
+// ============================================================================
+
+export {
+  ArtifactStore,
+  createArtifactStore,
+  type ArtifactFormat,
+  type ArtifactMetadata,
+  type FilesystemArtifact,
+  type ArtifactStoreConfig,
+  type ArtifactQuery,
+  type StoreArtifactInput,
+} from "./artifact-store.js"
+
+// ============================================================================
+// Benchmark Exports
+// ============================================================================
+
+export {
+  BaselineRunner,
+  createBaselineRunner,
+  formatBaselineReport,
+  saveBaselineReport,
+  DEFAULT_TEST_SUITE,
+  type BaselineCategory,
+  type BaselineTestSuite,
+  type BaselineSample,
+  type BaselineResult,
+  type BaselineComparison,
+  type BaselineReport,
+  type BenchmarkConfig,
+} from "./benchmark.js"
