@@ -191,6 +191,7 @@ program
   .option("--team-benchmark-modes <modes>", "Comma-separated team modes to benchmark")
   .option("--team-ralph", "Run Ralph continuous loop mode")
   .option("--team-ralph-task-file <path>", "Task file for Ralph loop (default: TASKS.md)")
+  .option("--team-ralph-progress <path>", "Progress file for Ralph loop (default: PROGRESS.md)")
   .action(async (options) => {
     const dbPath = path.join(os.homedir(), ".lite-opencode", "history.db")
 
@@ -276,19 +277,30 @@ program
     // 处理 Team Ralph 循环模式
     if (options.teamRalph) {
       const taskFile = options.teamRalphTaskFile || "TASKS.md"
+      const progressFile = options.teamRalphProgress || "PROGRESS.md"
 
       if (!fs.existsSync(taskFile)) {
         console.error(`Error: Task file not found: ${taskFile}`)
         process.exit(1)
       }
 
-      const tasksContent = fs.readFileSync(taskFile, "utf-8")
-      console.log(`Running Ralph loop with tasks from: ${taskFile}`)
-      console.log("Note: Ralph loop requires agent executor injection")
+      const { RalphLoop } = await import("./teams/ralph-loop.js")
 
-      // Ralph 循环需要在 Agent 上下文中运行
-      // 这里只是打印信息，实际执行需要通过 Agent
-      console.log("\nTo run Ralph loop, use --team ralph in interactive mode")
+      const ralphLoop = new RalphLoop({
+        taskFilePath: taskFile,
+        progressFilePath: progressFile,
+        teamMode: (options.team as any) || "worker-reviewer",
+        maxRetries: 1,
+        cooldownMs: 0,
+        notifyOnFailure: true,
+      })
+
+      const result = await ralphLoop.run()
+
+      // 根据结果退出
+      if (result.failedTasks > 0) {
+        process.exit(1)
+      }
       process.exit(0)
     }
 
