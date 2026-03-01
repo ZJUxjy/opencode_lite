@@ -6,6 +6,16 @@ Agent Teams 是一个多 Agent 协作开发系统，允许多个 Agent 以明确
 
 - [快速开始](#快速开始)
 - [协作模式](#协作模式)
+- [高级功能](#高级功能)
+  - [PROGRESS.md 持久化](#progressmd-持久化)
+  - [松散上下文契约](#松散上下文契约)
+  - [LLM-as-Judge 评估](#llm-as-judge-评估)
+  - [检查点恢复](#检查点恢复)
+  - [Git Worktree 隔离](#git-worktree-隔离)
+  - [Ralph Loop 持续执行](#ralph-loop-持续执行)
+  - [思考预算控制](#思考预算控制)
+  - [非交互模式](#非交互模式)
+  - [基线测试](#基线测试)
 - [CLI 使用](#cli-使用)
 - [配置说明](#配置说明)
 - [最佳实践](#最佳实践)
@@ -186,6 +196,471 @@ lite-opencode --team council \
   --iterations 2
 ```
 
+## 高级功能
+
+### PROGRESS.md 持久化
+
+自动将 Team 执行进度写入 `PROGRESS.md` 文件，支持中断后继续执行。
+
+**特性**：
+- 每个迭代完成后自动更新进度
+- 记录当前阶段、已完成任务、下一步计划
+- 支持从进度文件恢复执行
+
+**配置**：
+
+```json
+{
+  "teams": {
+    "default": {
+      "progressPersistence": {
+        "enabled": true,
+        "filePath": "PROGRESS.md",
+        "autoSave": true,
+        "saveIntervalMs": 30000
+      }
+    }
+  }
+}
+```
+
+**手动恢复**：
+
+```typescript
+import { createProgressPersistence } from "./teams/progress-persistence.js"
+
+const persistence = createProgressPersistence({
+  filePath: "PROGRESS.md",
+})
+
+const progress = persistence.load()
+if (progress) {
+  console.log(`恢复执行: 第 ${progress.currentIteration} 轮`)
+  console.log(`已完成: ${progress.completedTasks.join(", ")}`)
+}
+```
+
+### 松散上下文契约
+
+支持 Loose Context Contract 模式，允许 Agent 在保持目标一致的前提下灵活执行。
+
+**使用场景**：
+- 探索性任务（不需要严格步骤）
+- 研究型任务（结果导向）
+- 创意型任务（过程不可预测）
+
+**契约类型对比**：
+
+| 特性 | Strict Contract | Loose Contract |
+|------|-----------------|----------------|
+| 步骤定义 | 必须 | 可选 |
+| 边界约束 | 严格 | 宽松 |
+| 验收标准 | 预定义 | 动态评估 |
+| 适用场景 | 确定性任务 | 探索性任务 |
+
+**示例**：
+
+```typescript
+import { createLooseContract, toStrictContract } from "./teams/contracts.js"
+
+// 创建松散契约
+const loose = createLooseContract({
+  objective: "探索代码优化机会",
+  boundaries: ["不修改 API 接口", "保持向后兼容"],
+  expectedOutcome: "生成优化建议报告",
+})
+
+// 转换为严格契约（当需要时）
+const strict = toStrictContract(loose, {
+  steps: ["分析性能瓶颈", "提出优化方案", "验证改进效果"],
+})
+```
+
+### LLM-as-Judge 评估
+
+使用 LLM 作为评判者，对代码质量、方案优劣进行自动评估。
+
+**评估维度**：
+- **Correctness (35%)**: 功能正确性
+- **Completeness (25%)**: 需求完整度
+- **Maintainability (20%)**: 可维护性
+- **Performance (20%)**: 性能表现
+
+**使用示例**：
+
+```typescript
+import { createLLMJudge, DEFAULT_CODE_QUALITY_RUBRIC } from "./teams/llm-judge.js"
+
+const judge = createLLMJudge({
+  model: "claude-sonnet-4",
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  rubric: DEFAULT_CODE_QUALITY_RUBRIC,
+})
+
+// 评估代码
+const result = await judge.evaluate({
+  task: "实现用户认证",
+  solution: codeString,
+  context: "Node.js + TypeScript",
+})
+
+console.log("总分:", result.score)
+console.log("维度评分:", result.dimensionScores)
+console.log("建议:", result.feedback)
+```
+
+**Leader-Workers 竞争模式集成**：
+
+```bash
+lite-opencode --team leader-workers \
+  --team-strategy competitive \
+  --team-workers 3 \
+  --objective "实现高性能缓存" \
+  --scope "src/cache.ts"
+```
+
+Leader 会自动使用 LLM-as-Judge 评估各 Worker 方案并选择最优。
+
+### 检查点恢复
+
+支持从任意检查点恢复 Team 执行，应对中断和失败场景。
+
+**恢复策略**：
+
+1. **restart-task**: 重新执行当前任务（推荐）
+2. **continue-iteration**: 从当前迭代继续（风险较高）
+3. **skip-completed**: 跳过已完成任务（快速恢复）
+
+**使用示例**：
+
+```typescript
+import { createCheckpointResumer } from "./teams/checkpoint-resume.js"
+
+const resumer = createCheckpointResumer({
+  strategy: "restart-task",
+  allowPartialResults: true,
+})
+
+// 从检查点恢复
+const resumed = await resumer.resume(checkpointId, {
+  teamManager,
+  onProgress: (phase) => console.log(`恢复阶段: ${phase}`),
+})
+
+if (resumed.success) {
+  console.log(`成功恢复，继续第 ${resumed.iteration} 轮`)
+}
+```
+
+**CLI 恢复**：
+
+```bash
+# 列出可用检查点
+lite-opencode --list-checkpoints
+
+# 从检查点恢复（未来版本支持）
+lite-opencode --resume-checkpoint checkpoint-xxx
+```
+
+### Git Worktree 隔离
+
+为并行 Agent 创建独立的 Git Worktree，实现完全隔离的执行环境。
+
+**使用场景**：
+- Leader-Workers 并行开发
+- 多方案并行验证
+- 实验性功能开发
+
+**示例**：
+
+```typescript
+import { createWorktreeIsolationManager } from "./teams/worktree-isolation.js"
+
+const isolation = createWorktreeIsolationManager({
+  baseDir: ".worktrees",
+  autoCleanup: true,
+})
+
+// 为 Worker 创建隔离环境
+const worktree = await isolation.createWorktree({
+  name: "worker-1",
+  baseBranch: "main",
+})
+
+console.log("工作目录:", worktree.path)
+console.log("分支:", worktree.branch)
+
+// Worker 在隔离环境中执行
+// ...
+
+// 合并结果
+await isolation.mergeWorktree(worktree.id, {
+  targetBranch: "main",
+  strategy: "merge",
+})
+```
+
+**Leader-Workers 自动隔离**：
+
+```bash
+lite-opencode --team leader-workers \
+  --team-strategy collaborative \
+  --team-workers 4 \
+  --objective "并行开发多个模块" \
+  --scope "src/module1,src/module2,src/module3,src/module4"
+```
+
+Leader 会自动为每个 Worker 创建独立 Worktree。
+
+### Ralph Loop 持续执行
+
+从 `TASKS.md` 读取任务队列，持续执行直到完成所有任务。
+
+**TASKS.md 格式**：
+
+```markdown
+# Task Queue
+
+## ACTIVE
+- [ ] 实现用户认证 API
+- [ ] 编写单元测试
+- [ ] 更新 API 文档
+
+## PENDING
+- [ ] 集成第三方登录
+- [ ] 添加权限管理
+
+## COMPLETED
+- [x] 项目初始化
+- [x] 数据库设计
+```
+
+**使用示例**：
+
+```typescript
+import { createRalphLoop } from "./teams/ralph-loop.js"
+
+const ralph = createRalphLoop({
+  taskFile: "TASKS.md",
+  teamConfig: {
+    mode: "worker-reviewer",
+    maxIterations: 3,
+  },
+})
+
+// 持续执行
+await ralph.run({
+  onTaskStart: (task) => console.log(`开始: ${task.title}`),
+  onTaskComplete: (task, result) => console.log(`完成: ${task.title}`),
+  onTaskFailed: (task, error) => console.log(`失败: ${task.title}`),
+})
+```
+
+**适用场景**：
+- 批量任务处理
+- 长期运行项目
+- 自动化工作流
+
+### 思考预算控制
+
+为复杂任务配置思考预算，控制 LLM 推理令牌使用量。
+
+**配置**：
+
+```json
+{
+  "teams": {
+    "default": {
+      "thinkingBudget": {
+        "enabled": true,
+        "maxThinkingTokens": 4000,
+        "outputThinkingProcess": true
+      }
+    }
+  }
+}
+```
+
+**使用示例**：
+
+```typescript
+import { createThinkingBudgetManager } from "./teams/thinking-budget.js"
+
+const thinking = createThinkingBudgetManager({
+  maxThinkingTokens: 4000,
+  outputThinkingProcess: true,
+})
+
+// 分配思考预算
+const budget = thinking.allocateBudget("complex-task", {
+  complexity: "high",
+  estimatedSteps: 5,
+})
+
+console.log("思考预算:", budget.allocatedTokens)
+console.log("输出预算:", budget.outputTokens)
+
+// 记录实际使用
+thinking.recordUsage("complex-task", 3500)
+
+// 检查是否超支
+if (thinking.isOverBudget("complex-task")) {
+  console.log("思考预算已用完，需要简化任务")
+}
+```
+
+**适用场景**：
+- 复杂算法设计
+- 架构决策
+- 调试难题
+
+### 非交互模式
+
+支持 CI/CD 集成，无需人工干预自动运行。
+
+**使用示例**：
+
+```bash
+# 文本输出（默认）
+lite-opencode \
+  --team worker-reviewer \
+  --objective "修复 bug" \
+  --scope "src/buggy.ts" \
+  --non-interactive
+
+# JSON 输出（便于解析）
+lite-opencode \
+  --team worker-reviewer \
+  --objective "实现功能" \
+  --scope "src/feature.ts" \
+  --non-interactive \
+  --output-format json
+```
+
+**JSON 输出格式**：
+
+```json
+{
+  "success": true,
+  "output": "实现完成",
+  "teamResult": {
+    "mode": "worker-reviewer",
+    "iterations": 2,
+    "status": "completed"
+  },
+  "duration": 45000,
+  "toolCalls": 15,
+  "tokensUsed": {
+    "input": 5000,
+    "output": 3000
+  }
+}
+```
+
+**GitHub Actions 集成**：
+
+```yaml
+name: AI Code Review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run Agent Team
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          lite-opencode \
+            --team hotfix-guardrail \
+            --objective "检查安全问题" \
+            --scope "src/" \
+            --non-interactive \
+            --output-format json \
+            > result.json
+      - name: Check Result
+        run: |
+          success=$(cat result.json | jq -r '.success')
+          if [ "$success" != "true" ]; then
+            echo "检查失败"
+            exit 1
+          fi
+```
+
+### 基线测试
+
+评估 Team 模式相对于单 Agent 的效果，量化多 Agent 协作的收益。
+
+**测试套件**：
+- **20 个样本**：6 简单 + 7 中等 + 7 复杂
+- **多维度评估**：时间、成本、质量、成功率
+
+**使用示例**：
+
+```typescript
+import { createBaselineRunner, DEFAULT_TEST_SUITE, formatBaselineReport } from "./teams/benchmark.js"
+
+const runner = createBaselineRunner({
+  model: "claude-sonnet-4",
+  apiKey: process.env.ANTHROPIC_API_KEY,
+})
+
+// 运行基线对比
+const report = await runner.runBaselineComparison(
+  DEFAULT_TEST_SUITE,
+  ["worker-reviewer", "planner-executor-reviewer"]
+)
+
+// 输出报告
+console.log(formatBaselineReport(report))
+```
+
+**示例输出**：
+
+```markdown
+# Agent Teams Baseline Report
+
+## Summary
+- Total Samples: 20
+- Modes Tested: worker-reviewer, planner-executor-reviewer
+
+## Results
+
+### worker-reviewer
+- Avg Time Reduction: 15.3%
+- Avg Cost Increase: 85.2%
+- Avg Quality Improvement: 22.1%
+- Cost Effective: ✅
+
+### planner-executor-reviewer
+- Avg Time Reduction: 8.7%
+- Avg Cost Increase: 120.5%
+- Avg Quality Improvement: 28.4%
+- Cost Effective: ✅
+```
+
+**自定义测试套件**：
+
+```typescript
+const customSuite = {
+  name: "My Test Suite",
+  samples: [
+    {
+      id: "test-001",
+      category: "simple",
+      task: "实现一个加法函数",
+      expectedFiles: ["src/math.ts"],
+      validationCommands: ["npm test"],
+      timeBudget: 60000,
+      tokenBudget: 10000,
+    },
+  ],
+}
+
+const report = await runner.runBaselineComparison(customSuite, ["worker-reviewer"])
+```
+
 ## CLI 使用
 
 ### 基本参数
@@ -200,6 +675,8 @@ lite-opencode --team council \
 | `--iterations <n>` | 最大迭代次数 | 3 |
 | `--team-timeout <ms>` | 超时时间（毫秒） | 300000 |
 | `--max-tokens <n>` | Token 预算 | 200000 |
+| `--non-interactive` | 非交互模式（CI/CD） | - |
+| `--output-format <format>` | 输出格式（text/json） | text |
 
 ### 完整示例
 
@@ -270,6 +747,17 @@ lite-opencode --continue
         "maxConsecutiveFailures": 3,
         "maxNoProgressRounds": 2,
         "cooldownMs": 60000
+      },
+      "progressPersistence": {
+        "enabled": true,
+        "filePath": "PROGRESS.md",
+        "autoSave": true,
+        "saveIntervalMs": 30000
+      },
+      "thinkingBudget": {
+        "enabled": true,
+        "maxThinkingTokens": 4000,
+        "outputThinkingProcess": false
       }
     },
     "worker-reviewer": {
@@ -388,6 +876,58 @@ lite-opencode --team worker-reviewer --scope "src/auth.ts,src/user.ts"
 - 关键路径使用 `noP0Issues`
 - 设置合理的代码覆盖率要求（`minCoverage`）
 - 定期查看 Reviewer 的反馈，优化提示词
+
+### 7. 使用 PROGRESS.md 跟踪长任务
+
+对于需要多轮迭代的复杂任务，启用 PROGRESS.md 持久化：
+
+```json
+{
+  "teams": {
+    "default": {
+      "progressPersistence": {
+        "enabled": true,
+        "filePath": "PROGRESS.md"
+      }
+    }
+  }
+}
+```
+
+### 8. 为探索性任务使用松散契约
+
+当需求不明确时，使用松散上下文契约：
+
+```bash
+lite-opencode --team planner-executor-reviewer \
+  --objective "探索代码优化机会" \
+  --scope "src/"
+```
+
+### 9. CI/CD 集成使用非交互模式
+
+```bash
+lite-opencode \
+  --team hotfix-guardrail \
+  --objective "安全检查" \
+  --scope "src/" \
+  --non-interactive \
+  --output-format json \
+  --max-tokens 50000 \
+  --iterations 2
+```
+
+### 10. 定期运行基线测试
+
+评估 Team 模式效果，优化配置：
+
+```bash
+# 运行基线测试（需在代码中实现）
+npm run test:baseline
+
+# 分析结果，调整配置
+# 如果时间减少 < 10% 但成本增加 > 100%，考虑使用单 Agent
+```
 
 ## TUI 状态指示
 
