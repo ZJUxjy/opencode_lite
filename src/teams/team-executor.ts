@@ -5,6 +5,7 @@
  * - 根据配置创建 Team 实例
  * - 管理子 Agent 的生命周期
  * - 跟踪执行状态到 TeamSessionStore
+ * - 保存产物到文件系统
  * - 提供执行进度回调
  */
 
@@ -16,6 +17,7 @@ import { PlannerExecutorReviewerTeam } from "./modes/planner-executor-reviewer.j
 import { LeaderWorkersTeam } from "./modes/leader-workers.js"
 import { HotfixGuardrailTeam } from "./modes/hotfix-guardrail.js"
 import { CouncilTeam } from "./modes/council.js"
+import { ArtifactStorage, type ArtifactStorageConfig } from "./artifact-storage.js"
 
 /**
  * 执行进度事件
@@ -49,6 +51,8 @@ export interface TeamExecutorConfig {
   sessionId: string
   /** Team 会话存储 */
   teamSessionStore?: TeamSessionStore
+  /** 产物存储配置 */
+  artifactStorageConfig?: Partial<ArtifactStorageConfig>
   /** 事件回调 */
   events?: TeamExecutionEvents
   /** 调试模式 */
@@ -65,6 +69,7 @@ export class TeamExecutor {
   private teamConfig: TeamConfig
   private sessionId: string
   private teamSessionStore?: TeamSessionStore
+  private artifactStorage: ArtifactStorage
   private events: TeamExecutionEvents
   private debug: boolean
   private currentStatus: TeamStatus = "initializing"
@@ -74,6 +79,7 @@ export class TeamExecutor {
     this.teamConfig = config.teamConfig
     this.sessionId = config.sessionId
     this.teamSessionStore = config.teamSessionStore
+    this.artifactStorage = new ArtifactStorage(config.artifactStorageConfig)
     this.events = config.events || {}
     this.debug = config.debug || false
   }
@@ -94,6 +100,55 @@ export class TeamExecutor {
     this.currentStatus = status
     this.events.onStatusChange?.(status)
     this.teamSessionStore?.updateTeamSessionStatus(this.sessionId, status)
+  }
+
+  /**
+   * 保存产物到文件系统
+   */
+  private saveArtifactsToStorage(result: TeamResult): void {
+    // 保存 TeamResult 摘要
+    const summaryContent = [
+      `# Team Execution Result`,
+      ``,
+      `## Status: ${result.status.toUpperCase()}`,
+      ``,
+      `## Summary`,
+      result.summary,
+      ``,
+      `## Statistics`,
+      `- Duration: ${result.stats.duration}ms`,
+      `- Iterations: ${result.stats.iterations}`,
+      `- Total Cost: $${result.stats.totalCost.toFixed(4)}`,
+      `- Total Tokens: ${result.stats.totalTokens}`,
+      ``,
+      `## Mode: ${this.teamConfig.mode}`,
+      ``,
+      `## Session ID: ${this.sessionId}`,
+      ``,
+      `---`,
+      `_Created: ${new Date().toISOString()}_`,
+    ].join("\n")
+
+    this.artifactStorage.saveArtifact(
+      this.sessionId,
+      "team-executor",
+      "coordinator",
+      "team-result.md",
+      summaryContent,
+      "markdown"
+    )
+
+    // 如果有产物列表，逐个保存为 Work Artifact 格式
+    for (const artifact of result.artifacts) {
+      this.artifactStorage.saveWorkArtifact(
+        this.sessionId,
+        artifact.agentId,
+        artifact.agentRole,
+        artifact
+      )
+    }
+
+    this.log(`Artifacts saved to ${this.artifactStorage.getArtifactDir()}`)
   }
 
   /**
@@ -138,6 +193,9 @@ export class TeamExecutor {
       const finalStatus = result.status === "success" ? "completed" : "failed"
       this.updateStatus(finalStatus)
       this.teamSessionStore?.updateTeamSessionStatus(this.sessionId, finalStatus, result)
+
+      // 保存产物到文件系统
+      this.saveArtifactsToStorage(result)
 
       // 触发完成回调
       this.events.onComplete?.(result)

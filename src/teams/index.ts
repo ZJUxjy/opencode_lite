@@ -122,3 +122,12 @@ export {
   type TeamExecutionEvents,
   type TeamExecutorConfig,
 } from "./team-executor.js"
+
+// 产物存储
+export {
+  ArtifactStorage,
+  DEFAULT_ARTIFACT_STORAGE_CONFIG,
+  type ArtifactFormat,
+  type FilesystemArtifact,
+  type ArtifactStorageConfig,
+} from "./artifact-storage.js"

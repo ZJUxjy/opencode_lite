@@ -264,13 +264,8 @@ Provide a clear, concise context that will help council members understand the d
     topic: string,
     context: string
   ): Promise<DecisionOption[]> {
-    const options: DecisionOption[] = []
-
-    // 让每个成员提出一个选项
-    for (let i = 0; i < this.members.length; i++) {
-      const member = this.members[i]
-
-      const prompt = `You are a Council Member with expertise in your domain.
+    // 并行让每个成员提出选项
+    const promptTemplate = (index: number) => `You are a Council Member with expertise in your domain.
 
 **Decision Topic**: ${topic}
 
@@ -296,13 +291,15 @@ RISKS:
 - risk 1
 EFFORT: <low/medium/high>`
 
-      const response = await member.run(prompt)
+    // 并行执行所有成员的选项生成
+    const responses = await Promise.all(
+      this.members.map((member, i) => member.run(promptTemplate(i)))
+    )
 
-      const option = this.parseOption(response, `member-${i}`)
-      if (option) {
-        options.push(option)
-      }
-    }
+    // 解析所有响应
+    const options = responses
+      .map((response, i) => this.parseOption(response, `member-${i}`))
+      .filter((option): option is DecisionOption => option !== null)
 
     // Speaker 可能添加一个综合选项
     if (options.length > 1) {
@@ -324,18 +321,18 @@ EFFORT: <low/medium/high>`
     options: DecisionOption[],
     previousRounds: DiscussionRound[]
   ): Promise<DiscussionRound> {
-    const opinions: DiscussionRound["opinions"] = []
+    // 并行让每个成员发表意见
+    const responses = await Promise.all(
+      this.members.map((member, i) => {
+        const prompt = this.buildDiscussionPrompt(round, topic, options, previousRounds, i)
+        return member.run(prompt)
+      })
+    )
 
-    // 让每个成员对当前选项发表意见
-    for (let i = 0; i < this.members.length; i++) {
-      const member = this.members[i]
-
-      const prompt = this.buildDiscussionPrompt(round, topic, options, previousRounds, i)
-
-      const response = await member.run(prompt)
-      const opinion = this.parseOpinion(response, `member-${i}`)
-      opinions.push(opinion)
-    }
+    // 解析所有意见
+    const opinions = responses.map((response, i) =>
+      this.parseOpinion(response, `member-${i}`)
+    )
 
     // Speaker 总结本轮讨论
     const summary = await this.summarizeRound(round, opinions, options)
