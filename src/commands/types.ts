@@ -1,4 +1,5 @@
 import type { Agent } from "../agent.js"
+import type { TeamConfig, TeamStatus } from "../teams/index.js"
 
 /**
  * Command execution context
@@ -10,6 +11,14 @@ export interface CommandContext {
   exit: () => void
   updateContextUsage: () => void
   showSessionList?: () => void
+  /** Current team mode (if enabled) */
+  teamMode?: string
+  /** Team configuration */
+  teamConfig?: TeamConfig
+  /** Team execution status */
+  teamStatus?: TeamStatus
+  /** Set team mode */
+  setTeamMode?: (mode: string | null) => void
 }
 
 /**

@@ -12,11 +12,17 @@ import * as fs from "fs"
 
 // 从 settings.json 加载配置
 import type { MCPGlobalConfig } from "./mcp/config.js"
+import type { TeamMode, TeamConfig } from "./teams/index.js"
 
 interface SettingsConfig {
   env?: Record<string, string>
   timeout?: number
   mcp?: MCPGlobalConfig
+  team?: {
+    mode?: TeamMode
+    budget?: number
+    maxIterations?: number
+  }
 }
 
 function loadSettings(): SettingsConfig {
@@ -164,6 +170,39 @@ function formatSessionList(
   return lines.join("\n")
 }
 
+/**
+ * 创建团队配置
+ */
+function createTeamConfig(
+  mode: TeamMode,
+  budgetUsd: number,
+  maxIterations: number
+): TeamConfig {
+  return {
+    mode,
+    agents: [
+      { role: "worker", model: "default", reuseInstance: true },
+      { role: "reviewer", model: "default", reuseInstance: true },
+    ],
+    maxIterations,
+    timeoutMs: 300000, // 5 minutes
+    budget: {
+      maxTokens: 1000000,
+      maxCostUsd: budgetUsd,
+    },
+    qualityGate: {
+      testsMustPass: true,
+      noP0Issues: true,
+    },
+    circuitBreaker: {
+      maxConsecutiveFailures: 3,
+      maxNoProgressRounds: 2,
+      cooldownMs: 60000,
+    },
+    conflictResolution: "auto",
+  }
+}
+
 const program = new Command()
 
 program
@@ -179,6 +218,9 @@ program
   .option("--no-stream", "Disable streaming output")
   .option("--compression-threshold <number>", "Context compression threshold (0-1)", "0.92")
   .option("--list-sessions", "List all sessions with metadata")
+  .option("--team <mode>", "Enable team mode (worker-reviewer, planner-executor-reviewer)")
+  .option("--team-budget <usd>", "Team budget in USD", "1.0")
+  .option("--team-max-iterations <n>", "Max iterations for team mode", "3")
   .action(async (options) => {
     const dbPath = path.join(os.homedir(), ".lite-opencode", "history.db")
 
@@ -235,6 +277,35 @@ program
     // 初始化 MCP
     await agent.initializeMCP()
 
+    // 处理 Team 模式配置
+    let teamConfig: TeamConfig | undefined
+    let teamMode: string | undefined
+
+    // 优先级：CLI > settings.json
+    const teamModeValue = options.team || settings.team?.mode
+    if (teamModeValue) {
+      const validModes: TeamMode[] = [
+        "worker-reviewer",
+        "planner-executor-reviewer",
+        "leader-workers",
+        "hotfix-guardrail",
+        "council",
+      ]
+      if (!validModes.includes(teamModeValue)) {
+        console.error(`Error: Invalid team mode "${teamModeValue}". Valid modes: ${validModes.join(", ")}`)
+        process.exit(1)
+      }
+
+      const budget = parseFloat(options.teamBudget || String(settings.team?.budget || "1.0"))
+      const maxIterations = parseInt(
+        options.teamMaxIterations || String(settings.team?.maxIterations || "3"),
+        10
+      )
+
+      teamConfig = createTeamConfig(teamModeValue, budget, maxIterations)
+      teamMode = teamModeValue
+    }
+
     // 渲染 Ink 应用
     // 注意: 不使用 incrementalRendering，因为与 Spinner 动画不兼容
     // Static 组件已经处理历史消息的滚动
@@ -248,6 +319,8 @@ program
         dbPath={dbPath}
         isResumed={!isNewSession}
         resumedSessionTitle={resumedSession?.title}
+        teamMode={teamMode}
+        teamConfig={teamConfig}
       />
     )
   })

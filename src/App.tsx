@@ -10,6 +10,7 @@ import { Session, SessionStore } from "./session/index.js"
 import type { CommandContext, PermissionRequest, PermissionDecision } from "./commands/types.js"
 import type { ToolCall } from "./types.js"
 import type { PolicyDecision } from "./policy.js"
+import type { TeamConfig, TeamStatus } from "./teams/index.js"
 import { getPlanFilePath, readPlanFile, exitPlanMode } from "./plan/manager.js"
 import { buildNewSessionPrompt, buildContinueSessionPrompt } from "./plan/handover.js"
 
@@ -36,6 +37,8 @@ interface Props {
   dbPath: string
   isResumed?: boolean
   resumedSessionTitle?: string
+  teamMode?: string
+  teamConfig?: TeamConfig
 }
 
 interface Message {
@@ -152,7 +155,7 @@ function MessageItem({ message }: MessageItemProps) {
 // 主组件
 // ============================================================================
 
-export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isResumed, resumedSessionTitle }: Props) {
+export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isResumed, resumedSessionTitle, teamMode: initialTeamMode, teamConfig }: Props) {
   const { exit } = useApp()
   const { stdout } = useStdout()
 
@@ -183,6 +186,10 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       total: status.length,
     }
   })
+
+  // Team 模式状态
+  const [teamMode, setTeamMode] = useState<string | null>(initialTeamMode || null)
+  const [teamStatus, setTeamStatus] = useState<TeamStatus | null>(null)
 
   // =========================================================================
   // Session 恢复和历史消息加载
@@ -508,8 +515,12 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       exit,
       updateContextUsage,
       showSessionList: handleShowSessionList,
+      teamMode: teamMode || undefined,
+      teamConfig,
+      teamStatus: teamStatus || undefined,
+      setTeamMode: (mode: string | null) => setTeamMode(mode),
     }),
-    [agent, setMessages, exit, updateContextUsage, handleShowSessionList]
+    [agent, setMessages, exit, updateContextUsage, handleShowSessionList, teamMode, teamConfig, teamStatus]
   )
 
   // =========================================================================
@@ -811,6 +822,12 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
             </Text>
             <Text dimColor> ({contextStatus.usedK}K / {contextStatus.limitK}K)</Text>
             <Text dimColor> | {modelDisplayName}</Text>
+            {teamMode && (
+              <Text color="cyan" bold> 👥 TEAM:{teamMode.toUpperCase().replace("-", "_")}</Text>
+            )}
+            {teamConfig && (
+              <Text dimColor> [Iter {teamConfig.maxIterations}]</Text>
+            )}
             {agent.isYoloMode() && <Text color="yellow" bold> 🚀 YOLO</Text>}
             {agent.isPlanMode() && <Text color="magenta" bold> 📋 PLAN</Text>}
             {mcpStatus.total > 0 && (

@@ -59,3 +59,14 @@ export {
 // 协作模式
 export { WorkerReviewerTeam } from "./modes/worker-reviewer.js"
 export { PlannerExecutorReviewerTeam } from "./modes/planner-executor-reviewer.js"
+
+// 降级机制
+export {
+  executeWithFallback,
+  generateRecoveryPrompt,
+  shouldFallback,
+  formatFailureReport,
+  type TeamFailureReport,
+  type FallbackResult,
+  type FallbackConfig,
+} from "./fallback.js"

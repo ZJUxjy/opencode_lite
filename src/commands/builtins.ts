@@ -71,6 +71,7 @@ const helpCommand: Command = {
   /yolo         - Toggle YOLO mode (auto-approve all)
   /sessions, /resume  - Show session list and switch sessions
   /skills       - List and manage skills
+  /team         - Manage team mode (status, off, worker-reviewer, etc.)
 ${mcpText}
 Current status:
   YOLO Mode: ${yoloStatus}
@@ -398,6 +399,158 @@ To configure MCP servers, add to your settings.json:
 }
 
 /**
+ * Team command - manage team mode
+ */
+const teamCommand: Command = {
+  name: "/team",
+  description: "Manage team mode (status, on, off)",
+  handler: (args: string, ctx: CommandContext) => {
+    const subCommand = args.trim().toLowerCase()
+
+    // /team status - 显示当前团队状态
+    if (subCommand === "" || subCommand === "status") {
+      const lines: string[] = []
+
+      if (!ctx.teamMode) {
+        lines.push(`# Team Mode: OFF`)
+        lines.push(``)
+        lines.push(`Team mode is currently disabled.`)
+        lines.push(``)
+        lines.push(`To enable, use:`)
+        lines.push(`  /team worker-reviewer`)
+        lines.push(`  /team planner-executor-reviewer`)
+      } else {
+        lines.push(`# Team Mode: ${ctx.teamMode.toUpperCase()}`)
+        lines.push(``)
+
+        if (ctx.teamConfig) {
+          lines.push(`## Configuration`)
+          lines.push(``)
+          lines.push(`- **Mode**: ${ctx.teamConfig.mode}`)
+          lines.push(`- **Max Iterations**: ${ctx.teamConfig.maxIterations}`)
+          if (ctx.teamConfig.budget?.maxCostUsd) {
+            lines.push(`- **Budget**: $${ctx.teamConfig.budget.maxCostUsd}`)
+          }
+          lines.push(``)
+        }
+
+        if (ctx.teamStatus) {
+          lines.push(`## Status`)
+          lines.push(``)
+          lines.push(`- **State**: ${ctx.teamStatus}`)
+        }
+
+        lines.push(``)
+        lines.push(`To disable: /team off`)
+        lines.push(`To switch mode: /team <mode>`)
+      }
+
+      const message = createSystemMessage(lines.join("\n"))
+      ctx.setMessages((prev) => [...prev, message])
+      return
+    }
+
+    // /team off - 禁用团队模式
+    if (subCommand === "off") {
+      if (ctx.setTeamMode) {
+        ctx.setTeamMode(null)
+        const message = createSystemMessage(`👥 Team mode disabled. Running in single agent mode.`)
+        ctx.setMessages((prev) => [...prev, message])
+      } else {
+        const message = createSystemMessage(`⚠️ Cannot disable team mode in this context`)
+        ctx.setMessages((prev) => [...prev, message])
+      }
+      return
+    }
+
+    // /team worker-reviewer - 切换到 worker-reviewer 模式
+    if (subCommand === "worker-reviewer") {
+      if (ctx.setTeamMode) {
+        ctx.setTeamMode("worker-reviewer")
+        const message = createSystemMessage(
+          `👥 Team mode enabled: **worker-reviewer**\n\n` +
+          `Two agents will collaborate:\n` +
+          `- **Worker**: Implements the solution\n` +
+          `- **Reviewer**: Reviews and validates the work\n\n` +
+          `Max iterations: ${ctx.teamConfig?.maxIterations || 3}`
+        )
+        ctx.setMessages((prev) => [...prev, message])
+      } else {
+        const message = createSystemMessage(
+          `⚠️ Cannot change team mode in this context.\n\n` +
+          `To use team mode, restart with:\n` +
+          `  lite-opencode --team worker-reviewer`
+        )
+        ctx.setMessages((prev) => [...prev, message])
+      }
+      return
+    }
+
+    // /team planner-executor-reviewer - 切换到 planner-executor-reviewer 模式
+    if (subCommand === "planner-executor-reviewer") {
+      if (ctx.setTeamMode) {
+        ctx.setTeamMode("planner-executor-reviewer")
+        const message = createSystemMessage(
+          `👥 Team mode enabled: **planner-executor-reviewer**\n\n` +
+          `Three agents will collaborate:\n` +
+          `- **Planner**: Creates the implementation plan\n` +
+          `- **Executor**: Implements the plan\n` +
+          `- **Reviewer**: Reviews and validates the work\n\n` +
+          `Max iterations: ${ctx.teamConfig?.maxIterations || 3}`
+        )
+        ctx.setMessages((prev) => [...prev, message])
+      } else {
+        const message = createSystemMessage(
+          `⚠️ Cannot change team mode in this context.\n\n` +
+          `To use team mode, restart with:\n` +
+          `  lite-opencode --team planner-executor-reviewer`
+        )
+        ctx.setMessages((prev) => [...prev, message])
+      }
+      return
+    }
+
+    // /team stats - 显示执行统计
+    if (subCommand === "stats") {
+      const lines: string[] = []
+      lines.push(`# Team Execution Statistics`)
+      lines.push(``)
+
+      if (!ctx.teamMode) {
+        lines.push(`Team mode is not enabled.`)
+      } else if (ctx.teamConfig) {
+        lines.push(`**Mode**: ${ctx.teamConfig.mode}`)
+        lines.push(`**Max Iterations**: ${ctx.teamConfig.maxIterations}`)
+        if (ctx.teamConfig.budget) {
+          lines.push(`**Budget**: $${ctx.teamConfig.budget.maxCostUsd || 0}`)
+        }
+        lines.push(`**Timeout**: ${ctx.teamConfig.timeoutMs / 1000}s`)
+        lines.push(``)
+        lines.push(`## Quality Gate`)
+        lines.push(`- Tests must pass: ${ctx.teamConfig.qualityGate.testsMustPass ? "✓" : "✗"}`)
+        lines.push(`- No P0 issues: ${ctx.teamConfig.qualityGate.noP0Issues ? "✓" : "✗"}`)
+      }
+
+      const message = createSystemMessage(lines.join("\n"))
+      ctx.setMessages((prev) => [...prev, message])
+      return
+    }
+
+    // 未知子命令
+    const message = createSystemMessage(
+      `⚠️ Unknown team command: ${subCommand}\n\n` +
+      `Available commands:\n` +
+      `  /team status           - Show team status\n` +
+      `  /team off              - Disable team mode\n` +
+      `  /team worker-reviewer  - Enable worker-reviewer mode\n` +
+      `  /team planner-executor-reviewer - Enable planner-executor-reviewer mode\n` +
+      `  /team stats            - Show team statistics`
+    )
+    ctx.setMessages((prev) => [...prev, message])
+  },
+}
+
+/**
  * All builtin commands
  * Exported as array for easy registration in CommandRegistry
  */
@@ -412,4 +565,5 @@ export const builtinCommands: Command[] = [
   sessionsCommand,
   skillsCommand,
   mcpCommand,
+  teamCommand,
 ]
