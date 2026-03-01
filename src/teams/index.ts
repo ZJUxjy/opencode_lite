@@ -102,3 +102,15 @@ export {
   CheckpointStore,
   type Checkpoint,
 } from "./checkpoint-store.js"
+
+// Team 会话存储
+export {
+  TeamSessionStore,
+  formatTeamStatus,
+  formatTeamMode,
+  type TeamSession,
+  type TeamAgentRecord,
+  type TeamSessionStats,
+  type AgentMessageTrace,
+  type CheckpointIndex,
+} from "./team-session-store.js"

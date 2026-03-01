@@ -12,7 +12,8 @@ import * as fs from "fs"
 
 // 从 settings.json 加载配置
 import type { MCPGlobalConfig } from "./mcp/config.js"
-import type { TeamMode, TeamConfig } from "./teams/index.js"
+import type { TeamMode, TeamConfig, TeamAgentRecord } from "./teams/index.js"
+import { TeamSessionStore } from "./teams/index.js"
 
 interface SettingsConfig {
   env?: Record<string, string>
@@ -280,6 +281,7 @@ program
     // 处理 Team 模式配置
     let teamConfig: TeamConfig | undefined
     let teamMode: string | undefined
+    let teamSessionStore: TeamSessionStore | undefined
 
     // 优先级：CLI > settings.json
     const teamModeValue = options.team || settings.team?.mode
@@ -304,6 +306,22 @@ program
 
       teamConfig = createTeamConfig(teamModeValue, budget, maxIterations)
       teamMode = teamModeValue
+
+      // 创建 TeamSessionStore 实例
+      teamSessionStore = new TeamSessionStore(dbPath)
+
+      // 创建 Team 会话记录
+      const agents: TeamAgentRecord[] = teamConfig.agents.map((a, i) => ({
+        id: `${a.role}-${i}`,
+        role: a.role,
+        model: a.model,
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 0,
+        status: "idle" as const,
+      }))
+
+      teamSessionStore.createTeamSession(sessionId, teamModeValue, agents)
     }
 
     // 渲染 Ink 应用
@@ -321,6 +339,7 @@ program
         resumedSessionTitle={resumedSession?.title}
         teamMode={teamMode}
         teamConfig={teamConfig}
+        teamSessionStore={teamSessionStore}
       />
     )
   })

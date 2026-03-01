@@ -11,6 +11,7 @@ import type { CommandContext, PermissionRequest, PermissionDecision } from "./co
 import type { ToolCall } from "./types.js"
 import type { PolicyDecision } from "./policy.js"
 import type { TeamConfig, TeamStatus } from "./teams/index.js"
+import { TeamSessionStore as TeamSessionStoreClass } from "./teams/index.js"
 import { getPlanFilePath, readPlanFile, exitPlanMode } from "./plan/manager.js"
 import { buildNewSessionPrompt, buildContinueSessionPrompt } from "./plan/handover.js"
 
@@ -39,6 +40,7 @@ interface Props {
   resumedSessionTitle?: string
   teamMode?: string
   teamConfig?: TeamConfig
+  teamSessionStore?: TeamSessionStoreClass
 }
 
 interface Message {
@@ -155,7 +157,7 @@ function MessageItem({ message }: MessageItemProps) {
 // 主组件
 // ============================================================================
 
-export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isResumed, resumedSessionTitle, teamMode: initialTeamMode, teamConfig }: Props) {
+export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isResumed, resumedSessionTitle, teamMode: initialTeamMode, teamConfig, teamSessionStore }: Props) {
   const { exit } = useApp()
   const { stdout } = useStdout()
 
