@@ -207,6 +207,7 @@ export {
   type HealthStatus,
   type ParallelConfig,
   type ParallelTaskResult,
+  type PlanModeConfig,
 } from "./ralph-loop.js"
 
 // 扩展思考预算

@@ -62,6 +62,18 @@ export interface ParallelConfig {
 }
 
 /**
+ * Plan Mode 配置
+ */
+export interface PlanModeConfig {
+  /** 是否启用 */
+  enabled: boolean
+  /** 批量规划任务数 */
+  batchSize: number
+  /** 是否自动批准计划 */
+  autoApprove: boolean
+}
+
+/**
  * Ralph Loop 配置
  */
 export interface RalphLoopConfig {
@@ -97,6 +109,10 @@ export interface RalphLoopConfig {
   parallelWorkers: number
   /** 是否启用 worktree 隔离 */
   worktreeEnabled: boolean
+  /** 是否在执行前先生成计划 */
+  planFirst: boolean
+  /** 批量规划的任务数 */
+  planBatchSize: number
 }
 
 /**
@@ -118,6 +134,8 @@ export const DEFAULT_RALPH_CONFIG: RalphLoopConfig = {
   heartbeatInterval: 0,
   parallelWorkers: 1,
   worktreeEnabled: false,
+  planFirst: false,
+  planBatchSize: 5,
 }
 
 /**
@@ -387,6 +405,36 @@ export class RalphLoop {
   }
 
   /**
+   * 为任务生成计划
+   */
+  private async generatePlanForTask(task: TaskDefinition): Promise<string> {
+    const planPrompt = `Generate a plan for the following task:
+
+## Task
+${task.description}
+
+## Requirements
+- Break down the task into clear steps
+- Identify potential risks or edge cases
+- Suggest the best approach
+
+Output the plan in markdown format.`
+
+    const plan = await this.agent.run(planPrompt)
+
+    // Save plan to file
+    const planDir = path.resolve(this.config.cwd, ".agent-teams", "plans")
+    if (!fs.existsSync(planDir)) {
+      fs.mkdirSync(planDir, { recursive: true })
+    }
+
+    const planFile = path.join(planDir, `${task.id}-plan.md`)
+    fs.writeFileSync(planFile, plan, "utf-8")
+
+    return plan
+  }
+
+  /**
    * 执行单个任务
    */
   private async executeTask(task: TaskDefinition): Promise<TaskExecutionResult> {
@@ -397,6 +445,16 @@ export class RalphLoop {
     // 标记任务为进行中
     this.progressManager.updateTaskStatus(task.id, "in_progress")
 
+    // Generate plan if planFirst is enabled
+    let plan: string | null = null
+    if (this.config.planFirst) {
+      plan = await this.generatePlanForTask(task)
+    }
+
+    const taskPrompt = plan
+      ? `${task.description}\n\n## Plan\n${plan}`
+      : task.description
+
     do {
       if (this.teamConfig) {
         // 使用 Team 模式执行
@@ -405,10 +463,10 @@ export class RalphLoop {
           teamConfig: this.teamConfig,
           sessionId: `ralph-${task.id}-${Date.now()}`,
         })
-        result = await executor.execute(task.description)
+        result = await executor.execute(taskPrompt)
       } else {
         // 使用单 Agent 执行
-        const response = await this.agent.run(task.description)
+        const response = await this.agent.run(taskPrompt)
         result = {
           status: "success",
           summary: response,
