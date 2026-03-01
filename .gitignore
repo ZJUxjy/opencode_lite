@@ -5,3 +5,6 @@ dist/
 settings.json
 # User skills (built-in skills in ./skills/ are tracked)
 # ~/.lite-opencode/skills/ is user-specific
+
+# Agent Teams artifacts
+.agent-teams/
