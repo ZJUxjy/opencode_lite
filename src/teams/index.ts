@@ -82,3 +82,7 @@ export type { EvaluationDimension, EvaluationRubric, EvaluationResult, Dimension
 // Progress Store
 export { ProgressStore } from "./progress-store.js"
 export type { ProgressStoreOptions } from "./progress-store.js"
+
+// Worktree Isolation
+export { WorktreeIsolation, createWorktreeIsolation } from "./worktree-isolation.js"
+export type { WorktreeIsolationOptions, WorktreeHandle } from "./worktree-isolation.js"

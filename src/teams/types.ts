@@ -51,6 +51,18 @@ export interface TeamAgentConfig {
   systemPrompt?: string
 }
 
+/**
+ * 思考预算配置 - 控制扩展思考 (Extended Thinking)
+ *
+ * 来源: Anthropic 的 "thinking budget" 机制
+ * 用途: 为 Planner/Leader 角色启用扩展思考，Worker 可禁用以节省成本
+ */
+export interface ThinkingBudget {
+  enabled: boolean
+  maxThinkingTokens: number  // 思考阶段最大 token
+  outputThinkingProcess: boolean  // 是否输出思考过程
+}
+
 export interface BudgetConfig {
   maxTokens: number
   maxCostUsd?: number
@@ -83,6 +95,8 @@ export interface TeamConfig {
   // 检查点配置
   checkpointEnabled?: boolean
   checkpointDir?: string
+  // 思考预算配置
+  thinkingBudget?: ThinkingBudget
 }
 
 // ============================================================================

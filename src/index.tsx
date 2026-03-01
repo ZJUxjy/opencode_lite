@@ -6,6 +6,9 @@ import { Agent } from "./agent.js"
 import { MessageStore } from "./store.js"
 import { SessionStore, formatRelativeTime, type Session } from "./session/index.js"
 import { App } from "./App.js"
+import { TeamManager } from "./teams/manager.js"
+import { CheckpointStore } from "./teams/checkpoint-store.js"
+import { TeamBenchmark } from "./teams/benchmark.js"
 import * as path from "path"
 import * as os from "os"
 import * as fs from "fs"
@@ -182,6 +185,12 @@ program
   .option("-t, --team <mode>", "Team mode: worker-reviewer, planner-executor-reviewer, leader-workers, hotfix-guardrail, council")
   .option("--team-strategy <strategy>", "Leader-Workers strategy: collaborative, competitive")
   .option("--team-workers <number>", "Number of workers for leader-workers mode", "3")
+  .option("--team-resume <checkpoint-id>", "Resume from a checkpoint")
+  .option("--team-benchmark", "Run benchmark tests for team modes")
+  .option("--team-benchmark-samples <number>", "Number of benchmark samples", "10")
+  .option("--team-benchmark-modes <modes>", "Comma-separated team modes to benchmark")
+  .option("--team-ralph", "Run Ralph continuous loop mode")
+  .option("--team-ralph-task-file <path>", "Task file for Ralph loop (default: TASKS.md)")
   .action(async (options) => {
     const dbPath = path.join(os.homedir(), ".lite-opencode", "history.db")
 
@@ -220,6 +229,68 @@ program
     const apiKey = getConfig(undefined, "ANTHROPIC_AUTH_TOKEN", settings, process.env.ANTHROPIC_API_KEY || "")
     const timeoutStr = getConfig(undefined, "API_TIMEOUT_MS", settings, "120000")
     const timeout = parseInt(timeoutStr, 10)
+
+    // 处理 Team Resume 模式
+    if (options.teamResume) {
+      const checkpointId = options.teamResume
+      const teamConfig = {
+        mode: (options.team || "worker-reviewer") as any,
+        agents: [],
+        maxIterations: 10,
+        timeoutMs: timeout,
+        qualityGate: { testsMustPass: false, noP0Issues: false },
+        circuitBreaker: { maxConsecutiveFailures: 3, maxNoProgressRounds: 5, cooldownMs: 60000 },
+        conflictResolution: "auto" as const,
+        checkpointEnabled: true,
+        checkpointDir: ".agent-teams/checkpoints",
+      }
+
+      const manager = new TeamManager(teamConfig)
+      const result = await manager.resumeFromCheckpoint(checkpointId, "skip-completed")
+
+      if (result.success) {
+        console.log("✓ Resume successful")
+        process.exit(0)
+      } else {
+        console.error("✗ Resume failed:", result.error)
+        process.exit(1)
+      }
+    }
+
+    // 处理 Team Benchmark 模式
+    if (options.teamBenchmark) {
+      const samples = parseInt(options.teamBenchmarkSamples, 10)
+      const modes = options.teamBenchmarkModes
+        ? options.teamBenchmarkModes.split(",")
+        : ["worker-reviewer", "leader-workers"]
+
+      console.log(`Running benchmark with ${samples} samples on modes: ${modes.join(", ")}`)
+      console.log("\nNote: Benchmark requires agent executor injection")
+      console.log("Use TeamBenchmark class programmatically for full functionality:\n")
+      console.log(`  import { TeamBenchmark } from './teams/benchmark.js'`)
+      console.log(`  const benchmark = new TeamBenchmark()`)
+      console.log(`  await benchmark.runBenchmark({ tasks, teamConfig, baselineConfig })`)
+      process.exit(0)
+    }
+
+    // 处理 Team Ralph 循环模式
+    if (options.teamRalph) {
+      const taskFile = options.teamRalphTaskFile || "TASKS.md"
+
+      if (!fs.existsSync(taskFile)) {
+        console.error(`Error: Task file not found: ${taskFile}`)
+        process.exit(1)
+      }
+
+      const tasksContent = fs.readFileSync(taskFile, "utf-8")
+      console.log(`Running Ralph loop with tasks from: ${taskFile}`)
+      console.log("Note: Ralph loop requires agent executor injection")
+
+      // Ralph 循环需要在 Agent 上下文中运行
+      // 这里只是打印信息，实际执行需要通过 Agent
+      console.log("\nTo run Ralph loop, use --team ralph in interactive mode")
+      process.exit(0)
+    }
 
     const agent = new Agent(sessionId, {
       cwd: options.directory,
