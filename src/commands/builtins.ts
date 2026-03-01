@@ -398,6 +398,67 @@ To configure MCP servers, add to your settings.json:
 }
 
 /**
+ * Team command - shows Agent Teams status and configuration
+ */
+const teamCommand: Command = {
+  name: "/team",
+  description: "Show Agent Teams status and configuration",
+  handler: (_args: string, ctx: CommandContext) => {
+    // Check if teams are configured
+    const teamManager = ctx.agent.getTeamManager?.()
+
+    if (!teamManager) {
+      const message = createSystemMessage(
+        `No Agent Teams configured.
+
+To use Agent Teams, start with --team flag:
+  lite-opencode --team worker-reviewer
+
+Available modes (MVP):
+  worker-reviewer          - 2 agents: Worker implements, Reviewer reviews
+  planner-executor-reviewer - 3 agents: Planner clarifies, Executor implements, Reviewer validates
+
+Example:
+  lite-opencode --team worker-reviewer --objective "Refactor auth module" --scope "src/auth/*.ts"`
+      )
+      ctx.setMessages((prev) => [...prev, message])
+      return
+    }
+
+    const state = teamManager.getState()
+    const costStatus = teamManager.getCostStatus()
+    const progressStats = teamManager.getProgressStats()
+
+    const lines: string[] = []
+    lines.push(`# Agent Team: ${state.mode}`)
+    lines.push(``)
+    lines.push(`Status: ${state.status}`)
+    lines.push(`Iteration: ${state.currentIteration}`)
+    lines.push(``)
+
+    // Cost info
+    lines.push(`## Cost`)
+    lines.push(`  Tokens: ${costStatus.tokens.used.toLocaleString()} / ${costStatus.tokens.limit.toLocaleString()} (${costStatus.tokens.percentage.toFixed(1)}%)`)
+    if (costStatus.cost.limit) {
+      lines.push(`  Cost: $${costStatus.cost.used.toFixed(4)} / $${costStatus.cost.limit.toFixed(2)}`)
+    } else {
+      lines.push(`  Cost: $${costStatus.cost.used.toFixed(4)} (unlimited)`)
+    }
+    lines.push(``)
+
+    // Progress info
+    lines.push(`## Progress`)
+    lines.push(`  Rounds: ${progressStats.totalRounds}`)
+    lines.push(`  Code changes: ${progressStats.codeChanges} files`)
+    lines.push(`  Tests: ${progressStats.testsPassed} passed, ${progressStats.testsFailed} failed`)
+    lines.push(``)
+
+    const message = createSystemMessage(lines.join("\n"))
+    ctx.setMessages((prev) => [...prev, message])
+  },
+}
+
+/**
  * All builtin commands
  * Exported as array for easy registration in CommandRegistry
  */
@@ -412,4 +473,5 @@ export const builtinCommands: Command[] = [
   sessionsCommand,
   skillsCommand,
   mcpCommand,
+  teamCommand,
 ]

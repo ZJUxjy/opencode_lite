@@ -9,6 +9,7 @@ import { ReActRunner, type Strategy, type ReActEvents } from "./react/index.js"
 import { CompressionService, type CompressionLevel, type CompressionPreview, type CompressionResult } from "./compression.js"
 import { SkillRegistry, getSkillRegistry } from "./skills/index.js"
 import { MCPManager, type MCPManagerOptions } from "./mcp/manager.js"
+import { TeamManager, type TeamManagerOptions } from "./teams/team-manager.js"
 
 export interface AgentConfig {
   cwd: string
@@ -22,6 +23,8 @@ export interface AgentConfig {
   strategy?: Strategy
   /** MCP 配置 */
   mcp?: MCPManagerOptions
+  /** Agent Teams 配置 */
+  team?: TeamManagerOptions
 }
 
 export interface AgentEvents {
@@ -61,6 +64,7 @@ export class Agent {
   private compressionService: CompressionService
   private skillRegistry: SkillRegistry
   private mcpManager?: MCPManager
+  private teamManager?: TeamManager
   private sessionId: string
   private cwd: string
   private enableStream: boolean
@@ -96,6 +100,15 @@ export class Agent {
         enabled: config.mcp.enabled ?? true,
       })
       this.tools.setMCPManager(this.mcpManager)
+    }
+
+    // 初始化 Team Manager
+    if (config.team?.config) {
+      this.teamManager = new TeamManager({
+        config: config.team.config,
+        objective: config.team.objective,
+        fileScope: config.team.fileScope,
+      })
     }
 
     // 初始化 ReAct Runner
@@ -639,5 +652,26 @@ export class Agent {
       tools:
         state.status.type === "connected" ? state.status.tools?.length || 0 : 0,
     }))
+  }
+
+  // ==========================================================================
+  // Agent Teams 方法
+  // ==========================================================================
+
+  /**
+   * 获取 Team Manager
+   */
+  getTeamManager(): TeamManager | undefined {
+    return this.teamManager
+  }
+
+  /**
+   * 运行 Agent Team
+   */
+  async runTeam(): Promise<unknown> {
+    if (!this.teamManager) {
+      throw new Error("Team Manager not initialized")
+    }
+    return await this.teamManager.run()
   }
 }

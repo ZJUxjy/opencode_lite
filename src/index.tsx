@@ -12,6 +12,7 @@ import * as fs from "fs"
 
 // 从 settings.json 加载配置
 import type { MCPGlobalConfig } from "./mcp/config.js"
+import type { TeamManagerOptions } from "./teams/team-manager.js"
 
 interface SettingsConfig {
   env?: Record<string, string>
@@ -179,6 +180,9 @@ program
   .option("--no-stream", "Disable streaming output")
   .option("--compression-threshold <number>", "Context compression threshold (0-1)", "0.92")
   .option("--list-sessions", "List all sessions with metadata")
+  .option("--team <mode>", "Agent team mode (worker-reviewer, planner-executor-reviewer)")
+  .option("--objective <text>", "Team objective/task description")
+  .option("--scope <files>", "File scope for team (comma-separated patterns)")
   .action(async (options) => {
     const dbPath = path.join(os.homedir(), ".lite-opencode", "history.db")
 
@@ -218,6 +222,40 @@ program
     const timeoutStr = getConfig(undefined, "API_TIMEOUT_MS", settings, "120000")
     const timeout = parseInt(timeoutStr, 10)
 
+    // Parse team configuration if --team is specified
+    const teamConfig = options.team
+      ? {
+          config: {
+            mode: options.team as "worker-reviewer" | "planner-executor-reviewer",
+            agents:
+              options.team === "worker-reviewer"
+                ? [
+                    { role: "worker" as const, model },
+                    { role: "reviewer" as const, model },
+                  ]
+                : [
+                    { role: "planner" as const, model },
+                    { role: "executor" as const, model },
+                    { role: "reviewer" as const, model },
+                  ],
+            maxIterations: 3,
+            timeoutMs: 300000,
+            qualityGate: {
+              testsMustPass: true,
+              noP0Issues: true,
+            },
+            circuitBreaker: {
+              maxConsecutiveFailures: 3,
+              maxNoProgressRounds: 2,
+              cooldownMs: 60000,
+            },
+            conflictResolution: "auto" as const,
+          },
+          objective: options.objective,
+          fileScope: options.scope?.split(",") ?? [],
+        }
+      : undefined
+
     const agent = new Agent(sessionId, {
       cwd: options.directory,
       dbPath,
@@ -230,6 +268,7 @@ program
       enableStream: options.stream !== false,
       compressionThreshold: parseFloat(options.compressionThreshold),
       mcp: settings.mcp,
+      team: teamConfig,
     })
 
     // 初始化 MCP
