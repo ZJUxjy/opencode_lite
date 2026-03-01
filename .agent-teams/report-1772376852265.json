@@ -1,0 +1,647 @@
+{
+  "timestamp": 1772376852265,
+  "comparisons": [
+    {
+      "sampleId": "simple-001",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "simple-001",
+        "mode": "single-agent",
+        "success": false,
+        "duration": 25858.054245526975,
+        "tokens": 5890,
+        "cost": 0.01767,
+        "filesModified": [
+          "src/utils.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "simple-001",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 48838.870205013,
+        "tokens": 11312.5,
+        "cost": 0.0339375,
+        "filesModified": [
+          "src/utils.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -88.8729513105625,
+        "successRate": 100
+      }
+    },
+    {
+      "sampleId": "simple-002",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "simple-002",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 35652.76156520766,
+        "tokens": 5825,
+        "cost": 0.017475,
+        "filesModified": [
+          "src/agent.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "simple-002",
+        "mode": "worker-reviewer",
+        "success": false,
+        "duration": 51556.21974851392,
+        "tokens": 12207.5,
+        "cost": 0.0366225,
+        "filesModified": [
+          "src/agent.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -44.606525511970204,
+        "successRate": -100
+      }
+    },
+    {
+      "sampleId": "simple-003",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "simple-003",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 25753.6582052963,
+        "tokens": 5219,
+        "cost": 0.015657,
+        "filesModified": [
+          "src/config.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "simple-003",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 53883.28547697778,
+        "tokens": 12945,
+        "cost": 0.038835,
+        "filesModified": [
+          "src/config.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -109.2257536674792,
+        "successRate": 0
+      }
+    },
+    {
+      "sampleId": "simple-004",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "simple-004",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 34090.509213590136,
+        "tokens": 4417,
+        "cost": 0.013251,
+        "filesModified": [
+          "src/utils.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "simple-004",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 36748.745158940495,
+        "tokens": 11297.5,
+        "cost": 0.0338925,
+        "filesModified": [
+          "src/utils.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -7.797583569947548,
+        "successRate": 0
+      }
+    },
+    {
+      "sampleId": "simple-005",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "simple-005",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 35919.800518334625,
+        "tokens": 5747,
+        "cost": 0.017241,
+        "filesModified": [
+          "src/types.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "simple-005",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 39279.54427774619,
+        "tokens": 10702.5,
+        "cost": 0.032107500000000004,
+        "filesModified": [
+          "src/types.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -9.353458847012917,
+        "successRate": 0
+      }
+    },
+    {
+      "sampleId": "medium-001",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "medium-001",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 88576.29687511691,
+        "tokens": 14160,
+        "cost": 0.042480000000000004,
+        "filesModified": [
+          "src/cache.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "medium-001",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 109934.50066486755,
+        "tokens": 32885,
+        "cost": 0.098655,
+        "filesModified": [
+          "src/cache.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -24.11277570100206,
+        "successRate": 0
+      }
+    },
+    {
+      "sampleId": "medium-002",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "medium-002",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 74769.82803787726,
+        "tokens": 15295,
+        "cost": 0.045885,
+        "filesModified": [
+          "src/rate-limiter.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "medium-002",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 155231.78165550195,
+        "tokens": 30770,
+        "cost": 0.09231,
+        "filesModified": [
+          "src/rate-limiter.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -107.61286434531303,
+        "successRate": 0
+      }
+    },
+    {
+      "sampleId": "medium-003",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "medium-003",
+        "mode": "single-agent",
+        "success": false,
+        "duration": 89796.54238769341,
+        "tokens": 14090,
+        "cost": 0.04227,
+        "filesModified": [
+          "src/events.ts"
+        ],
+        "validationPassed": false
+      },
+      "team": {
+        "sampleId": "medium-003",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 152374.88107147074,
+        "tokens": 38187.5,
+        "cost": 0.1145625,
+        "filesModified": [
+          "src/events.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -69.68902924301645,
+        "successRate": 100
+      }
+    },
+    {
+      "sampleId": "complex-001",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "complex-001",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 149441.18349511633,
+        "tokens": 27693,
+        "cost": 0.083079,
+        "filesModified": [
+          "src/promise-pool.ts"
+        ],
+        "validationPassed": false
+      },
+      "team": {
+        "sampleId": "complex-001",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 241245.68910699675,
+        "tokens": 82745,
+        "cost": 0.248235,
+        "filesModified": [
+          "src/promise-pool.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -61.43186467395753,
+        "successRate": 0
+      }
+    },
+    {
+      "sampleId": "complex-002",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "complex-002",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 151702.76598014613,
+        "tokens": 25470,
+        "cost": 0.07641,
+        "filesModified": [
+          "src/di.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "complex-002",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 303857.3954361193,
+        "tokens": 71005,
+        "cost": 0.213015,
+        "filesModified": [
+          "src/di.ts"
+        ],
+        "validationPassed": false
+      },
+      "improvement": {
+        "duration": -100.29786106595193,
+        "successRate": 0
+      }
+    },
+    {
+      "sampleId": "simple-006",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "simple-006",
+        "mode": "single-agent",
+        "success": false,
+        "duration": 25377.788611296408,
+        "tokens": 5092,
+        "cost": 0.015276,
+        "filesModified": [
+          "src/utils.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "simple-006",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 46873.540069948824,
+        "tokens": 13730,
+        "cost": 0.041190000000000004,
+        "filesModified": [
+          "src/utils.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -84.70301249606918,
+        "successRate": 100
+      }
+    },
+    {
+      "sampleId": "simple-007",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "simple-007",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 32149.562812278204,
+        "tokens": 5627,
+        "cost": 0.016881,
+        "filesModified": [
+          "src/utils.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "simple-007",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 50739.75851881888,
+        "tokens": 12340,
+        "cost": 0.037020000000000004,
+        "filesModified": [
+          "src/utils.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -57.824101108587755,
+        "successRate": 0
+      }
+    },
+    {
+      "sampleId": "simple-008",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "simple-008",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 32457.563921324858,
+        "tokens": 5860,
+        "cost": 0.017580000000000002,
+        "filesModified": [
+          "src/utils.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "simple-008",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 51561.37287564375,
+        "tokens": 11812.5,
+        "cost": 0.035437500000000004,
+        "filesModified": [
+          "src/utils.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -58.85780276247888,
+        "successRate": 0
+      }
+    },
+    {
+      "sampleId": "medium-004",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "medium-004",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 97502.09737693197,
+        "tokens": 17577,
+        "cost": 0.052731,
+        "filesModified": [
+          "src/utils.ts"
+        ],
+        "validationPassed": false
+      },
+      "team": {
+        "sampleId": "medium-004",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 127419.8244451496,
+        "tokens": 37930,
+        "cost": 0.11379,
+        "filesModified": [
+          "src/utils.ts"
+        ],
+        "validationPassed": false
+      },
+      "improvement": {
+        "duration": -30.68418821039215,
+        "successRate": 0
+      }
+    },
+    {
+      "sampleId": "medium-005",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "medium-005",
+        "mode": "single-agent",
+        "success": false,
+        "duration": 87352.02510000094,
+        "tokens": 16061,
+        "cost": 0.048183000000000004,
+        "filesModified": [
+          "src/utils.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "medium-005",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 125075.1091721854,
+        "tokens": 41537.5,
+        "cost": 0.1246125,
+        "filesModified": [
+          "src/utils.ts"
+        ],
+        "validationPassed": false
+      },
+      "improvement": {
+        "duration": -43.18512825432372,
+        "successRate": 100
+      }
+    },
+    {
+      "sampleId": "medium-006",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "medium-006",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 86673.49429392266,
+        "tokens": 17817,
+        "cost": 0.053451,
+        "filesModified": [
+          "src/object-pool.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "medium-006",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 132414.84183701646,
+        "tokens": 40315,
+        "cost": 0.120945,
+        "filesModified": [
+          "src/object-pool.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -52.77432035678417,
+        "successRate": 0
+      }
+    },
+    {
+      "sampleId": "complex-003",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "complex-003",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 156477.4950448565,
+        "tokens": 26083,
+        "cost": 0.078249,
+        "filesModified": [
+          "src/message-broker.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "complex-003",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 279788.0596084153,
+        "tokens": 89740,
+        "cost": 0.26922,
+        "filesModified": [
+          "src/message-broker.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -78.80402515915151,
+        "successRate": 0
+      }
+    },
+    {
+      "sampleId": "complex-004",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "complex-004",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 164077.17248438147,
+        "tokens": 31606,
+        "cost": 0.094818,
+        "filesModified": [
+          "src/state-machine.ts"
+        ],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "complex-004",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 255043.64061243186,
+        "tokens": 74812.5,
+        "cost": 0.2244375,
+        "filesModified": [
+          "src/state-machine.ts"
+        ],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -55.4412699528385,
+        "successRate": 0
+      }
+    },
+    {
+      "sampleId": "refactor-001",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "refactor-001",
+        "mode": "single-agent",
+        "success": true,
+        "duration": 90475.6919040355,
+        "tokens": 15222,
+        "cost": 0.045666,
+        "filesModified": [],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "refactor-001",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 109712.26854824316,
+        "tokens": 30625,
+        "cost": 0.091875,
+        "filesModified": [],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -21.261596611619442,
+        "successRate": 0
+      }
+    },
+    {
+      "sampleId": "refactor-002",
+      "mode": "worker-reviewer",
+      "singleAgent": {
+        "sampleId": "refactor-002",
+        "mode": "single-agent",
+        "success": false,
+        "duration": 77989.63907582896,
+        "tokens": 13802,
+        "cost": 0.041406,
+        "filesModified": [],
+        "validationPassed": true
+      },
+      "team": {
+        "sampleId": "refactor-002",
+        "mode": "worker-reviewer",
+        "success": true,
+        "duration": 115734.07547596074,
+        "tokens": 41702.5,
+        "cost": 0.1251075,
+        "filesModified": [],
+        "validationPassed": true
+      },
+      "improvement": {
+        "duration": -48.396731729240386,
+        "successRate": 100
+      }
+    }
+  ],
+  "summary": {
+    "totalSamples": 20,
+    "singleAgentSuccessRate": 75,
+    "teamSuccessRate": 95,
+    "averageImprovement": 20,
+    "totalCost": {
+      "singleAgent": 0.8356589999999999,
+      "team": 2.1258075000000005
+    }
+  }
+}
