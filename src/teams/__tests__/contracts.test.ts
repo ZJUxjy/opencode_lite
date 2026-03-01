@@ -17,6 +17,8 @@ import {
   createApprovalReview,
   createRejectionReview,
   createLooseContract,
+  toStrictContract,
+  toContextContract,
 } from "../contracts.js"
 
 describe("Contracts", () => {
@@ -300,6 +302,61 @@ describe("Contracts", () => {
 
       it("should throw on invalid data", () => {
         expect(() => validateContextContract({ invalid: true })).toThrow()
+      })
+    })
+  })
+
+  describe("Contract Adapters", () => {
+    describe("toStrictContract", () => {
+      it("should convert loose to strict contract", () => {
+        const loose = createLooseContract("task-001", "Add feature", {
+          references: ["src/feature.ts"],
+          validationHint: "npm test",
+        })
+
+        const strict = toStrictContract(loose)
+
+        expect(strict.taskId).toBe("task-001")
+        expect(strict.objective).toBe("Add feature")
+        expect(strict.fileScope).toContain("src/feature.ts")
+        expect(strict.acceptanceChecks).toContain("npm test")
+      })
+
+      it("should use embedded strict contract if present", () => {
+        const embeddedStrict = createDefaultTaskContract("task-001", "Test", ["src/a.ts"])
+        const loose = createLooseContract("task-001", "Different", {
+          references: ["src/b.ts"],
+        })
+        // @ts-expect-error - injecting strict contract
+        loose.strictContract = embeddedStrict
+
+        const strict = toStrictContract(loose)
+
+        expect(strict.fileScope).toContain("src/a.ts") // From embedded, not derived
+      })
+    })
+
+    describe("toContextContract", () => {
+      it("should convert strict to loose contract", () => {
+        const strict = createDefaultTaskContract("task-001", "Add feature", ["src/feature.ts"])
+
+        const loose = toContextContract(strict, {
+          background: "Feature needed for v2",
+        })
+
+        expect(loose.taskId).toBe("task-001")
+        expect(loose.objective).toBe("Add feature")
+        expect(loose.context.background).toBe("Feature needed for v2")
+        expect(loose.strictContract).toEqual(strict)
+      })
+
+      it("should use defaults when context not provided", () => {
+        const strict = createDefaultTaskContract("task-001", "Test")
+
+        const loose = toContextContract(strict)
+
+        expect(loose.context.background).toBe("No additional context provided")
+        expect(loose.context.constraints).toEqual([])
       })
     })
   })

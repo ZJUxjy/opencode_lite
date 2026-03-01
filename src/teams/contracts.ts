@@ -254,3 +254,73 @@ export function createLooseContract(
     },
   }
 }
+
+// ============================================================================
+// Contract Adapters
+// ============================================================================
+
+/**
+ * Contract adapter - convert loose ContextContract to strict TaskContract
+ */
+export function toStrictContract(context: ContextContract): TaskContract {
+  if (context.strictContract) {
+    return context.strictContract
+  }
+
+  // Derive strict contract from loose context
+  return {
+    taskId: context.taskId,
+    objective: context.objective,
+    fileScope: deriveFileScope(context),
+    acceptanceChecks: deriveAcceptanceChecks(context),
+  }
+}
+
+/**
+ * Contract adapter - convert strict TaskContract to loose ContextContract
+ */
+export function toContextContract(
+  contract: TaskContract,
+  context?: Partial<ContextContract["context"]>
+): ContextContract {
+  return {
+    taskId: contract.taskId,
+    objective: contract.objective,
+    context: {
+      background: context?.background || "No additional context provided",
+      constraints: context?.constraints || [],
+      references: contract.fileScope || [],
+    },
+    boundaries: {
+      mustNot: [],
+      shouldConsider: [],
+    },
+    expectedOutcome: {
+      intent: `Complete: ${contract.objective}`,
+      validationHint: `Run: ${contract.acceptanceChecks.join(", ")}`,
+    },
+    strictContract: contract,
+  }
+}
+
+/**
+ * Derive file scope from context references
+ */
+function deriveFileScope(context: ContextContract): string[] {
+  // Extract file references from context
+  return context.context.references.filter(ref =>
+    ref.includes("/") || ref.includes(".")
+  )
+}
+
+/**
+ * Derive acceptance checks from validation hint
+ */
+function deriveAcceptanceChecks(context: ContextContract): string[] {
+  // Derive checks from validation hint
+  const hint = context.expectedOutcome.validationHint.toLowerCase()
+  if (hint.includes("test")) return ["npm test"]
+  if (hint.includes("build")) return ["npm run build"]
+  if (hint.includes("lint")) return ["npm run lint"]
+  return ["npm test"]
+}
