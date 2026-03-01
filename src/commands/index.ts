@@ -1,6 +1,7 @@
 import { Fzf, type FzfResultItem } from "fzf"
 import type { Command } from "./types.js"
 import { builtinCommands } from "./builtins.js"
+import { teamCommand } from "./team.js"
 
 /**
  * CommandRegistry - Central command management system
@@ -18,6 +19,8 @@ class CommandRegistry {
   constructor() {
     // Register all builtin commands
     builtinCommands.forEach((cmd) => this.register(cmd))
+    // Register team command
+    this.register(teamCommand)
   }
 
   /**

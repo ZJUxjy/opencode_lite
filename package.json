@@ -17,6 +17,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^1.0.0",
     "@ai-sdk/openai": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "@types/react": "^19.2.14",
     "ai": "^4.0.0",
     "better-sqlite3": "^11.0.0",
