@@ -131,3 +131,49 @@ export {
   type FilesystemArtifact,
   type ArtifactStorageConfig,
 } from "./artifact-storage.js"
+
+// 评估 Rubric
+export {
+  RubricEvaluator,
+  DEFAULT_CODE_RUBRIC,
+  createDefaultEvaluator,
+  type EvaluationRubric,
+  type EvaluationDimension,
+  type DimensionScore,
+  type JudgementResult,
+  type ScoreLevel,
+} from "./evaluation-rubric.js"
+
+// 检查点恢复
+export {
+  CheckpointResumeManager,
+  createCheckpointResumeManager,
+  DEFAULT_RESUME_CONFIG,
+  type ResumeStrategy,
+  type ContextInjectionConfig,
+  type CheckpointResumeConfig,
+  type ResumeContext,
+} from "./checkpoint-resume.js"
+
+// 宽松上下文契约
+export {
+  ContextContractBuilder,
+  generateContextPrompt,
+  createContract,
+  createFeatureContract,
+  createBugFixContract,
+  type ContextContract,
+  type ContextReference,
+  type BoundaryConstraints,
+  type OutputExpectation,
+} from "./context-contract.js"
+
+// 进度文件持久化
+export {
+  ProgressFileManager,
+  createProgressManager,
+  type ProgressFile,
+  type ProgressTask,
+  type TaskStatus,
+  type TaskPriority,
+} from "./progress-file.js"

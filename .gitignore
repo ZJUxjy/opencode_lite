@@ -3,5 +3,7 @@ dist/
 *.log
 .DS_Store
 settings.json
+# Agent Teams generated output
+.agent-teams/
 # User skills (built-in skills in ./skills/ are tracked)
 # ~/.lite-opencode/skills/ is user-specific
