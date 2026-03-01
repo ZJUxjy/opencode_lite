@@ -599,3 +599,50 @@ export function validateReviewArtifact(data: unknown): ReviewArtifact {
 export function validateContextContract(data: unknown): ContextContract {
   return ContextContractSchema.parse(data)
 }
+
+// ============================================================================
+// Shared Blackboard (from kimi)
+// ============================================================================
+
+/**
+ * SharedBlackboard is the central state sharing and event notification system
+ * for multi-agent collaboration. Stores structured summaries only, not large raw content.
+ */
+export interface SharedBlackboard {
+  // State storage
+  get<T>(key: string): T | undefined
+  set<T>(key: string, value: T, updatedBy?: string): void
+  has(key: string): boolean
+  delete(key: string): boolean
+  keys(): string[]
+  snapshot(): Record<string, unknown>
+  restore(snapshot: Record<string, unknown>): void
+  clear(): void
+
+  // Event handling
+  emit<K extends keyof TeamEvents>(event: K, ...args: Parameters<TeamEvents[K]>): boolean
+  on<K extends keyof TeamEvents>(event: K, listener: TeamEvents[K]): void
+  off<K extends keyof TeamEvents>(event: K, listener: TeamEvents[K]): void
+  once<K extends keyof TeamEvents>(event: K, listener: TeamEvents[K]): void
+
+  // Message passing
+  postMessage(message: AgentMessage, from: string, to?: string): void
+  getMessages(filter?: {
+    from?: string
+    to?: string
+    type?: string
+  }): Array<{ message: AgentMessage; from: string; to?: string; timestamp: number }>
+  clearMessages(): void
+
+  // Contract helpers
+  setTaskContract(contract: TaskContract): void
+  getTaskContract(): TaskContract | undefined
+  setWorkArtifact(agentId: string, artifact: WorkArtifact): void
+  getWorkArtifact(agentId: string): WorkArtifact | undefined
+  setReviewArtifact(agentId: string, artifact: ReviewArtifact): void
+  getReviewArtifact(agentId: string): ReviewArtifact | undefined
+
+  // Audit log
+  logEvent(event: string, details: Record<string, unknown>): void
+  getAuditLog(): Array<{ timestamp: number; event: string; details: Record<string, unknown> }>
+}
