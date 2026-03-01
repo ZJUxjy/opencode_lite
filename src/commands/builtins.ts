@@ -343,6 +343,101 @@ Each skill is a directory containing a SKILL.md file with YAML frontmatter.`
 }
 
 /**
+ * Context command - shows detailed context usage visualization
+ */
+const contextCommand: Command = {
+  name: "/context",
+  description: "Show context usage visualization",
+  handler: (_args: string, ctx: CommandContext) => {
+    const stats = ctx.agent.getSessionStats()
+    const usage = stats.contextUsage
+
+    // 计算各类消息的 token 使用
+    const messages = ctx.agent.getMessages()
+    let userTokens = 0
+    let assistantTokens = 0
+    let toolCallTokens = 0
+
+    for (const msg of messages) {
+      if (msg.role === "user") {
+        userTokens += estimateTokens(msg)
+      } else if (msg.role === "assistant") {
+        assistantTokens += estimateTokens(msg)
+        // 计算 tool 调用的 token
+        if (msg.toolCalls) {
+          for (const tc of msg.toolCalls) {
+            toolCallTokens += estimateTokens({ content: JSON.stringify(tc) })
+          }
+        }
+      }
+    }
+
+    const totalTokens = userTokens + assistantTokens + toolCallTokens
+    const percent = Math.round(usage.percentage * 100)
+
+    // 生成进度条
+    const barWidth = 20
+    const filled = Math.round((percent / 100) * barWidth)
+    const bar = "█".repeat(filled) + "░".repeat(barWidth - filled)
+
+    // 颜色基于使用率
+    let color = "🟢"
+    if (percent >= 80) color = "🟡"
+    if (percent >= 92) color = "🔴"
+
+    // 构建消息
+    const lines = [
+      `🧠 Context Usage`,
+      ``,
+      `┌${"─".repeat(22)}┐`,
+      `│ ${bar} │ ${percent}%`,
+      `└${"─".repeat(22)}┘`,
+      ``,
+      `📊 Breakdown (${(totalTokens / 1000).toFixed(1)}K / ${(usage.limit / 1000).toFixed(0)}K tokens)`,
+      ``,
+    ]
+
+    // 添加各个分类的条形图
+    const addBar = (label: string, tokens: number, emoji: string) => {
+      if (totalTokens === 0) return
+      const ratio = tokens / totalTokens
+      const width = Math.round(ratio * 20)
+      const barStr = "▓".repeat(width) + "░".repeat(20 - width)
+      lines.push(`${emoji} ${label.padEnd(12)} ${barStr} ${(tokens / 1000).toFixed(1)}K`)
+    }
+
+    addBar("User", userTokens, "👤")
+    addBar("Assistant", assistantTokens, "🤖")
+    addBar("Tool Calls", toolCallTokens, "🔧")
+
+    lines.push("")
+    lines.push(`📝 Messages: ${messages.length} total`)
+
+    // 添加建议
+    lines.push("")
+    if (percent >= 92) {
+      lines.push(`⚠️ Context at critical level! Consider running /compact aggressive`)
+    } else if (percent >= 80) {
+      lines.push(`💡 Consider running /compact to free up space`)
+    } else {
+      lines.push(`✅ Context usage is healthy`)
+    }
+
+    const response = createSystemMessage(lines.join("\n"))
+    ctx.setMessages((prev) => [...prev, response])
+  },
+}
+
+/**
+ * 估算消息的 token 数量
+ */
+function estimateTokens(msg: { content?: string | null; name?: string | null }): number {
+  const text = msg.content || msg.name || ""
+  // 简单估算: ~4 字符 per token
+  return Math.ceil(text.length / 4)
+}
+
+/**
  * MCP command - shows MCP server status and available tools
  */
 const mcpCommand: Command = {
@@ -467,6 +562,7 @@ export const builtinCommands: Command[] = [
   clearCommand,
   helpCommand,
   toolsCommand,
+  contextCommand,
   statsCommand,
   compactCommand,
   yoloCommand,
