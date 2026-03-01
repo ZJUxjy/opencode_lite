@@ -1,4 +1,4 @@
-import { exec } from "child_process"
+import { execFile } from "child_process"
 import * as path from "path"
 import * as fs from "fs/promises"
 import * as os from "os"
@@ -34,7 +34,7 @@ export class WorktreeIsolation {
     const branchName = `worker-${workerId}-${Date.now()}`
 
     // 创建 Worktree
-    await this.runGitCommand(`worktree add ${worktreePath} -b ${branchName}`)
+    await this.runGitCommand("worktree", ["add", worktreePath, "-b", branchName])
 
     return {
       workerId,
@@ -67,12 +67,12 @@ export class WorktreeIsolation {
 
     try {
       // 删除 Worktree
-      await this.runGitCommand(`worktree remove ${worktreePath} --force`)
+      await this.runGitCommand("worktree", ["remove", worktreePath, "--force"])
 
       // 删除分支
       if (branch) {
         try {
-          await this.runGitCommand(`branch -D ${branch}`)
+          await this.runGitCommand("branch", ["-D", branch])
         } catch {
           // 分支可能已合并，忽略错误
         }
@@ -94,7 +94,7 @@ export class WorktreeIsolation {
         const stat = await fs.stat(entryPath)
 
         if (stat.isDirectory()) {
-          await this.runGitCommand(`worktree remove ${entryPath} --force`)
+          await this.runGitCommand("worktree", ["remove", entryPath, "--force"])
         }
       }
     } catch (error) {
@@ -107,7 +107,7 @@ export class WorktreeIsolation {
    */
   async listWorktrees(): Promise<string[]> {
     try {
-      const output = await this.runGitCommand("worktree list --porcelain")
+      const output = await this.runGitCommand("worktree", ["list", "--porcelain"])
       const worktrees: string[] = []
 
       for (const line of output.split("\n")) {
@@ -123,13 +123,13 @@ export class WorktreeIsolation {
   }
 
   /**
-   * 运行 Git 命令
+   * 运行 Git 命令 - 使用 execFile 避免命令注入
    */
-  private async runGitCommand(command: string): Promise<string> {
+  private async runGitCommand(command: string, args: string[] = []): Promise<string> {
     return new Promise((resolve, reject) => {
-      exec(`git ${command}`, (error, stdout, stderr) => {
+      execFile("git", [command, ...args], (error, stdout, stderr) => {
         if (error) {
-          reject(new Error(`git ${command} failed: ${stderr || error.message}`))
+          reject(new Error(`git ${command} ${args.join(" ")} failed: ${stderr || error.message}`))
         } else {
           resolve(stdout.trim())
         }

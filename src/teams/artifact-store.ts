@@ -18,16 +18,18 @@ import type { WorkArtifact, ReviewArtifact } from "./contracts.js"
 export class ArtifactStore {
   private baseDir: string
   private enabled: boolean
+  private agentId: string
 
   constructor(options: ArtifactStoreOptions = {}) {
     this.baseDir = options.baseDir || ".agent-teams/artifacts"
     this.enabled = options.enabled ?? true
+    this.agentId = options.agentId || "agent"
   }
 
   /**
    * 保存Worker产出
    */
-  async saveWorkerOutput(taskId: string, artifact: WorkArtifact): Promise<ArtifactFile> {
+  async saveWorkerOutput(taskId: string, artifact: WorkArtifact, agentId?: string): Promise<ArtifactFile> {
     if (!this.enabled) {
       return this.createPlaceholder(taskId, "worker-output")
     }
@@ -41,7 +43,7 @@ export class ArtifactStore {
     await fs.writeFile(outputPath, content, "utf-8")
 
     // 写入元数据
-    const metadata = await this.saveMetadata(taskId, "worker-output", artifact)
+    const metadata = await this.saveMetadata(taskId, "worker-output", artifact, agentId)
 
     return {
       path: outputPath,
@@ -53,7 +55,7 @@ export class ArtifactStore {
   /**
    * 保存Reviewer反馈
    */
-  async saveReviewFeedback(taskId: string, review: ReviewArtifact): Promise<ArtifactFile> {
+  async saveReviewFeedback(taskId: string, review: ReviewArtifact, agentId?: string): Promise<ArtifactFile> {
     if (!this.enabled) {
       return this.createPlaceholder(taskId, "reviewer-feedback")
     }
@@ -65,7 +67,7 @@ export class ArtifactStore {
     const content = this.formatReviewFeedback(review)
     await fs.writeFile(outputPath, content, "utf-8")
 
-    const metadata = await this.saveMetadata(taskId, "reviewer-feedback", review)
+    const metadata = await this.saveMetadata(taskId, "reviewer-feedback", review, agentId)
 
     return {
       path: outputPath,
@@ -215,7 +217,8 @@ export class ArtifactStore {
   private async saveMetadata(
     taskId: string,
     type: string,
-    data: unknown
+    data: unknown,
+    agentId?: string
   ): Promise<{ path: string }> {
     const taskDir = this.getTaskDir(taskId)
     const metadataPath = path.join(taskDir, "metadata.json")
@@ -226,11 +229,14 @@ export class ArtifactStore {
     const content = JSON.stringify(data)
     const checksum = this.calculateChecksum(content)
 
+    // 使用传入的 agentId 或默认的 agentId
+    const resolvedAgentId = agentId || this.agentId
+
     const metadata: Record<string, unknown> = {
       ...existing,
       [type]: {
         createdAt: Date.now(),
-        agentId: "agent",
+        agentId: resolvedAgentId,
         taskId,
         checksum,
       },
@@ -281,6 +287,7 @@ export class ArtifactStore {
 export interface ArtifactStoreOptions {
   baseDir?: string
   enabled?: boolean
+  agentId?: string
 }
 
 export interface ArtifactFile {

@@ -327,3 +327,99 @@ export interface BenchmarkReport {
   }>
   summary: string
 }
+
+// ============================================================================
+// 默认测试套件
+// ============================================================================
+
+/**
+ * 默认测试套件 - 10+ 基线测试样本
+ *
+ * 用于快速验证 Agent Teams 性能
+ */
+export const DEFAULT_TEST_SUITE: BenchmarkTask[] = [
+  // Simple 级别 (1-4)
+  {
+    name: "simple-001",
+    description: "Add a hello world function to utils.ts",
+    expectedOutput: "Function hello() { return 'Hello, World!' }",
+  },
+  {
+    name: "simple-002",
+    description: "Fix typo in README.md: 'teh' -> 'the'",
+    expectedOutput: "Fixed typo",
+  },
+  {
+    name: "simple-003",
+    description: "Add console.log statement to entry point",
+    expectedOutput: "Added logging",
+  },
+  {
+    name: "simple-004",
+    description: "Create a simple config file with default values",
+    expectedOutput: "Config file created",
+  },
+
+  // Medium 级别 (5-8)
+  {
+    name: "medium-001",
+    description: "Implement a function to calculate fibonacci sequence",
+    expectedOutput: "Fibonacci function implemented",
+  },
+  {
+    name: "medium-002",
+    description: "Add input validation to a form handler",
+    expectedOutput: "Validation added",
+  },
+  {
+    name: "medium-003",
+    description: "Refactor a function to use async/await",
+    expectedOutput: "Function refactored",
+  },
+  {
+    name: "medium-004",
+    description: "Add error handling to API endpoint",
+    expectedOutput: "Error handling added",
+  },
+
+  // Complex 级别 (9-12)
+  {
+    name: "complex-001",
+    description: "Implement user authentication flow with JWT",
+    expectedOutput: "Auth flow implemented",
+  },
+  {
+    name: "complex-002",
+    description: "Create a pagination utility for database queries",
+    expectedOutput: "Pagination utility created",
+  },
+  {
+    name: "complex-003",
+    description: "Implement rate limiting middleware",
+    expectedOutput: "Rate limiting implemented",
+  },
+  {
+    name: "complex-004",
+    description: "Add caching layer to API client",
+    expectedOutput: "Caching layer added",
+  },
+]
+
+/**
+ * 根据难度获取测试样本
+ */
+export function getTestSuiteByDifficulty(
+  difficulty: "simple" | "medium" | "complex" | "all"
+): BenchmarkTask[] {
+  switch (difficulty) {
+    case "simple":
+      return DEFAULT_TEST_SUITE.filter((t) => t.name.startsWith("simple"))
+    case "medium":
+      return DEFAULT_TEST_SUITE.filter((t) => t.name.startsWith("medium"))
+    case "complex":
+      return DEFAULT_TEST_SUITE.filter((t) => t.name.startsWith("complex"))
+    case "all":
+    default:
+      return DEFAULT_TEST_SUITE
+  }
+}
