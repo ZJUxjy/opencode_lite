@@ -327,7 +327,6 @@ describe("Contracts", () => {
         const loose = createLooseContract("task-001", "Different", {
           references: ["src/b.ts"],
         })
-        // @ts-expect-error - injecting strict contract
         loose.strictContract = embeddedStrict
 
         const strict = toStrictContract(loose)

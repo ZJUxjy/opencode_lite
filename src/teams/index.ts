@@ -51,6 +51,7 @@ export {
   WorkArtifactSchema,
   ReviewArtifactSchema,
   TestResultSchema,
+  ContextContractSchema,
   validateTaskContract,
   validateWorkArtifact,
   validateReviewArtifact,
@@ -59,6 +60,11 @@ export {
   createEmptyWorkArtifact,
   createApprovalReview,
   createRejectionReview,
+  validateContextContract,
+  createLooseContract,
+  toStrictContract,
+  toContextContract,
+  type ContextContract,
 } from "./contracts.js"
 
 // ============================================================================
@@ -258,3 +264,40 @@ export {
   type BaselineReport,
   type BenchmarkConfig,
 } from "./benchmark.js"
+
+// ============================================================================
+// Progress Persistence Exports
+// ============================================================================
+
+export {
+  ProgressPersistence,
+  createProgressPersistence,
+  type ProgressReport,
+  type ProgressPersistenceConfig,
+} from "./progress-persistence.js"
+
+// ============================================================================
+// LLM Judge Exports
+// ============================================================================
+
+export {
+  LLMJudge,
+  createLLMJudge,
+  DEFAULT_CODE_QUALITY_RUBRIC,
+  type EvaluationRubric,
+  type EvaluationDimension,
+  type JudgementResult,
+  type LLMJudgeConfig,
+} from "./llm-judge.js"
+
+// ============================================================================
+// Checkpoint Resume Exports
+// ============================================================================
+
+export {
+  CheckpointResumer,
+  createCheckpointResumer,
+  type ResumedExecution,
+  type ResumeContext,
+  type CheckpointResumeConfig,
+} from "./checkpoint-resume.js"
