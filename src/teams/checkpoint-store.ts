@@ -23,6 +23,15 @@ export interface CheckpointStoreOptions {
   filePath?: string
 }
 
+export interface ResumeContext {
+  checkpointId: string
+  mode: TeamMode
+  task: string
+  pendingTasks: string[]
+  reviewRounds: number
+  lastOutput?: string
+}
+
 export class CheckpointStore {
   private checkpoints: Checkpoint[] = []
   private readonly filePath?: string
@@ -69,6 +78,32 @@ export class CheckpointStore {
     return {
       baseRef: checkpoint.baseRef,
       reversePatchRefs: [...checkpoint.patchRefs].reverse(),
+    }
+  }
+
+  getResumeContext(
+    id: string,
+    strategy: "restart-task" | "continue-iteration" | "skip-completed" = "continue-iteration"
+  ): ResumeContext {
+    const checkpoint = this.get(id)
+    if (!checkpoint) {
+      throw new Error(`Checkpoint not found: ${id}`)
+    }
+    if (!checkpoint.context) {
+      throw new Error(`Checkpoint has no resumable context: ${id}`)
+    }
+
+    const pendingTasks = strategy === "skip-completed"
+      ? checkpoint.context.pendingTasks || [checkpoint.context.task]
+      : [checkpoint.context.task]
+
+    return {
+      checkpointId: checkpoint.id,
+      mode: checkpoint.context.mode,
+      task: checkpoint.context.task,
+      pendingTasks,
+      reviewRounds: checkpoint.context.reviewRounds || 0,
+      lastOutput: checkpoint.context.lastOutput,
     }
   }
 

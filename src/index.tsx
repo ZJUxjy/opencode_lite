@@ -12,7 +12,7 @@ import * as fs from "fs"
 
 // 从 settings.json 加载配置
 import type { MCPGlobalConfig } from "./mcp/config.js"
-import type { TeamConfig } from "./teams/index.js"
+import type { TeamConfig, TeamMode, LeaderWorkersStrategy } from "./teams/index.js"
 
 interface SettingsConfig {
   env?: Record<string, string>
@@ -181,6 +181,16 @@ program
   .option("--no-stream", "Disable streaming output")
   .option("--compression-threshold <number>", "Context compression threshold (0-1)", "0.92")
   .option("--list-sessions", "List all sessions with metadata")
+  .option("--team <mode>", "Team mode (worker-reviewer|planner-executor-reviewer|leader-workers|hotfix-guardrail|council)")
+  .option("--team-strategy <strategy>", "Team strategy (collaborative|competitive)")
+  .option("--non-interactive", "Run once and exit (no TUI)")
+  .option("--output-format <format>", "Output format for non-interactive mode (text|json)", "text")
+  .option("--prompt <text>", "Input prompt for non-interactive mode")
+  .option("--team-ralph", "Run Ralph loop task queue in non-interactive mode")
+  .option("--task-file <path>", "Task queue file path for Ralph loop", "TASKS.md")
+  .option("--progress-file <path>", "Progress log file for Ralph loop", "PROGRESS.md")
+  .option("--max-iterations <number>", "Max iterations for Ralph loop", "50")
+  .option("--cooldown-ms <number>", "Cooldown between Ralph tasks (ms)", "0")
   .action(async (options) => {
     const dbPath = path.join(os.homedir(), ".lite-opencode", "history.db")
 
@@ -235,8 +245,59 @@ program
       mcp: settings.mcp,
     })
 
+    const teamMode = options.team as TeamMode | undefined
+    if (teamMode) {
+      const strategy = (options.teamStrategy === "competitive" ? "competitive" : "collaborative") as LeaderWorkersStrategy
+      agent.setTeamMode(teamMode, strategy)
+      agent.setTeamEnabled(true)
+    }
+
     // 初始化 MCP
     await agent.initializeMCP()
+
+    if (options.nonInteractive) {
+      const asJson = options.outputFormat === "json"
+
+      if (options.teamRalph) {
+        const summary = await agent.runTeamRalphLoop({
+          taskFilePath: path.resolve(options.directory, options.taskFile),
+          progressFilePath: path.resolve(options.directory, options.progressFile),
+          maxIterations: Math.max(1, parseInt(options.maxIterations, 10) || 50),
+          cooldownMs: Math.max(0, parseInt(options.cooldownMs, 10) || 0),
+        })
+
+        if (asJson) {
+          console.log(JSON.stringify({ mode: teamMode || "worker-reviewer", type: "ralph-loop", summary }, null, 2))
+        } else {
+          console.log(`Ralph loop finished: processed=${summary.processed}, completed=${summary.completed.length}, failed=${summary.failed.length}`)
+        }
+        process.exit(0)
+      }
+
+      const prompt = String(options.prompt || "").trim()
+      if (!prompt) {
+        console.error("Error: --prompt is required in --non-interactive mode")
+        process.exit(1)
+      }
+
+      if (teamMode) {
+        const result = await agent.runTeamTask(prompt)
+        if (asJson) {
+          console.log(JSON.stringify({ type: "team", mode: teamMode, result }, null, 2))
+        } else {
+          console.log(result.output)
+        }
+      } else {
+        const output = await agent.run(prompt)
+        if (asJson) {
+          console.log(JSON.stringify({ type: "single-agent", output }, null, 2))
+        } else {
+          console.log(output)
+        }
+      }
+
+      process.exit(0)
+    }
 
     // 渲染 Ink 应用
     // 注意: 不使用 incrementalRendering，因为与 Spinner 动画不兼容

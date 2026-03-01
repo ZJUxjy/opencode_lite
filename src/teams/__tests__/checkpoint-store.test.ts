@@ -86,4 +86,25 @@ describe("CheckpointStore", () => {
     expect(loaded?.context?.task).toBe("task-a")
     expect(second.list()).toHaveLength(1)
   })
+
+  it("builds resume context with strategy", () => {
+    const store = new CheckpointStore()
+    const created = store.create({
+      description: "resume",
+      baseRef: "base",
+      patchRefs: ["p1"],
+      artifactRefs: [],
+      blackboardSnapshotRef: "bb",
+      context: {
+        task: "main task",
+        mode: "worker-reviewer",
+        reviewRounds: 2,
+        pendingTasks: ["todo-1", "todo-2"],
+      },
+    })
+
+    const ctx = store.getResumeContext(created.id, "skip-completed")
+    expect(ctx.pendingTasks).toEqual(["todo-1", "todo-2"])
+    expect(ctx.reviewRounds).toBe(2)
+  })
 })

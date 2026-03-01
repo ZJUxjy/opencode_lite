@@ -11,6 +11,7 @@ import { SkillRegistry, getSkillRegistry } from "./skills/index.js"
 import {
   ArtifactStore,
   CheckpointStore,
+  RalphLoopManager,
   TeamManager,
   TeamRunStore,
   defaultTeamConfig,
@@ -753,6 +754,55 @@ export class Agent {
 
   getTeamBaselines(): BaselineComparison[] {
     return this.teamManager.getProgressTracker().getBaselines()
+  }
+
+  async runTeamRalphLoop(config: {
+    taskFilePath: string
+    progressFilePath: string
+    maxIterations: number
+    cooldownMs: number
+  }): Promise<{ processed: number; completed: string[]; failed: string[] }> {
+    const previousEnabled = this.teamManager.isEnabled()
+    this.teamManager.setEnabled(false)
+    const loop = new RalphLoopManager()
+    const queue = loop.loadQueue(config.taskFilePath)
+
+    const completed: string[] = []
+    const failed: string[] = []
+    let processed = 0
+
+    try {
+      while (processed < Math.max(1, config.maxIterations)) {
+        const task = loop.dequeuePending(queue)
+        if (!task) break
+
+        try {
+          const result = await this.runTeamTask(task)
+          loop.appendProgress(
+            config.progressFilePath,
+            `[${new Date().toISOString()}] ${task} -> ${result.status}${result.fallbackUsed ? " (fallback)" : ""}`
+          )
+          loop.markCompleted(queue, task)
+          completed.push(task)
+        } catch {
+          loop.markFailed(queue, task)
+          failed.push(task)
+          loop.appendProgress(config.progressFilePath, `[${new Date().toISOString()}] ${task} -> failed`)
+        }
+
+        processed += 1
+        loop.saveQueue(config.taskFilePath, queue)
+
+        if (config.cooldownMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, config.cooldownMs))
+        }
+      }
+
+      return { processed, completed, failed }
+    } finally {
+      loop.saveQueue(config.taskFilePath, queue)
+      this.teamManager.setEnabled(previousEnabled)
+    }
   }
 
   getTeamCheckpoints(limit = 20) {
