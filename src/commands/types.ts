@@ -10,6 +10,7 @@ export interface CommandContext {
   exit: () => void
   updateContextUsage: () => void
   showSessionList?: () => void
+  emit?: (event: string, data?: unknown) => void
 }
 
 /**
