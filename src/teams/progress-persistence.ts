@@ -79,25 +79,29 @@ export class ProgressPersistence {
    * Save progress report to file(s)
    */
   async saveProgress(report: ProgressReport): Promise<void> {
-    // Ensure parent directory exists
-    const parentDir = path.dirname(this.config.outputPath)
-    await fs.promises.mkdir(parentDir, { recursive: true })
+    try {
+      // Ensure parent directory exists
+      const parentDir = path.dirname(this.config.outputPath)
+      await fs.promises.mkdir(parentDir, { recursive: true })
 
-    const format = this.config.format
+      const format = this.config.format
 
-    if (format === "markdown" || format === "both") {
-      const markdownPath = this.getMarkdownPath()
-      const markdownContent = this.formatAsMarkdown(report)
-      await fs.promises.writeFile(markdownPath, markdownContent, "utf-8")
+      if (format === "markdown" || format === "both") {
+        const markdownPath = this.getMarkdownPath()
+        const markdownContent = this.formatAsMarkdown(report)
+        await fs.promises.writeFile(markdownPath, markdownContent, "utf-8")
+      }
+
+      if (format === "json" || format === "both") {
+        const jsonPath = this.getJsonPath()
+        const jsonContent = JSON.stringify(report, null, 2)
+        await fs.promises.writeFile(jsonPath, jsonContent, "utf-8")
+      }
+
+      this.lastSaveTime = Date.now()
+    } catch (error) {
+      throw new Error(`Failed to save progress report: ${error instanceof Error ? error.message : String(error)}`)
     }
-
-    if (format === "json" || format === "both") {
-      const jsonPath = this.getJsonPath()
-      const jsonContent = JSON.stringify(report, null, 2)
-      await fs.promises.writeFile(jsonPath, jsonContent, "utf-8")
-    }
-
-    this.lastSaveTime = Date.now()
   }
 
   /**
@@ -264,7 +268,8 @@ export class ProgressPersistence {
    * Render progress bar
    */
   private renderProgressBar(percentage: number): string {
-    const filled = Math.floor(percentage / 10)
+    const clamped = Math.max(0, Math.min(100, percentage))
+    const filled = Math.floor(clamped / 10)
     const empty = 10 - filled
     const filledBar = "█".repeat(filled)
     const emptyBar = "░".repeat(empty)
