@@ -27,8 +27,8 @@ describe("BaselineRunner", () => {
   })
 
   describe("DEFAULT_TEST_SUITE", () => {
-    it("should have 10 samples", () => {
-      expect(DEFAULT_TEST_SUITE.samples).toHaveLength(10)
+    it("should have 20 samples", () => {
+      expect(DEFAULT_TEST_SUITE.samples).toHaveLength(20)
     })
 
     it("should have correct categories", () => {
@@ -36,9 +36,9 @@ describe("BaselineRunner", () => {
       const medium = DEFAULT_TEST_SUITE.samples.filter(s => s.category === "medium")
       const complex = DEFAULT_TEST_SUITE.samples.filter(s => s.category === "complex")
 
-      expect(simple).toHaveLength(3)
-      expect(medium).toHaveLength(4)
-      expect(complex).toHaveLength(3)
+      expect(simple).toHaveLength(6)
+      expect(medium).toHaveLength(7)
+      expect(complex).toHaveLength(7)
     })
 
     it("should have unique IDs", () => {
@@ -198,9 +198,9 @@ describe("DEFAULT_TEST_SUITE samples", () => {
     const medium = DEFAULT_TEST_SUITE.samples.filter(s => s.category === "medium")
     const complex = DEFAULT_TEST_SUITE.samples.filter(s => s.category === "complex")
 
-    expect(simple.length).toBe(3)
-    expect(medium.length).toBe(4)
-    expect(complex.length).toBe(3)
+    expect(simple.length).toBe(6)
+    expect(medium.length).toBe(7)
+    expect(complex.length).toBe(7)
   })
 
   it("should have increasing token budgets by complexity", () => {
