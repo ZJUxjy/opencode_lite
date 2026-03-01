@@ -530,6 +530,23 @@ export class ProgressFileManager {
   }
 
   /**
+   * 获取所有待处理任务
+   */
+  getPendingTasks(): ProgressTask[] {
+    // 优先级排序
+    const priorityOrder: Record<TaskPriority, number> = {
+      critical: 0,
+      high: 1,
+      medium: 2,
+      low: 3,
+    }
+
+    return this.progress.tasks
+      .filter(t => t.status === "pending")
+      .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])
+  }
+
+  /**
    * 获取文件路径
    */
   getFilePath(): string {

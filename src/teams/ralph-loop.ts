@@ -369,6 +369,24 @@ export class RalphLoop {
   }
 
   /**
+   * 获取所有待处理任务
+   */
+  private getAllTasks(): TaskDefinition[] {
+    // 首先检查进度文件中的待处理任务
+    const progressTasks = this.progressManager.getPendingTasks()
+    if (progressTasks.length > 0) {
+      return progressTasks.map(t => ({
+        id: t.id,
+        description: t.description,
+        priority: t.priority,
+      }))
+    }
+
+    // 然后从任务文件加载
+    return this.loadTasksFromFile()
+  }
+
+  /**
    * 执行单个任务
    */
   private async executeTask(task: TaskDefinition): Promise<TaskExecutionResult> {
@@ -442,12 +460,98 @@ export class RalphLoop {
   }
 
   /**
+   * 并行执行任务
+   */
+  private async runParallel(): Promise<RalphLoopStats> {
+    this.running = true
+    this.startTime = Date.now()
+
+    this.emitEvent({
+      type: "start",
+      timestamp: this.startTime,
+      config: this.config,
+    })
+
+    console.log("[RalphLoop] Starting parallel execution mode")
+    this.startHeartbeat()
+
+    const executor = new ParallelExecutor({
+      maxWorkers: this.config.parallelWorkers,
+      worktreeEnabled: this.config.worktreeEnabled,
+    })
+
+    const tasks = this.getAllTasks()
+    this.stats.totalTasks = tasks.length
+
+    console.log(`[RalphLoop] Found ${tasks.length} tasks to execute with ${this.config.parallelWorkers} workers`)
+
+    const results = await executor.executeParallel(tasks, async (task, workerId) => {
+      this.emitEvent({
+        type: "task_start",
+        timestamp: Date.now(),
+        taskId: task.id,
+        description: task.description,
+        priority: task.priority,
+      })
+
+      console.log(`[RalphLoop] Worker ${workerId} executing: ${task.description.substring(0, 50)}...`)
+
+      const taskStartTime = Date.now()
+      const result = await this.executeTask(task)
+      const taskDuration = Date.now() - taskStartTime
+
+      this.emitEvent({
+        type: "task_complete",
+        timestamp: Date.now(),
+        taskId: task.id,
+        success: result.result.status === "success",
+        duration: taskDuration,
+        tokens: result.result.stats.totalTokens,
+        ...(result.result.status !== "success" && { error: result.result.summary }),
+      })
+
+      return result
+    })
+
+    // Process results
+    for (const result of results) {
+      if (result.result.status === "success") {
+        this.stats.completedTasks++
+      } else {
+        this.stats.failedTasks++
+      }
+      this.stats.totalDuration += result.duration
+      this.stats.totalCost += result.result.stats.totalCost
+      this.stats.totalTokens += result.result.stats.totalTokens
+    }
+
+    this.stopHeartbeat()
+    this.running = false
+
+    console.log("[RalphLoop] Parallel execution completed")
+    this.printStats()
+
+    this.emitEvent({
+      type: "complete",
+      timestamp: Date.now(),
+      stats: this.stats,
+    })
+
+    return this.stats
+  }
+
+  /**
    * 运行 Ralph Loop
    */
   async run(): Promise<RalphLoopStats> {
     if (!this.config.enabled) {
       console.log("[RalphLoop] Disabled, not running")
       return this.stats
+    }
+
+    // 并行模式
+    if (this.config.parallelWorkers > 1) {
+      return this.runParallel()
     }
 
     // 发送开始事件

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import * as fs from "fs"
 import * as path from "path"
 import { RalphLoop, ParallelExecutor, type ParallelConfig, type TaskDefinition } from "../index.js"
@@ -127,5 +127,108 @@ describe("RalphLoop Parallel Execution", () => {
 
       expect(results).toHaveLength(0)
     })
+  })
+
+  describe("RalphLoop Parallel Integration", () => {
+    it("should execute multiple tasks in parallel when parallelWorkers > 1", async () => {
+      fs.writeFileSync(path.join(testDir, "TASKS.md"),
+        "- [ ] Task A\n- [ ] Task B\n- [ ] Task C\n"
+      )
+
+      let concurrentCount = 0
+      let maxConcurrent = 0
+
+      const loop = new RalphLoop(
+        {
+          run: async () => {
+            concurrentCount++
+            maxConcurrent = Math.max(maxConcurrent, concurrentCount)
+            await new Promise(r => setTimeout(r, 50))
+            concurrentCount--
+            return "done"
+          }
+        } as any,
+        null,
+        {
+          cwd: testDir,
+          maxIterations: 3,
+          parallelWorkers: 3,
+          worktreeEnabled: false,
+          cooldownMs: 0,
+          persistProgress: false,
+        }
+      )
+
+      await loop.run()
+
+      expect(maxConcurrent).toBeGreaterThan(1)
+      expect(loop.getStats().completedTasks).toBe(3)
+    }, 30000)
+
+    it("should execute tasks sequentially when parallelWorkers = 1", async () => {
+      fs.writeFileSync(path.join(testDir, "TASKS.md"),
+        "- [ ] Task A\n- [ ] Task B\n- [ ] Task C\n"
+      )
+
+      let concurrentCount = 0
+      let maxConcurrent = 0
+
+      const loop = new RalphLoop(
+        {
+          run: async () => {
+            concurrentCount++
+            maxConcurrent = Math.max(maxConcurrent, concurrentCount)
+            await new Promise(r => setTimeout(r, 30))
+            concurrentCount--
+            return "done"
+          }
+        } as any,
+        null,
+        {
+          cwd: testDir,
+          maxIterations: 3,
+          parallelWorkers: 1,
+          cooldownMs: 0,
+          persistProgress: false,
+        }
+      )
+
+      await loop.run()
+
+      expect(maxConcurrent).toBe(1)
+    }, 30000)
+
+    it("should emit task events for parallel execution", async () => {
+      fs.writeFileSync(path.join(testDir, "TASKS.md"),
+        "- [ ] Task A\n- [ ] Task B\n"
+      )
+
+      const events: any[] = []
+
+      const loop = new RalphLoop(
+        { run: async () => "done" } as any,
+        null,
+        {
+          cwd: testDir,
+          maxIterations: 2,
+          parallelWorkers: 2,
+          outputFormat: "stream-json",
+          cooldownMs: 0,
+          persistProgress: false,
+        }
+      )
+
+      loop.emitEvent = (event: any) => {
+        events.push(event)
+      }
+
+      await loop.run()
+
+      const taskStartEvents = events.filter(e => e.type === "task_start")
+      const taskCompleteEvents = events.filter(e => e.type === "task_complete")
+
+      expect(taskStartEvents.length).toBe(2)
+      expect(taskCompleteEvents.length).toBe(2)
+    }, 30000)
   })
 })
