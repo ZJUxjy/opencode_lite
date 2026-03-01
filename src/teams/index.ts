@@ -114,3 +114,11 @@ export {
   type AgentMessageTrace,
   type CheckpointIndex,
 } from "./team-session-store.js"
+
+// Team 执行器
+export {
+  TeamExecutor,
+  createTeamExecutor,
+  type TeamExecutionEvents,
+  type TeamExecutorConfig,
+} from "./team-executor.js"

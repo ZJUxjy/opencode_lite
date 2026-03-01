@@ -11,7 +11,7 @@ import type { CommandContext, PermissionRequest, PermissionDecision } from "./co
 import type { ToolCall } from "./types.js"
 import type { PolicyDecision } from "./policy.js"
 import type { TeamConfig, TeamStatus } from "./teams/index.js"
-import { TeamSessionStore as TeamSessionStoreClass } from "./teams/index.js"
+import { TeamSessionStore as TeamSessionStoreClass, TeamExecutor, type TeamExecutionEvents } from "./teams/index.js"
 import { getPlanFilePath, readPlanFile, exitPlanMode } from "./plan/manager.js"
 import { buildNewSessionPrompt, buildContinueSessionPrompt } from "./plan/handover.js"
 
@@ -623,11 +623,56 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
     agent.setEvents(events)
 
     // -----------------------------------------------------------------------
-    // 执行 Agent
+    // 执行 Agent 或 Team
     // -----------------------------------------------------------------------
 
     try {
-      await agent.run(trimmed)
+      // 检查是否启用 Team 模式
+      if (teamMode && teamConfig) {
+        // Team 模式执行
+        const teamEvents: TeamExecutionEvents = {
+          onStatusChange: (status) => {
+            setTeamStatus(status)
+          },
+          onIterationStart: (iteration, maxIterations) => {
+            const msg = createSystemMessage(`🔄 Iteration ${iteration}/${maxIterations}`)
+            setMessages(prev => [...prev, msg])
+          },
+          onAgentStart: (agentId, role, task) => {
+            const msg = createSystemMessage(`👤 ${role}: Starting task...`)
+            setMessages(prev => [...prev, msg])
+          },
+          onAgentEnd: (agentId, role, result) => {
+            const msg = createAssistantMessage(`✅ ${role}: ${result.summary.slice(0, 200)}...`)
+            setMessages(prev => [...prev, msg])
+          },
+          onError: (error) => {
+            const msg = createSystemMessage(`❌ Team Error: ${error.message}`)
+            setMessages(prev => [...prev, msg])
+          },
+        }
+
+        const executor = new TeamExecutor({
+          mainAgent: agent,
+          teamConfig,
+          sessionId,
+          teamSessionStore,
+          events: teamEvents,
+          debug: false,
+        })
+
+        const result = await executor.execute(trimmed)
+
+        // 添加最终结果消息
+        const resultMessage = result.status === "success"
+          ? createAssistantMessage(`✅ Team completed:\n${result.summary}`)
+          : createSystemMessage(`❌ Team failed: ${result.summary}`)
+        setMessages(prev => [...prev, resultMessage])
+
+      } else {
+        // 单 Agent 模式
+        await agent.run(trimmed)
+      }
     } catch (error: any) {
       // 如果是用户取消，不显示错误（已经在上面的 useInput 中处理了）
       if (error.message?.includes("cancelled by user")) {
@@ -655,7 +700,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
 
     setIsProcessing(false)
     updateContextUsage()
-  }, [agent, isProcessing])
+  }, [agent, isProcessing, teamMode, teamConfig, teamSessionStore, sessionId])
 
   // =========================================================================
   // 键盘快捷键
