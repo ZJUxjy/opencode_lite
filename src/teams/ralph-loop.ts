@@ -170,6 +170,24 @@ export class RalphLoop {
   }
 
   /**
+   * 发送事件
+   */
+  emitEvent(event: RalphEvent): void {
+    const eventStr = JSON.stringify(event)
+
+    // 输出到控制台
+    if (this.config.outputFormat === "stream-json") {
+      console.log(eventStr)
+    }
+
+    // 输出到文件
+    if (this.config.logFile) {
+      const logPath = path.resolve(this.config.cwd, this.config.logFile)
+      fs.appendFileSync(logPath, eventStr + "\n", "utf-8")
+    }
+  }
+
+  /**
    * 从文件加载任务
    */
   private loadTasksFromFile(): TaskDefinition[] {
