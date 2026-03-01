@@ -356,6 +356,14 @@ export class RalphLoop {
       return this.stats
     }
 
+    // 发送开始事件
+    const startTime = Date.now()
+    this.emitEvent({
+      type: "start",
+      timestamp: startTime,
+      config: this.config,
+    })
+
     this.running = true
     console.log("[RalphLoop] Starting continuous execution loop")
 
@@ -375,6 +383,15 @@ export class RalphLoop {
         await this.sleep(this.config.cooldownMs)
         continue
       }
+
+      // 发送任务开始事件
+      this.emitEvent({
+        type: "task_start",
+        timestamp: Date.now(),
+        taskId: task.id,
+        description: task.description,
+        priority: task.priority,
+      })
 
       console.log(`[RalphLoop] Executing task: ${task.description.substring(0, 50)}...`)
       this.stats.totalTasks++
@@ -398,9 +415,31 @@ export class RalphLoop {
             break
           }
         }
+
+        // 发送任务完成事件
+        this.emitEvent({
+          type: "task_complete",
+          timestamp: Date.now(),
+          taskId: task.id,
+          success: executionResult.result.status === "success",
+          duration: executionResult.duration,
+          tokens: executionResult.result.stats.totalTokens,
+          ...(executionResult.result.status !== "success" && { error: executionResult.result.summary }),
+        })
       } catch (error) {
         this.stats.failedTasks++
         console.error(`[RalphLoop] Task error: ${error}`)
+
+        // 发送任务完成事件（错误情况）
+        this.emitEvent({
+          type: "task_complete",
+          timestamp: Date.now(),
+          taskId: task.id,
+          success: false,
+          duration: 0,
+          tokens: 0,
+          error: error instanceof Error ? error.message : String(error),
+        })
 
         if (this.config.errorHandling === "stop") {
           break
@@ -416,6 +455,13 @@ export class RalphLoop {
     this.running = false
     console.log("[RalphLoop] Execution loop completed")
     this.printStats()
+
+    // 发送完成事件
+    this.emitEvent({
+      type: "complete",
+      timestamp: Date.now(),
+      stats: this.stats,
+    })
 
     return this.stats
   }

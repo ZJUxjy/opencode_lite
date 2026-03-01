@@ -185,3 +185,93 @@ describe("RalphEvent types", () => {
       expect(event.type).toBe("complete")
     })
 })
+
+describe("RalphLoop Integrated Event Emission", () => {
+  const testDir = path.resolve(process.cwd(), ".test-ralph-integrated")
+
+  beforeEach(() => {
+    if (!fs.existsSync(testDir)) {
+      fs.mkdirSync(testDir, { recursive: true })
+    }
+  })
+
+  afterEach(() => {
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true })
+    }
+  })
+
+  it("should emit start event when run begins", async () => {
+    fs.writeFileSync(path.join(testDir, "TASKS.md"), "")
+
+    const events: RalphEvent[] = []
+
+    const loop = new RalphLoop(
+      { run: async () => "done" } as any,
+      null,
+      { cwd: testDir, outputFormat: "stream-json", maxIterations: 0 }
+    )
+
+    // Capture events by mocking emitEvent
+    loop.emitEvent = (event: RalphEvent) => {
+      events.push(event)
+      // Don't actually emit to console
+    }
+
+    await loop.run()
+
+    const startEvent = events.find(e => e.type === "start")
+    expect(startEvent).toBeDefined()
+    expect(startEvent).toHaveProperty("timestamp")
+    expect(startEvent).toHaveProperty("config")
+  })
+
+  it("should emit complete event when run ends", async () => {
+    fs.writeFileSync(path.join(testDir, "TASKS.md"), "")
+
+    const events: RalphEvent[] = []
+
+    const loop = new RalphLoop(
+      { run: async () => "done" } as any,
+      null,
+      { cwd: testDir, outputFormat: "stream-json", maxIterations: 0 }
+    )
+
+    // Capture events by mocking emitEvent
+    loop.emitEvent = (event: RalphEvent) => {
+      events.push(event)
+      // Don't actually emit to console
+    }
+
+    await loop.run()
+
+    const completeEvent = events.find(e => e.type === "complete")
+    expect(completeEvent).toBeDefined()
+    expect(completeEvent).toHaveProperty("timestamp")
+    expect(completeEvent).toHaveProperty("stats")
+  })
+
+  it("should emit task_start and task_complete for each task", async () => {
+    fs.writeFileSync(path.join(testDir, "TASKS.md"), "- [ ] Test task\n")
+
+    const events: RalphEvent[] = []
+
+    const loop = new RalphLoop(
+      { run: async () => "done" } as any,
+      null,
+      { cwd: testDir, outputFormat: "stream-json", maxIterations: 1, cooldownMs: 0 }
+    )
+
+    loop.emitEvent = (event: RalphEvent) => {
+      events.push(event)
+    }
+
+    await loop.run()
+
+    const taskStartEvents = events.filter(e => e.type === "task_start")
+    const taskCompleteEvents = events.filter(e => e.type === "task_complete")
+
+    expect(taskStartEvents.length).toBe(1)
+    expect(taskCompleteEvents.length).toBe(1)
+  })
+})
