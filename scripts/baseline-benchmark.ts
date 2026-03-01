@@ -179,6 +179,116 @@ const DEFAULT_TEST_SUITE: BaselineSample[] = [
     timeBudget: 300,
     tokenBudget: 50000,
   },
+
+  // Additional simple tasks (3 samples)
+  {
+    id: "simple-006",
+    category: "simple",
+    task: "Add a sleep(ms: number) utility function that returns a Promise",
+    expectedFiles: ["src/utils.ts"],
+    validationCommands: ["grep -q 'sleep' src/utils.ts"],
+    timeBudget: 60,
+    tokenBudget: 10000,
+  },
+  {
+    id: "simple-007",
+    category: "simple",
+    task: "Add a deepClone function that creates a deep copy of an object",
+    expectedFiles: ["src/utils.ts"],
+    validationCommands: ["grep -q 'deepClone' src/utils.ts"],
+    timeBudget: 60,
+    tokenBudget: 10000,
+  },
+  {
+    id: "simple-008",
+    category: "simple",
+    task: "Add an isEmpty function that checks if a value is empty (null, undefined, empty string, empty array, empty object)",
+    expectedFiles: ["src/utils.ts"],
+    validationCommands: ["grep -q 'isEmpty' src/utils.ts"],
+    timeBudget: 60,
+    tokenBudget: 10000,
+  },
+
+  // Additional medium tasks (3 samples)
+  {
+    id: "medium-004",
+    category: "medium",
+    task: "Implement a debounce function that delays invoking a function until after wait milliseconds have elapsed",
+    expectedFiles: ["src/utils.ts"],
+    validationCommands: ["grep -q 'debounce' src/utils.ts"],
+    timeBudget: 180,
+    tokenBudget: 30000,
+  },
+  {
+    id: "medium-005",
+    category: "medium",
+    task: "Implement a throttle function that limits function calls to once per specified interval",
+    expectedFiles: ["src/utils.ts"],
+    validationCommands: ["grep -q 'throttle' src/utils.ts"],
+    timeBudget: 180,
+    tokenBudget: 30000,
+  },
+  {
+    id: "medium-006",
+    category: "medium",
+    task: "Create a simple object pool class with acquire and release methods in src/object-pool.ts",
+    expectedFiles: ["src/object-pool.ts"],
+    validationCommands: [
+      "grep -q 'class ObjectPool' src/object-pool.ts",
+      "grep -q 'acquire' src/object-pool.ts",
+      "grep -q 'release' src/object-pool.ts",
+    ],
+    timeBudget: 180,
+    tokenBudget: 30000,
+  },
+
+  // Additional complex tasks (2 samples)
+  {
+    id: "complex-003",
+    category: "complex",
+    task: "Implement a simple pub/sub message broker with subscribe, unsubscribe, publish, and topic wildcard support in src/message-broker.ts",
+    expectedFiles: ["src/message-broker.ts"],
+    validationCommands: [
+      "grep -q 'class MessageBroker' src/message-broker.ts",
+      "grep -q 'subscribe' src/message-broker.ts",
+      "grep -q 'publish' src/message-broker.ts",
+    ],
+    timeBudget: 300,
+    tokenBudget: 50000,
+  },
+  {
+    id: "complex-004",
+    category: "complex",
+    task: "Create a simple state machine implementation with states, transitions, guards, and actions in src/state-machine.ts",
+    expectedFiles: ["src/state-machine.ts"],
+    validationCommands: [
+      "grep -q 'class StateMachine' src/state-machine.ts",
+      "grep -q 'transition' src/state-machine.ts",
+      "grep -q 'state' src/state-machine.ts",
+    ],
+    timeBudget: 300,
+    tokenBudget: 50000,
+  },
+
+  // Refactoring tasks (2 samples)
+  {
+    id: "refactor-001",
+    category: "medium",
+    task: "Refactor the following code to use async/await instead of .then() chains: function fetchUser(id) { return fetch(`/users/${id}`).then(r => r.json()).then(user => user.name); }",
+    expectedFiles: [],
+    validationCommands: [],
+    timeBudget: 120,
+    tokenBudget: 20000,
+  },
+  {
+    id: "refactor-002",
+    category: "medium",
+    task: "Refactor this callback-based function to return a Promise: function readFile(path, callback) { fs.readFile(path, 'utf8', (err, data) => { if (err) callback(err); else callback(null, data); }); }",
+    expectedFiles: [],
+    validationCommands: [],
+    timeBudget: 120,
+    tokenBudget: 20000,
+  },
 ]
 
 // ============ Benchmark Runner ============

@@ -177,3 +177,50 @@ export {
   type TaskStatus,
   type TaskPriority,
 } from "./progress-file.js"
+
+// Git Worktree 隔离
+export {
+  WorktreeManager,
+  createWorktreeManager,
+  withIsolatedWorktree,
+  isGitRepository,
+  getCurrentBranch,
+  listWorktrees,
+  DEFAULT_WORKTREE_CONFIG,
+  type WorktreeIsolationConfig,
+  type WorktreeInfo,
+} from "./worktree-isolation.js"
+
+// Ralph Loop 持续执行
+export {
+  RalphLoop,
+  createRalphLoop,
+  DEFAULT_RALPH_CONFIG,
+  type RalphLoopConfig,
+  type TaskSourceType,
+  type TaskDefinition,
+  type TaskExecutionResult,
+  type RalphLoopStats,
+} from "./ralph-loop.js"
+
+// 扩展思考预算
+export {
+  ThinkingBudgetManager,
+  createThinkingBudgetManager,
+  prependThinkingPrompt,
+  THINKING_PROMPT_TEMPLATE,
+  DEFAULT_THINKING_CONFIG,
+  type ThinkingBudgetConfig,
+  type ThinkingArtifact,
+} from "./thinking-budget.js"
+
+// 非交互模式
+export {
+  NonInteractiveExecutor,
+  createNonInteractiveExecutor,
+  runNonInteractive,
+  DEFAULT_NON_INTERACTIVE_CONFIG,
+  type NonInteractiveConfig,
+  type NonInteractiveResult,
+  type OutputFormat,
+} from "./non-interactive.js"
