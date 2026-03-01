@@ -325,6 +325,19 @@ export class TeamManager {
       this.blackboard.set(key, value)
     }
 
+    // Restore cost controller state
+    this.costController.restoreFromSnapshot(
+      resumed.teamState.tokensUsed,
+      resumed.teamState.costUsd
+    )
+
+    // Restore progress tracker state
+    this.progressTracker.restoreFromSnapshot({
+      lastProgressAt: resumed.teamState.lastProgressAt,
+      consecutiveNoProgressRounds: resumed.teamState.consecutiveNoProgressRounds,
+      consecutiveFailures: resumed.teamState.consecutiveFailures,
+    })
+
     // Log resume event
     this.blackboard.logEvent("resumed-from-checkpoint", {
       iteration: resumed.teamState.currentIteration,

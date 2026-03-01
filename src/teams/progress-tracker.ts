@@ -44,6 +44,13 @@ export interface ProgressTracker {
 
   // Reset
   reset(): void
+
+  // State restoration
+  restoreFromSnapshot(state: {
+    lastProgressAt: number
+    consecutiveNoProgressRounds: number
+    consecutiveFailures: number
+  }): void
 }
 
 // ============================================================================
@@ -342,6 +349,28 @@ export class TeamProgressTracker implements ProgressTracker {
       }
     }
     return count
+  }
+
+  /**
+   * Restore progress state from a checkpoint snapshot
+   */
+  restoreFromSnapshot(state: {
+    lastProgressAt: number
+    consecutiveNoProgressRounds: number
+    consecutiveFailures: number
+  }): void {
+    // Restore the current round state
+    this.currentRound = {
+      round: this.rounds.length,
+      filesChanged: 0,
+      testPassed: null,
+      p0Count: 0,
+      p1Count: 0,
+      timestamp: state.lastProgressAt,
+    }
+
+    // Note: We can't fully restore rounds history from snapshot
+    // but we preserve the continuity by setting timestamp
   }
 }
 

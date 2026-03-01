@@ -271,6 +271,7 @@ export interface CostController {
   shouldDegrade(): "none" | "reduce-concurrency" | "switch-model" | "stop"
   onBudgetExceeded(callback: () => void): void
   onDegradationNeeded(callback: (level: "reduce-concurrency" | "switch-model" | "stop") => void): void
+  restoreFromSnapshot(tokensUsed: { input: number; output: number }, costUsd: number): void
 }
 
 export interface ProgressTracker {
@@ -295,4 +296,9 @@ export interface ProgressTracker {
     p3Issues: number
   }
   reset(): void
+  restoreFromSnapshot(state: {
+    lastProgressAt: number
+    consecutiveNoProgressRounds: number
+    consecutiveFailures: number
+  }): void
 }

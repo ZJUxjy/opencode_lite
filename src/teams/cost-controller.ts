@@ -61,6 +61,9 @@ export interface CostController {
   // Callbacks
   onBudgetExceeded(callback: () => void): void
   onDegradationNeeded(callback: (level: "reduce-concurrency" | "switch-model" | "stop") => void): void
+
+  // State restoration
+  restoreFromSnapshot(tokensUsed: { input: number; output: number }, costUsd: number): void
 }
 
 // ============================================================================
@@ -249,6 +252,27 @@ export class TeamCostController implements CostController {
         }
       }
     }
+  }
+
+  /**
+   * Restore cost state from a checkpoint snapshot
+   */
+  restoreFromSnapshot(tokensUsed: { input: number; output: number }, costUsd: number): void {
+    // Clear existing records
+    this.records = []
+
+    // Add a single synthetic record with the restored totals
+    // Use "unknown" model since we don't have per-model breakdown in snapshot
+    this.records.push({
+      inputTokens: tokensUsed.input,
+      outputTokens: tokensUsed.output,
+      model: "unknown",
+      timestamp: Date.now(),
+      cost: costUsd,
+    })
+
+    // Check budget after restoration
+    this.checkBudget()
   }
 }
 
