@@ -15,9 +15,12 @@ import {
   showSkillTool,
   getActiveSkillsPromptTool,
 } from "./skill.js"
+import type { MCPManager } from "../mcp/manager.js"
+import { createMCPToolWrapper } from "../mcp/tools.js"
 
 export class ToolRegistry {
   private tools = new Map<string, Tool>()
+  private mcpManager?: MCPManager
 
   constructor() {
     // 注册内置工具
@@ -39,6 +42,53 @@ export class ToolRegistry {
       showSkillTool,
       getActiveSkillsPromptTool,
     ].forEach((tool) => this.register(tool))
+  }
+
+  /**
+   * 设置 MCP Manager 并监听工具变更
+   */
+  setMCPManager(manager: MCPManager): void {
+    this.mcpManager = manager
+
+    // 注册现有 MCP 工具
+    for (const toolInfo of manager.getAllTools()) {
+      this.register(createMCPToolWrapper(toolInfo, manager))
+    }
+
+    // 监听服务器连接事件
+    manager.on("server-connected", (_, tools) => {
+      for (const toolInfo of tools) {
+        this.register(createMCPToolWrapper(toolInfo, manager))
+      }
+    })
+
+    // 监听工具变更事件
+    manager.on("tools-changed", (_, tools) => {
+      // 重新注册该服务器的所有工具
+      for (const toolInfo of tools) {
+        // 删除旧工具
+        this.tools.delete(toolInfo.name)
+        // 注册新工具
+        this.register(createMCPToolWrapper(toolInfo, manager))
+      }
+    })
+
+    // 监听服务器断开事件
+    manager.on("server-disconnected", (serverName) => {
+      // 移除该服务器的所有工具（通过 mcpServer 标记识别）
+      for (const [name, tool] of this.tools.entries()) {
+        if (tool.mcpServer === serverName) {
+          this.tools.delete(name)
+        }
+      }
+    })
+  }
+
+  /**
+   * 获取 MCP Manager
+   */
+  getMCPManager(): MCPManager | undefined {
+    return this.mcpManager
   }
 
   register(tool: Tool) {

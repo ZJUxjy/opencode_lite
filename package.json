@@ -17,6 +17,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^1.0.0",
     "@ai-sdk/openai": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@types/react": "^19.2.14",
     "ai": "^4.0.0",
     "better-sqlite3": "^11.0.0",
@@ -31,9 +32,10 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",
+    "@types/deep-eql": "^4.0.2",
     "@types/node": "^22.0.0",
     "tsx": "^4.0.0",
-    "typescript": "^5.0.0",
+    "typescript": "^5.9.3",
     "vitest": "^3.0.0"
   },
   "engines": {

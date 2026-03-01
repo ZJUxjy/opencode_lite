@@ -8,6 +8,7 @@ import { PromptProvider } from "./prompts/index.js"
 import { ReActRunner, type Strategy, type ReActEvents } from "./react/index.js"
 import { CompressionService, type CompressionLevel, type CompressionPreview, type CompressionResult } from "./compression.js"
 import { SkillRegistry, getSkillRegistry } from "./skills/index.js"
+import { MCPManager, type MCPManagerOptions } from "./mcp/manager.js"
 
 export interface AgentConfig {
   cwd: string
@@ -19,6 +20,8 @@ export interface AgentConfig {
   policy?: PolicyConfig
   /** ReAct 策略: auto | fc | cot */
   strategy?: Strategy
+  /** MCP 配置 */
+  mcp?: MCPManagerOptions
 }
 
 export interface AgentEvents {
@@ -57,6 +60,7 @@ export class Agent {
   private reactRunner: ReActRunner
   private compressionService: CompressionService
   private skillRegistry: SkillRegistry
+  private mcpManager?: MCPManager
   private sessionId: string
   private cwd: string
   private enableStream: boolean
@@ -84,6 +88,15 @@ export class Agent {
     this.enableStream = config.enableStream ?? true
     this.compressionThreshold = config.compressionThreshold ?? 0.92
     this.strategy = config.strategy || "auto"
+
+    // 初始化 MCP Manager
+    if (config.mcp?.servers && config.mcp.servers.length > 0) {
+      this.mcpManager = new MCPManager({
+        servers: config.mcp.servers,
+        enabled: config.mcp.enabled ?? true,
+      })
+      this.tools.setMCPManager(this.mcpManager)
+    }
 
     // 初始化 ReAct Runner
     this.reactRunner = new ReActRunner(this.llm, this.tools, {
@@ -590,5 +603,41 @@ export class Agent {
    */
   getActiveSkills(): ReturnType<SkillRegistry["getActive"]> {
     return this.skillRegistry.getActive()
+  }
+
+  // ==========================================================================
+  // MCP 方法
+  // ==========================================================================
+
+  /**
+   * 初始化 MCP（在应用启动时调用）
+   */
+  async initializeMCP(): Promise<void> {
+    if (this.mcpManager) {
+      await this.mcpManager.initialize()
+    }
+  }
+
+  /**
+   * 获取 MCP Manager
+   */
+  getMCPManager(): MCPManager | undefined {
+    return this.mcpManager
+  }
+
+  /**
+   * 获取 MCP 服务器状态
+   */
+  getMCPStatus(): Array<{ name: string; connected: boolean; tools: number }> {
+    if (!this.mcpManager) {
+      return []
+    }
+
+    return this.mcpManager.getAllServerStates().map((state) => ({
+      name: state.name,
+      connected: state.status.type === "connected",
+      tools:
+        state.status.type === "connected" ? state.status.tools?.length || 0 : 0,
+    }))
   }
 }
