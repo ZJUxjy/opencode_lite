@@ -233,6 +233,11 @@ program
       enableStream: options.stream !== false,
       compressionThreshold: parseFloat(options.compressionThreshold),
       mcp: settings.mcp,
+      team: options.team ? {
+        mode: options.team,
+        strategy: options.teamStrategy,
+        workers: parseInt(options.teamWorkers, 10),
+      } : undefined,
     })
 
     // 初始化 MCP
@@ -251,6 +256,9 @@ program
         dbPath={dbPath}
         isResumed={!isNewSession}
         resumedSessionTitle={resumedSession?.title}
+        teamMode={options.team}
+        teamStrategy={options.teamStrategy}
+        teamWorkers={parseInt(options.teamWorkers, 10)}
       />
     )
   })
