@@ -38,12 +38,14 @@ export class PlannerExecutorReviewerTeam {
   private blackboard: SharedBlackboard
   private costController: CostController
   private progressTracker: ProgressTracker
+  private debug: boolean
 
   constructor(
     config: TeamConfig,
     planner: Agent,
     executor: Agent,
-    reviewer: Agent
+    reviewer: Agent,
+    options?: { debug?: boolean }
   ) {
     if (config.mode !== "planner-executor-reviewer") {
       throw new Error("Invalid mode for PlannerExecutorReviewerTeam")
@@ -56,6 +58,23 @@ export class PlannerExecutorReviewerTeam {
     this.blackboard = new SharedBlackboard()
     this.costController = new CostController(config.budget)
     this.progressTracker = new ProgressTracker(config.maxIterations)
+    this.debug = options?.debug ?? false
+  }
+
+  /**
+   * 调试日志
+   */
+  private log(message: string): void {
+    if (this.debug) {
+      console.log(message)
+    }
+  }
+
+  /**
+   * 警告日志（始终输出）
+   */
+  private warn(message: string): void {
+    console.warn(message)
   }
 
   /**
@@ -70,7 +89,7 @@ export class PlannerExecutorReviewerTeam {
 
     try {
       // Phase 1: Planner 制定任务契约
-      console.log("\n[Phase 1] Planner analyzing requirements...")
+      this.log("\n[Phase 1] Planner analyzing requirements...")
       taskContract = await this.plannerAnalyze(userRequirement)
 
       if (!taskContract) {
@@ -80,10 +99,10 @@ export class PlannerExecutorReviewerTeam {
       this.progressTracker.registerTask(taskContract, "executor")
       this.blackboard.publishTask(taskContract, "executor")
 
-      console.log(`[Phase 1] Task contract created:`)
-      console.log(`  - Objective: ${taskContract.objective}`)
-      console.log(`  - File scope: ${taskContract.fileScope.length} files`)
-      console.log(`  - Acceptance checks: ${taskContract.acceptanceChecks.length}`)
+      this.log(`[Phase 1] Task contract created:`)
+      this.log(`  - Objective: ${taskContract.objective}`)
+      this.log(`  - File scope: ${taskContract.fileScope.length} files`)
+      this.log(`  - Acceptance checks: ${taskContract.acceptanceChecks.length}`)
 
       // Phase 2: Executor 实现 + Reviewer 验收（迭代循环）
       while (iteration < this.config.maxIterations) {
@@ -91,7 +110,7 @@ export class PlannerExecutorReviewerTeam {
         this.progressTracker.startIteration()
 
         // Step 1: Executor 按契约实现
-        console.log(`\n[Iteration ${iteration}] Executor implementing...`)
+        this.log(`\n[Iteration ${iteration}] Executor implementing...`)
         workArtifact = await this.executorImplement(taskContract, reviewArtifact)
 
         if (!workArtifact) {
@@ -101,22 +120,22 @@ export class PlannerExecutorReviewerTeam {
         // 检查是否越界修改
         const outOfScope = this.checkScopeViolation(taskContract, workArtifact)
         if (outOfScope.length > 0) {
-          console.warn(`[Iteration ${iteration}] Warning: Out-of-scope changes detected:`)
-          outOfScope.forEach(file => console.warn(`  - ${file}`))
+          this.warn(`[Iteration ${iteration}] Warning: Out-of-scope changes detected:`)
+          outOfScope.forEach(file => this.warn(`  - ${file}`))
         }
 
         this.blackboard.submitWork(workArtifact)
         this.progressTracker.completeTask(taskContract.taskId, workArtifact)
 
         // Step 2: Reviewer 按契约验收
-        console.log(`[Iteration ${iteration}] Reviewer reviewing against contract...`)
+        this.log(`[Iteration ${iteration}] Reviewer reviewing against contract...`)
         reviewArtifact = await this.reviewerReview(taskContract, workArtifact)
 
         this.blackboard.submitReview(reviewArtifact)
 
         // Step 3: 检查是否通过
         if (reviewArtifact.status === "approved") {
-          console.log(`[Iteration ${iteration}] Review approved!`)
+          this.log(`[Iteration ${iteration}] Review approved!`)
           break
         }
 
@@ -124,7 +143,7 @@ export class PlannerExecutorReviewerTeam {
           throw new Error("Review rejected, cannot proceed")
         }
 
-        console.log(
+        this.log(
           `[Iteration ${iteration}] Changes requested: ${reviewArtifact.mustFix.length} issues`
         )
 

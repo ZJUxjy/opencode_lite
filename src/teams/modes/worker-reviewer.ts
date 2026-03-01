@@ -31,11 +31,13 @@ export class WorkerReviewerTeam {
   private blackboard: SharedBlackboard
   private costController: CostController
   private progressTracker: ProgressTracker
+  private debug: boolean
 
   constructor(
     config: TeamConfig,
     worker: Agent,
-    reviewer: Agent
+    reviewer: Agent,
+    options?: { debug?: boolean }
   ) {
     if (config.mode !== "worker-reviewer") {
       throw new Error("Invalid mode for WorkerReviewerTeam")
@@ -47,6 +49,23 @@ export class WorkerReviewerTeam {
     this.blackboard = new SharedBlackboard()
     this.costController = new CostController(config.budget)
     this.progressTracker = new ProgressTracker(config.maxIterations)
+    this.debug = options?.debug ?? false
+  }
+
+  /**
+   * 调试日志
+   */
+  private log(message: string): void {
+    if (this.debug) {
+      console.log(message)
+    }
+  }
+
+  /**
+   * 警告日志（始终输出）
+   */
+  private warn(message: string): void {
+    console.warn(message)
   }
 
   /**
@@ -76,7 +95,7 @@ export class WorkerReviewerTeam {
         this.progressTracker.startIteration()
 
         // Step 1: Worker 实现功能
-        console.log(`\n[Iteration ${iteration}] Worker implementing...`)
+        this.log(`\n[Iteration ${iteration}] Worker implementing...`)
         workArtifact = await this.workerImplement(taskContract, reviewArtifact)
 
         if (!workArtifact) {
@@ -87,14 +106,14 @@ export class WorkerReviewerTeam {
         this.progressTracker.completeTask(taskContract.taskId, workArtifact)
 
         // Step 2: Reviewer 审查
-        console.log(`[Iteration ${iteration}] Reviewer reviewing...`)
+        this.log(`[Iteration ${iteration}] Reviewer reviewing...`)
         reviewArtifact = await this.reviewerReview(workArtifact)
 
         this.blackboard.submitReview(reviewArtifact)
 
         // Step 3: 检查是否通过
         if (reviewArtifact.status === "approved") {
-          console.log(`[Iteration ${iteration}] Review approved!`)
+          this.log(`[Iteration ${iteration}] Review approved!`)
           break
         }
 
@@ -102,7 +121,7 @@ export class WorkerReviewerTeam {
           throw new Error("Review rejected, cannot proceed")
         }
 
-        console.log(
+        this.log(
           `[Iteration ${iteration}] Changes requested: ${reviewArtifact.mustFix.length} issues`
         )
 

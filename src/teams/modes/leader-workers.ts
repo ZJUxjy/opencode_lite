@@ -61,11 +61,13 @@ export class LeaderWorkersTeam {
   private conflictDetector: ConflictDetector
   private maxParallelWorkers: number
   private evaluationCriteria: EvaluationCriteria
+  private debug: boolean
 
   constructor(
     config: TeamConfig,
     leader: Agent,
-    workers: Agent[]
+    workers: Agent[],
+    options?: { debug?: boolean }
   ) {
     if (config.mode !== "leader-workers") {
       throw new Error("Invalid mode for LeaderWorkersTeam")
@@ -88,6 +90,23 @@ export class LeaderWorkersTeam {
       maintainability: 0.15,
       requirementMatch: 0.1,
     }
+    this.debug = options?.debug ?? false
+  }
+
+  /**
+   * 调试日志
+   */
+  private log(message: string): void {
+    if (this.debug) {
+      console.log(message)
+    }
+  }
+
+  /**
+   * 警告日志（始终输出）
+   */
+  private warn(message: string): void {
+    console.warn(message)
   }
 
   /**
@@ -127,17 +146,17 @@ export class LeaderWorkersTeam {
     userRequirement: string,
     startTime: number
   ): Promise<TeamResult> {
-    console.log("\n[Leader-Workers] Starting collaborative mode...")
+    this.log("\n[Leader-Workers] Starting collaborative mode...")
 
     // Phase 1: Leader 分析需求并拆分任务
-    console.log("[Phase 1] Leader analyzing and splitting tasks...")
+    this.log("[Phase 1] Leader analyzing and splitting tasks...")
     const taskContracts = await this.leaderSplitTasks(userRequirement)
 
     if (taskContracts.length === 0) {
       throw new Error("Leader failed to split tasks")
     }
 
-    console.log(`[Phase 1] Split into ${taskContracts.length} tasks`)
+    this.log(`[Phase 1] Split into ${taskContracts.length} tasks`)
 
     // 构建 DAG
     for (const contract of taskContracts) {
@@ -152,14 +171,14 @@ export class LeaderWorkersTeam {
 
     // 生成执行计划
     const plan = this.taskDAG.generateExecutionPlan()
-    console.log(`[Phase 1] Execution plan: ${plan.levels.length} levels, max parallelism: ${plan.maxParallelism}`)
+    this.log(`[Phase 1] Execution plan: ${plan.levels.length} levels, max parallelism: ${plan.maxParallelism}`)
 
     // Phase 2: 按层级并行执行
-    console.log("\n[Phase 2] Workers executing tasks...")
+    this.log("\n[Phase 2] Workers executing tasks...")
     const allArtifacts: WorkArtifact[] = []
 
     for (const level of plan.levels) {
-      console.log(`\n[Level ${level.level}] Executing ${level.tasks.length} tasks in parallel...`)
+      this.log(`\n[Level ${level.level}] Executing ${level.tasks.length} tasks in parallel...`)
 
       const levelArtifacts = await this.executeLevel(level.tasks)
       allArtifacts.push(...levelArtifacts)
@@ -171,9 +190,9 @@ export class LeaderWorkersTeam {
 
       const conflictResult = this.conflictDetector.detectConflicts()
       if (conflictResult.hasConflicts) {
-        console.warn(`[Level ${level.level}] Detected ${conflictResult.conflicts.length} conflicts`)
+        this.warn(`[Level ${level.level}] Detected ${conflictResult.conflicts.length} conflicts`)
         for (const conflict of conflictResult.conflicts) {
-          console.warn(formatConflictReport(conflict))
+          this.warn(formatConflictReport(conflict))
         }
       }
 
@@ -185,7 +204,7 @@ export class LeaderWorkersTeam {
     }
 
     // Phase 3: Leader 集成验收
-    console.log("\n[Phase 3] Leader integrating and reviewing...")
+    this.log("\n[Phase 3] Leader integrating and reviewing...")
     const finalArtifact = await this.leaderIntegrate(allArtifacts, userRequirement)
 
     const duration = Date.now() - startTime
@@ -212,21 +231,21 @@ export class LeaderWorkersTeam {
     userRequirement: string,
     startTime: number
   ): Promise<TeamResult> {
-    console.log("\n[Leader-Workers] Starting competitive mode...")
+    this.log("\n[Leader-Workers] Starting competitive mode...")
 
     // Phase 1: Leader 定义评估标准
-    console.log("[Phase 1] Leader defining evaluation criteria...")
+    this.log("[Phase 1] Leader defining evaluation criteria...")
     const criteria = await this.leaderDefineCriteria(userRequirement)
 
     // Phase 2: Workers 并行出方案
-    console.log(`\n[Phase 2] ${this.workers.length} workers proposing solutions...`)
+    this.log(`\n[Phase 2] ${this.workers.length} workers proposing solutions...`)
     const workerResults = await this.executeWorkersInParallel(
       userRequirement,
       undefined
     )
 
     // Phase 3: Leader 评估并选择
-    console.log("\n[Phase 3] Leader evaluating solutions...")
+    this.log("\n[Phase 3] Leader evaluating solutions...")
     const evaluation = await this.leaderEvaluate(workerResults, criteria)
 
     const duration = Date.now() - startTime
@@ -519,18 +538,68 @@ REASON: <brief reason>`
 
     const selectedResult = results.find(r => r.workerId === selectedWorkerId)
 
-    // 计算分数（简化：使用随机分数模拟）
-    const scores = results.map(r => ({
-      workerId: r.workerId,
-      score: r.workerId === selectedWorkerId ? 0.85 : Math.random() * 0.7 + 0.1,
-    }))
+    // 计算分数（使用加权评分）
+    const scores = results.map(r => {
+      const score = this.calculateScore(r.artifact, criteria)
+      return {
+        workerId: r.workerId,
+        score,
+      }
+    })
+
+    // 找到最高分
+    const bestResult = scores.reduce((best, current) =>
+      current.score > best.score ? current : best,
+      { workerId: "", score: -1 }
+    )
+
+    const bestWorkerId = bestResult.workerId || null
+    const bestResultData = results.find(r => r.workerId === bestWorkerId)
 
     return {
-      selectedWorker: selectedWorkerId || null,
-      selectedArtifact: selectedResult?.artifact || null,
-      selectedScore: selectedWorkerId ? 0.85 : null,
+      selectedWorker: bestWorkerId,
+      selectedArtifact: bestResultData?.artifact || selectedResult?.artifact || null,
+      selectedScore: bestResult.score > 0 ? bestResult.score : null,
       scores,
     }
+  }
+
+  /**
+   * 计算方案分数（基于 EvaluationCriteria 加权）
+   */
+  private calculateScore(
+    artifact: WorkArtifact,
+    criteria: EvaluationCriteria
+  ): number {
+    let score = 0
+
+    // 1. 代码质量：基于变更文件数量
+    const fileCount = artifact.changedFiles.length
+    const codeQualityScore = Math.min(fileCount / 10, 0.3)
+    score += criteria.codeQuality * codeQualityScore
+
+    // 2. 测试覆盖率：基于测试结果
+    const passedTests = artifact.testResults.filter(t => t.passed).length
+    const totalTests = artifact.testResults.length
+    const testCoverageScore = totalTests > 0 ? passedTests / totalTests : 0
+    score += criteria.testCoverage * testCoverageScore
+
+    // 3. 性能：基于执行时间（假设有）
+    if (passedTests > 0) {
+      score += criteria.performance * 0.3
+    }
+
+    // 4. 可维护性：基于风险数量
+    const riskCount = artifact.risks.length
+    const maintainabilityScore = Math.max(0, 1 - riskCount * 0.2)
+    score += criteria.maintainability * maintainabilityScore
+
+    // 5. 需求符合度：基于摘要长度
+    const summaryLength = artifact.summary.length
+    const requirementScore = summaryLength > 100 && summaryLength < 500 ? 1 : 0
+    score += criteria.requirementMatch * requirementScore
+
+    return score
   }
 
   /**
