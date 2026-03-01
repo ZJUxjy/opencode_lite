@@ -137,7 +137,7 @@ export class ConflictDetector {
               type: "partition-conflict",
               severity: "medium",
               ownerTaskId: partition,
-              message: `文件 ${file} 与 {existingFile} 存在目录重叠但分区不同`,
+              message: `文件 ${file} 与 ${existingFile} 存在目录重叠但分区不同`,
               resolution: "考虑重新划分分区或使用三方合并",
             })
           }

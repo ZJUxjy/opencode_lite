@@ -278,9 +278,14 @@ export class LeaderWorkersRunner extends EventEmitter {
 
           return artifact
         } finally {
-          // 解锁文件
+          // 解锁文件 - 确保执行，捕获异常避免永久锁定
           for (const file of task.fileScope) {
-            this.conflictDetector.unlockFile(file, taskId)
+            try {
+              this.conflictDetector.unlockFile(file, taskId)
+            } catch (error) {
+              // 记录警告但不阻塞流程
+              this.emit("unlock-warning", { file, taskId, error })
+            }
           }
         }
       })
