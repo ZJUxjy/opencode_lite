@@ -214,6 +214,9 @@ export class TeamManager {
     checkpointId: string,
     strategy: CheckpointResumeConfig["strategy"] = "continue-iteration"
   ): Promise<unknown> {
+    // Initialize abort controller for cancellation support
+    this.abortController = new AbortController()
+
     if (!this.checkpointManager) {
       throw new Error("Checkpoint manager not configured")
     }
