@@ -160,26 +160,161 @@ export class WorkerReviewerTeam {
     contract: TaskContract,
     previousReview?: ReviewArtifact | null
   ): Promise<WorkArtifact> {
-    // TODO: 实际调用 Worker Agent
-    // 这里需要：
-    // 1. 构建prompt（包含任务描述和review反馈）
-    // 2. 调用 worker.run()
-    // 3. 解析结果并构建 WorkArtifact
+    // 构建prompt
+    let prompt = `You are a Worker agent. Your task is to implement the following requirement:\n\n`
+    prompt += `**Objective**: ${contract.objective}\n\n`
 
-    throw new Error("Not implemented yet")
+    if (contract.fileScope.length > 0) {
+      prompt += `**File Scope** (you should only modify these files):\n`
+      contract.fileScope.forEach(file => prompt += `- ${file}\n`)
+      prompt += `\n`
+    }
+
+    if (contract.acceptanceChecks.length > 0) {
+      prompt += `**Acceptance Checks** (you must run these commands):\n`
+      contract.acceptanceChecks.forEach(check => prompt += `- ${check}\n`)
+      prompt += `\n`
+    }
+
+    if (previousReview) {
+      prompt += `**Previous Review Feedback**:\n`
+      prompt += `Status: ${previousReview.status}\n`
+      if (previousReview.mustFix.length > 0) {
+        prompt += `\nMust fix:\n`
+        previousReview.mustFix.forEach(comment => {
+          prompt += `- ${comment.message}\n`
+        })
+      }
+      prompt += `\n`
+    }
+
+    prompt += `Please implement the functionality and provide:\n`
+    prompt += `1. A summary of what you did\n`
+    prompt += `2. List of changed files\n`
+    prompt += `3. Any risks or assumptions\n\n`
+    prompt += `After implementation, respond with "IMPLEMENTATION COMPLETE"`
+
+    // 调用Worker Agent
+    const response = await this.worker.run(prompt)
+
+    // 解析响应并构建WorkArtifact
+    // 注意：这是简化实现，实际应该解析response提取结构化信息
+    const artifact: WorkArtifact = {
+      taskId: contract.taskId,
+      agentId: "worker",
+      agentRole: "worker",
+      summary: response.substring(0, 200), // 简化：取前200字符作为摘要
+      changedFiles: this.extractChangedFiles(response, contract.fileScope),
+      patchRef: `patch-${Date.now()}`,
+      testResults: [],
+      risks: [],
+      assumptions: [],
+      createdAt: Date.now(),
+    }
+
+    return artifact
   }
 
   /**
    * Reviewer 审查代码
    */
   private async reviewerReview(artifact: WorkArtifact): Promise<ReviewArtifact> {
-    // TODO: 实际调用 Reviewer Agent
-    // 这里需要：
-    // 1. 构建prompt（包含代码变更和质量标准）
-    // 2. 调用 reviewer.run()
-    // 3. 解析结果并构建 ReviewArtifact
+    // 构建prompt
+    let prompt = `You are a Reviewer agent. Please review the following work:\n\n`
+    prompt += `**Summary**: ${artifact.summary}\n\n`
+    prompt += `**Changed Files**:\n`
+    artifact.changedFiles.forEach(file => prompt += `- ${file}\n`)
+    prompt += `\n`
 
-    throw new Error("Not implemented yet")
+    prompt += `Please review the code and provide:\n`
+    prompt += `1. Overall assessment (approved/changes_requested/rejected)\n`
+    prompt += `2. List of issues that must be fixed\n`
+    prompt += `3. Suggestions for improvement\n\n`
+    prompt += `Respond with your review decision: APPROVED, CHANGES_REQUESTED, or REJECTED`
+
+    // 调用Reviewer Agent
+    const response = await this.reviewer.run(prompt)
+
+    // 解析响应并构建ReviewArtifact
+    const status = this.parseReviewStatus(response)
+
+    const review: ReviewArtifact = {
+      workArtifactId: artifact.taskId,
+      reviewerId: "reviewer",
+      status,
+      severity: "P1",
+      mustFix: this.extractReviewComments(response),
+      suggestions: [],
+      createdAt: Date.now(),
+    }
+
+    return review
+  }
+
+  /**
+   * 从响应中提取变更的文件列表
+   */
+  private extractChangedFiles(response: string, fileScope: string[]): string[] {
+    // 简化实现：如果有fileScope，返回fileScope；否则尝试从响应中提取
+    if (fileScope.length > 0) {
+      return fileScope
+    }
+
+    // 尝试匹配文件路径模式
+    const filePattern = /(?:modified|created|changed):\s*([^\s]+\.(ts|js|tsx|jsx|py|java|go|rs))/gi
+    const matches = response.matchAll(filePattern)
+    const files = Array.from(matches, m => m[1])
+
+    return files.length > 0 ? files : ["unknown-file"]
+  }
+
+  /**
+   * 解析审查状态
+   */
+  private parseReviewStatus(response: string): "approved" | "changes_requested" | "rejected" {
+    const lowerResponse = response.toLowerCase()
+
+    if (lowerResponse.includes("approved") || lowerResponse.includes("looks good")) {
+      return "approved"
+    }
+
+    if (lowerResponse.includes("rejected") || lowerResponse.includes("cannot proceed")) {
+      return "rejected"
+    }
+
+    return "changes_requested"
+  }
+
+  /**
+   * 从响应中提取审查评论
+   */
+  private extractReviewComments(response: string): Array<{
+    file?: string
+    line?: number
+    message: string
+    category: "bug" | "style" | "performance" | "security" | "other"
+  }> {
+    // 简化实现：将响应按行分割，查找问题描述
+    const lines = response.split('\n')
+    const comments: Array<{
+      message: string
+      category: "bug" | "style" | "performance" | "security" | "other"
+    }> = []
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('•')) {
+        const message = trimmed.substring(1).trim()
+        if (message.length > 10) { // 过滤太短的行
+          comments.push({
+            message,
+            category: "other",
+          })
+        }
+      }
+    }
+
+    return comments
   }
 
   /**

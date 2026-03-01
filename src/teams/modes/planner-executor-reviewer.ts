@@ -179,18 +179,32 @@ export class PlannerExecutorReviewerTeam {
    * Planner 分析需求并制定任务契约
    */
   private async plannerAnalyze(requirement: string): Promise<TaskContract> {
-    // TODO: 实际调用 Planner Agent
-    // 这里需要：
-    // 1. 构建prompt（包含需求和契约模板）
-    // 2. 调用 planner.run()
-    // 3. 解析结果并构建 TaskContract
-    //
-    // Prompt应该包含：
-    // - 用户需求
-    // - 要求Planner明确：目标、文件范围、API约束、验收标准
-    // - 要求Planner考虑：依赖关系、风险点、预估工作量
+    // 构建prompt
+    let prompt = `You are a Planner agent. Your task is to analyze the requirement and create a detailed task contract.\n\n`
+    prompt += `**User Requirement**: ${requirement}\n\n`
+    prompt += `Please analyze and provide:\n`
+    prompt += `1. Clear objective (what needs to be achieved)\n`
+    prompt += `2. File scope (which files should be modified)\n`
+    prompt += `3. Acceptance checks (commands to verify the implementation)\n`
+    prompt += `4. Any API contracts or constraints\n\n`
+    prompt += `Format your response as:\n`
+    prompt += `OBJECTIVE: <clear objective>\n`
+    prompt += `FILES: <comma-separated list of files>\n`
+    prompt += `CHECKS: <comma-separated list of commands>\n`
 
-    throw new Error("Not implemented yet")
+    // 调用Planner Agent
+    const response = await this.planner.run(prompt)
+
+    // 解析响应并构建TaskContract
+    const contract: TaskContract = {
+      taskId: `task-${Date.now()}`,
+      objective: this.extractObjective(response) || requirement,
+      fileScope: this.extractFileScope(response),
+      acceptanceChecks: this.extractAcceptanceChecks(response),
+      apiContracts: [],
+    }
+
+    return contract
   }
 
   /**
@@ -200,18 +214,53 @@ export class PlannerExecutorReviewerTeam {
     contract: TaskContract,
     previousReview?: ReviewArtifact | null
   ): Promise<WorkArtifact> {
-    // TODO: 实际调用 Executor Agent
-    // 这里需要：
-    // 1. 构建prompt（包含契约、review反馈）
-    // 2. 调用 executor.run()
-    // 3. 解析结果并构建 WorkArtifact
-    //
-    // Prompt应该强调：
-    // - 必须遵守fileScope限制
-    // - 必须执行acceptanceChecks
-    // - 必须遵守apiContracts
+    // 构建prompt
+    let prompt = `You are an Executor agent. You must implement according to the task contract.\n\n`
+    prompt += `**Task Contract**:\n`
+    prompt += `- Objective: ${contract.objective}\n`
 
-    throw new Error("Not implemented yet")
+    if (contract.fileScope.length > 0) {
+      prompt += `- File Scope (MUST ONLY modify these files):\n`
+      contract.fileScope.forEach(file => prompt += `  * ${file}\n`)
+    }
+
+    if (contract.acceptanceChecks.length > 0) {
+      prompt += `- Acceptance Checks (MUST run these):\n`
+      contract.acceptanceChecks.forEach(check => prompt += `  * ${check}\n`)
+    }
+
+    if (previousReview) {
+      prompt += `\n**Previous Review Feedback**:\n`
+      prompt += `Status: ${previousReview.status}\n`
+      if (previousReview.mustFix.length > 0) {
+        prompt += `Must fix:\n`
+        previousReview.mustFix.forEach(comment => {
+          prompt += `- ${comment.message}\n`
+        })
+      }
+    }
+
+    prompt += `\nIMPORTANT: You MUST stay within the file scope defined in the contract.\n`
+    prompt += `\nPlease implement and respond with "IMPLEMENTATION COMPLETE"`
+
+    // 调用Executor Agent
+    const response = await this.executor.run(prompt)
+
+    // 解析响应并构建WorkArtifact
+    const artifact: WorkArtifact = {
+      taskId: contract.taskId,
+      agentId: "executor",
+      agentRole: "executor",
+      summary: response.substring(0, 200),
+      changedFiles: this.extractChangedFiles(response, contract.fileScope),
+      patchRef: `patch-${Date.now()}`,
+      testResults: [],
+      risks: [],
+      assumptions: [],
+      createdAt: Date.now(),
+    }
+
+    return artifact
   }
 
   /**
@@ -221,20 +270,140 @@ export class PlannerExecutorReviewerTeam {
     contract: TaskContract,
     artifact: WorkArtifact
   ): Promise<ReviewArtifact> {
-    // TODO: 实际调用 Reviewer Agent
-    // 这里需要：
-    // 1. 构建prompt（包含契约、工作产物）
-    // 2. 调用 reviewer.run()
-    // 3. 解析结果并构建 ReviewArtifact
-    //
-    // Prompt应该要求Reviewer检查：
-    // - 是否符合契约目标
-    // - 是否有越界修改（changedFiles vs fileScope）
-    // - 是否执行了所有acceptanceChecks
-    // - 是否遵守了apiContracts
-    // - 代码质量和测试覆盖
+    // 构建prompt
+    let prompt = `You are a Reviewer agent. Review the work against the task contract.\n\n`
+    prompt += `**Task Contract**:\n`
+    prompt += `- Objective: ${contract.objective}\n`
+    prompt += `- File Scope: ${contract.fileScope.join(', ')}\n`
+    prompt += `- Acceptance Checks: ${contract.acceptanceChecks.join(', ')}\n\n`
 
-    throw new Error("Not implemented yet")
+    prompt += `**Work Submitted**:\n`
+    prompt += `- Summary: ${artifact.summary}\n`
+    prompt += `- Changed Files: ${artifact.changedFiles.join(', ')}\n\n`
+
+    prompt += `Please verify:\n`
+    prompt += `1. Does it meet the objective?\n`
+    prompt += `2. Are all changes within the file scope?\n`
+    prompt += `3. Were all acceptance checks executed?\n`
+    prompt += `4. Code quality and test coverage\n\n`
+    prompt += `Respond with: APPROVED, CHANGES_REQUESTED, or REJECTED`
+
+    // 调用Reviewer Agent
+    const response = await this.reviewer.run(prompt)
+
+    // 解析响应并构建ReviewArtifact
+    const status = this.parseReviewStatus(response)
+
+    const review: ReviewArtifact = {
+      workArtifactId: artifact.taskId,
+      reviewerId: "reviewer",
+      status,
+      severity: "P1",
+      mustFix: this.extractReviewComments(response),
+      suggestions: [],
+      createdAt: Date.now(),
+    }
+
+    return review
+  }
+
+  /**
+   * 从响应中提取目标
+   */
+  private extractObjective(response: string): string | null {
+    const match = response.match(/OBJECTIVE:\s*(.+?)(?:\n|$)/i)
+    return match ? match[1].trim() : null
+  }
+
+  /**
+   * 从响应中提取文件范围
+   */
+  private extractFileScope(response: string): string[] {
+    const match = response.match(/FILES:\s*(.+?)(?:\n|$)/i)
+    if (!match) return []
+
+    return match[1]
+      .split(',')
+      .map(f => f.trim())
+      .filter(f => f.length > 0)
+  }
+
+  /**
+   * 从响应中提取验收检查
+   */
+  private extractAcceptanceChecks(response: string): string[] {
+    const match = response.match(/CHECKS:\s*(.+?)(?:\n|$)/i)
+    if (!match) return []
+
+    return match[1]
+      .split(',')
+      .map(c => c.trim())
+      .filter(c => c.length > 0)
+  }
+
+  /**
+   * 从响应中提取变更的文件列表
+   */
+  private extractChangedFiles(response: string, fileScope: string[]): string[] {
+    // 如果有fileScope，优先返回fileScope
+    if (fileScope.length > 0) {
+      return fileScope
+    }
+
+    // 尝试从响应中提取
+    const filePattern = /(?:modified|created|changed):\s*([^\s]+\.(ts|js|tsx|jsx|py|java|go|rs))/gi
+    const matches = response.matchAll(filePattern)
+    const files = Array.from(matches, m => m[1])
+
+    return files.length > 0 ? files : ["unknown-file"]
+  }
+
+  /**
+   * 解析审查状态
+   */
+  private parseReviewStatus(response: string): "approved" | "changes_requested" | "rejected" {
+    const lowerResponse = response.toLowerCase()
+
+    if (lowerResponse.includes("approved") || lowerResponse.includes("looks good")) {
+      return "approved"
+    }
+
+    if (lowerResponse.includes("rejected") || lowerResponse.includes("cannot proceed")) {
+      return "rejected"
+    }
+
+    return "changes_requested"
+  }
+
+  /**
+   * 从响应中提取审查评论
+   */
+  private extractReviewComments(response: string): Array<{
+    file?: string
+    line?: number
+    message: string
+    category: "bug" | "style" | "performance" | "security" | "other"
+  }> {
+    const lines = response.split('\n')
+    const comments: Array<{
+      message: string
+      category: "bug" | "style" | "performance" | "security" | "other"
+    }> = []
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('•')) {
+        const message = trimmed.substring(1).trim()
+        if (message.length > 10) {
+          comments.push({
+            message,
+            category: "other",
+          })
+        }
+      }
+    }
+
+    return comments
   }
 
   /**
