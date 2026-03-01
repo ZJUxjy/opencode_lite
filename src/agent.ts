@@ -495,6 +495,13 @@ export class Agent {
   }
 
   /**
+   * 获取当前会话的所有消息
+   */
+  getMessages() {
+    return this.store.get(this.sessionId)
+  }
+
+  /**
    * 取消当前正在进行的 LLM 请求
    */
   abort(): void {
