@@ -17,6 +17,7 @@ import { createCouncilMode } from "./modes/council.js"
 import { createFallbackHandler, type FallbackAgentInput, type TeamFailureReport } from "./fallback.js"
 import { CheckpointResumer, createCheckpointResumer } from "./checkpoint-resume.js"
 import type { CheckpointResumeConfig } from "./checkpoint-resume.js"
+import { CheckpointManager, createCheckpointManager } from "./checkpoint.js"
 
 // ============================================================================
 // Team Manager Options
@@ -43,7 +44,7 @@ export class TeamManager {
   private fallbackHandler: ReturnType<typeof createFallbackHandler>
   private failureReport?: TeamFailureReport
   private checkpointResumer?: CheckpointResumer
-  private checkpointManager?: import("./checkpoint.js").CheckpointManager
+  private checkpointManager?: CheckpointManager
 
   constructor(options: TeamManagerOptions) {
     this.config = options.config
@@ -85,6 +86,9 @@ export class TeamManager {
 
     // Create mode runner based on config
     this.modeRunner = this.createModeRunner(options.config.mode)
+
+    // Initialize checkpoint manager
+    this.checkpointManager = createCheckpointManager(this.state.teamId)
 
     // Set up event handlers
     this.setupEventHandlers()
