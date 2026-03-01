@@ -38,7 +38,19 @@ export type {
 } from "./fallback.js"
 
 // Modes
-export { WorkerReviewerRunner, PlannerExecutorReviewerRunner, LeaderWorkersRunner } from "./modes/index.js"
+export {
+  WorkerReviewerRunner,
+  PlannerExecutorReviewerRunner,
+  LeaderWorkersRunner,
+  HotfixGuardrailRunner,
+  CouncilRunner,
+} from "./modes/index.js"
 export type { AgentExecutor, TeamRunStats } from "./modes/index.js"
 export type { PlannerExecutorReviewerStats } from "./modes/index.js"
 export type { LeaderPlan, LeaderWorkersStats } from "./modes/index.js"
+export type { HotfixArtifact, RollbackStep, SafetyReview, SafetyIssue, HotfixGuardrailStats } from "./modes/index.js"
+export type { CouncilTopic, MemberOpinion, DecisionOption, CouncilStats } from "./modes/index.js"
+
+// Checkpoint Store
+export { CheckpointStore } from "./checkpoint-store.js"
+export type { Checkpoint, CreateCheckpointParams, RollbackResult, MergeParams, MergeResult, CheckpointStats } from "./checkpoint-store.js"
