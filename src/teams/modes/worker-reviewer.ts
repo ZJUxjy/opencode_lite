@@ -7,6 +7,7 @@
 import type { ModeRunner, TeamConfig, SharedBlackboard, CostController, ProgressTracker, AgentMessage } from "../types.js"
 import type { TaskContract, WorkArtifact, ReviewArtifact } from "../contracts.js"
 import { createDefaultTaskContract, createEmptyWorkArtifact, validateWorkArtifact, validateReviewArtifact, meetsQualityGate } from "../contracts.js"
+import { createAgentLLMClient, type AgentLLMClient } from "../llm-client.js"
 
 // ============================================================================
 // Worker-Reviewer State
@@ -97,7 +98,8 @@ export class WorkerReviewerMode implements ModeRunner {
         blackboard.emit("iteration-started", iteration, workerConfig.role, "worker")
         this.state.phase = "working"
 
-        const workArtifact = await this.runWorker(workerConfig.model, taskContract, iteration)
+        const previousReview = iteration > 1 ? this.state.reviewArtifact : undefined
+        const workArtifact = await this.runWorker(workerConfig.model, taskContract, iteration, previousReview)
         this.state.workArtifact = workArtifact
         blackboard.setWorkArtifact("worker", workArtifact)
 
@@ -171,7 +173,8 @@ export class WorkerReviewerMode implements ModeRunner {
   private async runWorker(
     model: string,
     taskContract: TaskContract,
-    iteration: number
+    iteration: number,
+    previousReview?: ReviewArtifact
   ): Promise<WorkArtifact> {
     if (!this.blackboard || !this.costController) {
       throw new Error("Not initialized")
@@ -187,20 +190,13 @@ export class WorkerReviewerMode implements ModeRunner {
       "worker"
     )
 
-    // In real implementation, this would call the LLM
-    // For now, return a placeholder that indicates the structure
-    const artifact: WorkArtifact = {
-      taskId: taskContract.taskId,
-      summary: `Implementation iteration ${iteration}`,
-      changedFiles: [], // Would be populated by actual implementation
-      patchRef: `iteration-${iteration}`,
-      testResults: [],
-      risks: [],
-      assumptions: [],
-    }
+    // Create LLM client for this agent
+    const llmClient = createAgentLLMClient({ model })
+    llmClient.setCostController(this.costController)
+    llmClient.setBlackboard(this.blackboard)
 
-    // Record cost (placeholder - would use actual token counts)
-    this.costController.recordUsage(1000, 500, model)
+    // Execute worker via LLM
+    const artifact = await llmClient.executeWorker(taskContract, iteration, previousReview)
 
     this.blackboard.postMessage(
       {
@@ -233,17 +229,13 @@ export class WorkerReviewerMode implements ModeRunner {
       "reviewer"
     )
 
-    // In real implementation, this would call the LLM
-    // For now, return a placeholder review
-    const review: ReviewArtifact = {
-      status: "changes_requested",
-      severity: "P1",
-      mustFix: ["Implementation incomplete - this is a placeholder"],
-      suggestions: ["Complete the implementation"],
-    }
+    // Create LLM client for this agent
+    const llmClient = createAgentLLMClient({ model })
+    llmClient.setCostController(this.costController)
+    llmClient.setBlackboard(this.blackboard)
 
-    // Record cost (placeholder)
-    this.costController.recordUsage(800, 400, model)
+    // Execute reviewer via LLM
+    const review = await llmClient.executeReviewer(taskContract, workArtifact)
 
     this.blackboard.postMessage(
       {

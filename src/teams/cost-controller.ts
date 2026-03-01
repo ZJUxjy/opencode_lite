@@ -196,18 +196,18 @@ export class TeamCostController implements CostController {
       return "stop"
     }
 
-    // Switch to cheaper model if cost > 80% or tokens > 85%
+    // Switch to cheaper model if cost >= 80% or tokens >= 80%
     if (
-      (status.cost.percentage !== null && status.cost.percentage > 80) ||
-      status.tokens.percentage > 85
+      (status.cost.percentage !== null && status.cost.percentage >= 80) ||
+      status.tokens.percentage >= 80
     ) {
       return "switch-model"
     }
 
-    // Reduce concurrency if cost > 60% or tokens > 70%
+    // Reduce concurrency if cost >= 60% or tokens >= 60%
     if (
-      (status.cost.percentage !== null && status.cost.percentage > 60) ||
-      status.tokens.percentage > 70
+      (status.cost.percentage !== null && status.cost.percentage >= 60) ||
+      status.tokens.percentage >= 60
     ) {
       return "reduce-concurrency"
     }

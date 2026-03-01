@@ -5,12 +5,14 @@
  * Coordinates all components and manages team lifecycle.
  */
 
-import type { TeamConfig, TeamState, TeamStatus, ModeRunner, SharedBlackboard, CostController, ProgressTracker } from "./types.js"
+import type { TeamConfig, TeamState, TeamStatus, ModeRunner, SharedBlackboard, CostController, ProgressTracker, TaskContract } from "./types.js"
 import { createBlackboard, type TeamBlackboard } from "./blackboard.js"
 import { createCostController } from "./cost-controller.js"
 import { createProgressTracker } from "./progress-tracker.js"
 import { createWorkerReviewerMode } from "./modes/worker-reviewer.js"
 import { createPlannerExecutorReviewerMode } from "./modes/planner-executor-reviewer.js"
+import { createLeaderWorkersMode } from "./modes/leader-workers.js"
+import { createFallbackHandler, type FallbackAgentInput, type TeamFailureReport } from "./fallback.js"
 
 // ============================================================================
 // Team Manager Options
@@ -34,27 +36,13 @@ export class TeamManager {
   private modeRunner: ModeRunner
   private state: TeamState
   private abortController?: AbortController
+  private fallbackHandler: ReturnType<typeof createFallbackHandler>
+  private failureReport?: TeamFailureReport
 
   constructor(options: TeamManagerOptions) {
     this.config = options.config
 
-    // Initialize components
-    this.blackboard = createBlackboard() as TeamBlackboard
-    this.costController = createCostController({ budget: options.config.budget })
-    this.progressTracker = createProgressTracker({ circuitBreaker: options.config.circuitBreaker })
-
-    // Set initial objective and file scope
-    if (options.objective) {
-      this.blackboard.set("objective", options.objective)
-    }
-    if (options.fileScope) {
-      this.blackboard.set("file-scope", options.fileScope)
-    }
-
-    // Create mode runner based on config
-    this.modeRunner = this.createModeRunner(options.config.mode)
-
-    // Initialize state
+    // Initialize state first (needed for other components)
     this.state = {
       teamId: `team-${Date.now()}`,
       mode: options.config.mode,
@@ -68,6 +56,30 @@ export class TeamManager {
       consecutiveFailures: 0,
     }
 
+    // Initialize components
+    this.blackboard = createBlackboard() as TeamBlackboard
+    this.costController = createCostController({ budget: options.config.budget })
+    this.progressTracker = createProgressTracker({ circuitBreaker: options.config.circuitBreaker })
+
+    // Initialize fallback handler with a default contract (will be updated when run starts)
+    this.fallbackHandler = createFallbackHandler(this.state.teamId, {
+      taskId: `task-${Date.now()}`,
+      objective: options.objective || "No objective specified",
+      fileScope: options.fileScope || [],
+      acceptanceChecks: [],
+    })
+
+    // Set initial objective and file scope
+    if (options.objective) {
+      this.blackboard.set("objective", options.objective)
+    }
+    if (options.fileScope) {
+      this.blackboard.set("file-scope", options.fileScope)
+    }
+
+    // Create mode runner based on config
+    this.modeRunner = this.createModeRunner(options.config.mode)
+
     // Set up event handlers
     this.setupEventHandlers()
   }
@@ -79,8 +91,13 @@ export class TeamManager {
   /**
    * Run the team collaboration
    */
-  async run(): Promise<unknown> {
+  async run(contract?: TaskContract): Promise<unknown> {
     this.abortController = new AbortController()
+
+    // Update fallback handler with actual contract if provided
+    if (contract) {
+      this.fallbackHandler = createFallbackHandler(this.state.teamId, contract)
+    }
 
     try {
       this.updateState({ status: "running" })
@@ -99,8 +116,42 @@ export class TeamManager {
         status: "failed",
         endTime: Date.now(),
       })
-      throw error
+
+      // Generate fallback report
+      const fallbackInput = await this.executeFallback("failed", error instanceof Error ? error : undefined)
+
+      // Attach fallback info to error for upstream handling
+      const enhancedError = error instanceof Error ? error : new Error(String(error))
+      ;(enhancedError as Error & { fallbackInput?: FallbackAgentInput }).fallbackInput = fallbackInput
+
+      throw enhancedError
     }
+  }
+
+  /**
+   * Execute fallback to single Agent when team fails
+   */
+  async executeFallback(
+    status: TeamStatus,
+    error?: Error,
+    budgetStatus?: { tokens: { used: number; limit: number; percentage: number }; cost: { used: number; limit: number | null; percentage: number | null } }
+  ): Promise<FallbackAgentInput> {
+    const fallbackInput = await this.fallbackHandler.executeFallback(status, {
+      error,
+      circuitBreakerReason: this.progressTracker.getCircuitBreakerReason(),
+      budgetStatus,
+    })
+
+    this.failureReport = fallbackInput.failureReport
+
+    return fallbackInput
+  }
+
+  /**
+   * Get failure report (available after fallback)
+   */
+  getFailureReport(): TeamFailureReport | undefined {
+    return this.failureReport
   }
 
   /**
@@ -156,6 +207,8 @@ export class TeamManager {
         return createWorkerReviewerMode()
       case "planner-executor-reviewer":
         return createPlannerExecutorReviewerMode()
+      case "leader-workers":
+        return createLeaderWorkersMode(this.config.strategy || "collaborative")
       default:
         throw new Error(`Mode '${mode}' not implemented yet`)
     }

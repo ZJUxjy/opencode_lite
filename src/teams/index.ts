@@ -92,6 +92,18 @@ export {
 } from "./progress-tracker.js"
 
 // ============================================================================
+// LLM Client Exports
+// ============================================================================
+
+export {
+  AgentLLMClient,
+  createAgentLLMClient,
+  type AgentLLMConfig,
+  type WorkerOutput,
+  type ReviewerOutput,
+} from "./llm-client.js"
+
+// ============================================================================
 // Mode Exports
 // ============================================================================
 
@@ -104,6 +116,56 @@ export {
   PlannerExecutorReviewerMode,
   createPlannerExecutorReviewerMode,
 } from "./modes/planner-executor-reviewer.js"
+
+export {
+  LeaderWorkersMode,
+  createLeaderWorkersMode,
+} from "./modes/leader-workers.js"
+
+// ============================================================================
+// Task DAG Exports
+// ============================================================================
+
+export {
+  TaskDAG,
+  ParallelTaskScheduler,
+  createTaskDAG,
+  createParallelScheduler,
+  type TaskNode,
+  type TaskEdge,
+  type TaskStatus,
+  type TaskExecutor,
+  type SchedulerConfig,
+} from "./task-dag.js"
+
+// ============================================================================
+// Conflict Detector Exports
+// ============================================================================
+
+export {
+  ConflictDetector,
+  createConflictDetector,
+  ResolutionStrategies,
+  type Conflict,
+  type ConflictType,
+  type ConflictSeverity,
+  type ConflictStatus,
+  type FileChange,
+  type ConflictDetectorConfig,
+  type ConflictResolution,
+} from "./conflict-detector.js"
+
+// ============================================================================
+// Fallback Exports
+// ============================================================================
+
+export {
+  TeamFallbackHandler,
+  createFallbackHandler,
+  type TeamFailureReport,
+  type FallbackContext,
+  type FallbackAgentInput,
+} from "./fallback.js"
 
 // ============================================================================
 // Team Manager Exports

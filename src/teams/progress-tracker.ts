@@ -160,20 +160,36 @@ export class TeamProgressTracker implements ProgressTracker {
   getConsecutiveNoProgressRounds(): number {
     if (this.rounds.length === 0) return 0
 
-    let count = 0
+    // Track no-progress by comparing consecutive rounds
+    // A round has no progress if: no files changed AND no issues resolved
+    let noProgressCount = 0
+
+    // Start from the most recent round and work backwards
     for (let i = this.rounds.length - 1; i >= 0; i--) {
-      // This is simplified - in real implementation, we'd compare consecutive rounds
-      // For now, just count rounds where no progress was made
-      const round = this.rounds[i]
-      const hasProgress = round.filesChanged > 0 || round.p0Count === 0
+      const current = this.rounds[i]
+      const previous = i > 0 ? this.rounds[i - 1] : null
+
+      // Check if this round had progress
+      const hasCodeProgress = current.filesChanged > 0
+
+      // Issue progress: current has fewer P0/P1 than previous
+      const hasIssueProgress = previous
+        ? current.p0Count < previous.p0Count || current.p1Count < previous.p1Count
+        : false
+
+      // Test progress: test passed in this round
+      const hasTestProgress = current.testPassed === true
+
+      const hasProgress = hasCodeProgress || hasIssueProgress || hasTestProgress
+
       if (!hasProgress) {
-        count++
+        noProgressCount++
       } else {
         break
       }
     }
 
-    return count
+    return noProgressCount
   }
 
   shouldCircuitBreak(): boolean {
@@ -194,15 +210,19 @@ export class TeamProgressTracker implements ProgressTracker {
   }
 
   getStats() {
+    // Calculate net issues from current round (which tracks active issues)
+    const activeP0 = this.currentRound.p0Count
+    const activeP1 = this.currentRound.p1Count
+
     return {
       totalRounds: this.rounds.length,
-      progressRounds: this.rounds.filter(r => r.filesChanged > 0 || r.p0Count === 0).length,
+      progressRounds: this.rounds.filter(r => r.filesChanged > 0).length,
       noProgressRounds: this.rounds.filter(r => r.filesChanged === 0).length,
       codeChanges: this.rounds.reduce((sum, r) => sum + r.filesChanged, 0),
       testsPassed: this.rounds.filter(r => r.testPassed === true).length,
       testsFailed: this.rounds.filter(r => r.testPassed === false).length,
-      p0Issues: this.rounds.reduce((sum, r) => sum + r.p0Count, 0),
-      p1Issues: this.rounds.reduce((sum, r) => sum + r.p1Count, 0),
+      p0Issues: activeP0,
+      p1Issues: activeP1,
       p2Issues: 0, // Not tracked per round
       p3Issues: 0, // Not tracked per round
     }
