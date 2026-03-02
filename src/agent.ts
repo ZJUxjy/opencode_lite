@@ -9,6 +9,7 @@ import { ReActRunner, type Strategy, type ReActEvents } from "./react/index.js"
 import { CompressionService, type CompressionLevel, type CompressionPreview, type CompressionResult } from "./compression.js"
 import { SkillRegistry, getSkillRegistry } from "./skills/index.js"
 import { MCPManager, type MCPManagerOptions } from "./mcp/manager.js"
+import { PromptDumper } from "./utils/promptDumper.js"
 
 export interface AgentConfig {
   cwd: string
@@ -63,6 +64,7 @@ export class Agent {
   private compressionService: CompressionService
   private skillRegistry: SkillRegistry
   private mcpManager?: MCPManager
+  private promptDumper: PromptDumper
   private _sessionId: string
   private cwd: string
   private enableStream: boolean
@@ -106,6 +108,9 @@ export class Agent {
       maxIterations: 50,
       enableStreaming: this.enableStream,
     })
+
+    // 初始化 PromptDumper
+    this.promptDumper = new PromptDumper(sessionId, config.dumpPrompt ?? false)
   }
 
   setEvents(events: AgentEvents) {
@@ -185,6 +190,11 @@ export class Agent {
       iterations++
       this.loopDetection.incrementTurn()
 
+      // Dump request before LLM call
+      if (this.promptDumper.isEnabled()) {
+        this.promptDumper.dumpRequest(systemPrompt, workingMessages)
+      }
+
       // 调用 LLM
       let response
       try {
@@ -205,6 +215,11 @@ export class Agent {
       } catch (error: any) {
         this.events.onResponse?.(`Error: ${error.message}`)
         return `Error: ${error.message}`
+      }
+
+      // Dump response after LLM call
+      if (this.promptDumper.isEnabled()) {
+        this.promptDumper.dumpResponse(response)
       }
 
       // 循环检测：内容重复
@@ -612,6 +627,31 @@ export class Agent {
    */
   getActiveSkills(): ReturnType<SkillRegistry["getActive"]> {
     return this.skillRegistry.getActive()
+  }
+
+  // ==========================================================================
+  // PromptDumper 方法
+  // ==========================================================================
+
+  /**
+   * 获取 PromptDumper 实例
+   */
+  getPromptDumper(): PromptDumper {
+    return this.promptDumper
+  }
+
+  /**
+   * 设置是否启用 prompt dump
+   */
+  setDumpPrompt(enabled: boolean): void {
+    this.promptDumper.setEnabled(enabled)
+  }
+
+  /**
+   * 检查 prompt dump 是否启用
+   */
+  isDumpPromptEnabled(): boolean {
+    return this.promptDumper.isEnabled()
   }
 
   // ==========================================================================
