@@ -648,6 +648,64 @@ export interface SharedBlackboard {
 }
 
 // ============================================================================
+// CostController Interface (referenced by ModeRunner)
+// ============================================================================
+
+export interface CostController {
+  recordUsage(inputTokens: number, outputTokens: number, model: string): void
+  getCurrentCost(): number
+  getCurrentTokens(): { input: number; output: number }
+  getUsageByModel(): Map<string, { input: number; output: number; cost: number }>
+  isBudgetExceeded(): boolean
+  isTokenBudgetExceeded(): boolean
+  isCostBudgetExceeded(): boolean
+  getBudgetStatus(): {
+    tokens: { used: number; limit: number; percentage: number }
+    cost: { used: number; limit: number | null; percentage: number | null }
+  }
+  getPricingTable(): PricingTable
+  updatePricingTable(pricing: PricingTable): void
+  getModelPrice(model: string): { inputPer1M: number; outputPer1M: number }
+  shouldDegrade(): "none" | "reduce-concurrency" | "switch-model" | "stop"
+  onBudgetExceeded(callback: () => void): void
+  onDegradationNeeded(callback: (level: "reduce-concurrency" | "switch-model" | "stop") => void): void
+  restoreFromSnapshot(tokensUsed: { input: number; output: number }, costUsd: number): void
+}
+
+// ============================================================================
+// ProgressTracker Interface (referenced by ModeRunner)
+// ============================================================================
+
+export interface ProgressTracker {
+  recordProgress(type: "code" | "test" | "review", details?: string): void
+  recordCodeChange(filesChanged: number): void
+  recordTestResult(passed: boolean): void
+  recordReviewIssue(severity: "P0" | "P1" | "P2" | "P3", fixed?: boolean): void
+  checkProgress(): boolean
+  getConsecutiveNoProgressRounds(): number
+  shouldCircuitBreak(): boolean
+  getCircuitBreakerReason(): string | null
+  getStats(): {
+    totalRounds: number
+    progressRounds: number
+    noProgressRounds: number
+    codeChanges: number
+    testsPassed: number
+    testsFailed: number
+    p0Issues: number
+    p1Issues: number
+    p2Issues: number
+    p3Issues: number
+  }
+  reset(): void
+  restoreFromSnapshot(state: {
+    lastProgressAt: number
+    consecutiveNoProgressRounds: number
+    consecutiveFailures: number
+  }): void
+}
+
+// ============================================================================
 // Mode Runner Interface (from kimi branch)
 // ============================================================================
 

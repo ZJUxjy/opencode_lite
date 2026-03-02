@@ -114,8 +114,9 @@ export type { RalphTaskQueue, RalphLoopConfig, RalphLoopSummary } from "./loop/r
 export { runDrillScenario, listDrillScenarios, runAllDrillScenarios } from "./testing/drill.js"
 export type { DrillScenarioResult, DrillReport } from "./testing/drill.js"
 
-export { BaselineRunner } from "./testing/benchmark.js"
-export type { BaselineSample, BaselineResult, BaselineComparison, BaselineReport, BenchmarkConfig } from "./testing/benchmark.js"
+// Note: Benchmark module temporarily disabled - requires Agent class implementation
+// export { BaselineRunner } from "./testing/benchmark.js"
+// export type { BaselineSample, BaselineResult, BaselineComparison, BaselineReport, BenchmarkConfig } from "./testing/benchmark.js"
 
 export { LLMJudge, createLLMJudge, DEFAULT_CODE_QUALITY_RUBRIC } from "./testing/llm-judge.js"
 export type { EvaluationDimension, EvaluationRubric, JudgementResult, LLMJudgeConfig } from "./testing/llm-judge.js"
