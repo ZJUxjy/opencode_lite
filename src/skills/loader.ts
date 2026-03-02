@@ -103,25 +103,29 @@ function parseYamlValue(value: string): unknown {
 /**
  * 验证 Skill 元数据
  */
-function validateMetadata(metadata: Record<string, unknown>): SkillMetadata {
-  const required = ["id", "name", "description", "version", "activation"]
-
-  for (const field of required) {
-    if (!(field in metadata)) {
-      throw new Error(`Missing required field: ${field}`)
-    }
+function validateMetadata(metadata: Record<string, unknown>, skillDir: string): SkillMetadata {
+  // 必填字段：name 和 description
+  if (!metadata.name) {
+    throw new Error("Missing required field: name")
+  }
+  if (!metadata.description) {
+    throw new Error("Missing required field: description")
   }
 
-  const activation = metadata.activation as string
+  // 可选字段使用默认值
+  const id = (metadata.id as string) || `skill:${skillDir}`
+  const version = (metadata.version as string) || "1.0.0"
+  const activation = (metadata.activation as string) || "manual"
+
   if (!["auto", "manual", "always"].includes(activation)) {
     throw new Error(`Invalid activation value: ${activation}`)
   }
 
   return {
-    id: metadata.id as string,
+    id,
     name: metadata.name as string,
     description: metadata.description as string,
-    version: metadata.version as string,
+    version,
     author: metadata.author as string | undefined,
     tags: (metadata.tags as string[]) ?? [],
     activation: activation as "auto" | "manual" | "always",
@@ -171,8 +175,11 @@ export class SkillLoader {
     const content = await readFile(filePath, "utf-8")
     const { metadata, body } = parseFrontmatter(content)
 
+    // Extract skill directory name for default ID
+    const skillDir = basename(dirname(filePath))
+
     const skillMetadata = validate
-      ? validateMetadata(metadata)
+      ? validateMetadata(metadata, skillDir)
       : (metadata as unknown as SkillMetadata)
 
     const basePath = dirname(filePath)
