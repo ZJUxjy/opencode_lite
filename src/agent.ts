@@ -22,6 +22,8 @@ export interface AgentConfig {
   strategy?: Strategy
   /** MCP 配置 */
   mcp?: MCPManagerOptions
+  /** Dump prompts and responses to file for debugging */
+  dumpPrompt?: boolean
 }
 
 export interface AgentEvents {
@@ -61,7 +63,7 @@ export class Agent {
   private compressionService: CompressionService
   private skillRegistry: SkillRegistry
   private mcpManager?: MCPManager
-  private sessionId: string
+  private _sessionId: string
   private cwd: string
   private enableStream: boolean
   private compressionThreshold: number
@@ -83,7 +85,7 @@ export class Agent {
       includeBuiltins: true,
       recursive: false,
     })
-    this.sessionId = sessionId
+    this._sessionId = sessionId
     this.cwd = config.cwd
     this.enableStream = config.enableStream ?? true
     this.compressionThreshold = config.compressionThreshold ?? 0.92
@@ -129,13 +131,13 @@ export class Agent {
    */
   async run(userInput: string): Promise<string> {
     // 1. 添加用户消息
-    this.store.add(this.sessionId, {
+    this.store.add(this._sessionId, {
       role: "user",
       content: userInput,
     })
 
     // 2. 加载历史消息
-    let messages = this.store.get(this.sessionId)
+    let messages = this.store.get(this._sessionId)
 
     // 3. 上下文压缩
     const beforeTokens = this.llm.estimateTokens(messages)
@@ -233,7 +235,7 @@ export class Agent {
         toolCalls: response.toolCalls,
       }
       workingMessages.push(assistantMsg)
-      this.store.add(this.sessionId, assistantMsg)
+      this.store.add(this._sessionId, assistantMsg)
 
       // 通知响应
       if (response.content) {
@@ -255,7 +257,7 @@ export class Agent {
         toolResults,
       }
       workingMessages.push(resultMsg)
-      this.store.add(this.sessionId, resultMsg)
+      this.store.add(this._sessionId, resultMsg)
 
       // 检查压缩
       const beforeTokens2 = this.llm.estimateTokens(workingMessages)
@@ -371,19 +373,26 @@ export class Agent {
     return this.reactRunner.getModelCapabilities()
   }
 
+  /**
+   * 获取当前会话 ID
+   */
+  get sessionId(): string {
+    return this._sessionId
+  }
+
   getHistory(): Message[] {
-    return this.store.get(this.sessionId)
+    return this.store.get(this._sessionId)
   }
 
   clearSession() {
-    this.store.clear(this.sessionId)
+    this.store.clear(this._sessionId)
     this.loopDetection.reset()
     this.policyEngine.clearLearnedRules()
     this.reactRunner.reset()
   }
 
   getContextUsage() {
-    const messages = this.store.get(this.sessionId)
+    const messages = this.store.get(this._sessionId)
     return this.llm.getContextUsage(messages)
   }
 
@@ -408,7 +417,7 @@ export class Agent {
    * 获取压缩预览（不执行压缩）
    */
   getCompressionPreview(): CompressionPreview {
-    const messages = this.store.get(this.sessionId)
+    const messages = this.store.get(this._sessionId)
     return this.compressionService.getPreview(messages)
   }
 
@@ -424,7 +433,7 @@ export class Agent {
     messagesRemoved: number
     summaryGenerated: boolean
   }> {
-    const messages = this.store.get(this.sessionId)
+    const messages = this.store.get(this._sessionId)
 
     // 设置压缩提示
     this.compressionService.setCompactionPrompt(this.promptProvider.getCompactionPrompt())
@@ -441,8 +450,8 @@ export class Agent {
 
     // 如果压缩有效，更新存储
     if (result.messages.length < messages.length) {
-      this.store.clear(this.sessionId)
-      result.messages.forEach((msg) => this.store.add(this.sessionId, msg))
+      this.store.clear(this._sessionId)
+      result.messages.forEach((msg) => this.store.add(this._sessionId, msg))
     }
 
     return {
@@ -458,7 +467,7 @@ export class Agent {
    * 获取会话统计信息
    */
   getSessionStats() {
-    const messages = this.store.get(this.sessionId)
+    const messages = this.store.get(this._sessionId)
     const contextUsage = this.llm.getContextUsage(messages)
     const strategy = this.reactRunner.getCurrentStrategy()
 

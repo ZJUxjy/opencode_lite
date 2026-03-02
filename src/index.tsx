@@ -12,6 +12,7 @@ import { TEAM_MODES } from "./teams/core/types.js"
 import * as path from "path"
 import * as os from "os"
 import * as fs from "fs"
+import { parseDumpOption } from "./cli/dump-option.js"
 
 // 从 settings.json 加载配置
 import type { MCPGlobalConfig } from "./mcp/config.js"
@@ -181,6 +182,7 @@ program
   .option("-c, --continue", "Continue the last session for current directory")
   .option("--no-stream", "Disable streaming output")
   .option("--compression-threshold <number>", "Context compression threshold (0-1)", "0.92")
+  .option("--dump-prompt [enabled]", "Dump prompts and responses to file for debugging")
   .option("--list-sessions", "List all sessions with metadata")
   // Team mode options
   .option("--team <mode>", `Team collaboration mode (${TEAM_MODES.join(", ")})`)
@@ -281,6 +283,8 @@ program
     const timeoutStr = getConfig(undefined, "API_TIMEOUT_MS", settings, "120000")
     const timeout = parseInt(timeoutStr, 10)
 
+    const dumpPrompt = parseDumpOption(options.dumpPrompt)
+
     const agent = new Agent(sessionId, {
       cwd: options.directory,
       dbPath,
@@ -293,6 +297,7 @@ program
       enableStream: options.stream !== false,
       compressionThreshold: parseFloat(options.compressionThreshold),
       mcp: settings.mcp,
+      dumpPrompt,
     })
 
     // 初始化 MCP
