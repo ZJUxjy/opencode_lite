@@ -340,3 +340,16 @@ export {
   type ThinkingBudgetConfig,
   type ThinkingArtifact,
 } from "./thinking-budget.js"
+
+// ============================================================================
+// Progress File Exports
+// ============================================================================
+
+export {
+  ProgressFileManager,
+  createProgressManager,
+  type ProgressFile,
+  type ProgressTask,
+  type ProgressTaskStatus,
+  type TaskPriority,
+} from "./progress-file.js"
