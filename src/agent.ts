@@ -135,6 +135,14 @@ export class Agent {
    * 执行 Agent 循环
    */
   async run(userInput: string): Promise<string> {
+    // 0. 自动激活匹配的 skills
+    this.skillRegistry.autoActivate({
+      userInput,
+      currentFile: undefined, // 可以从上下文获取
+      cwd: this.cwd,
+      activeSkills: this.skillRegistry.getActive().map(s => s.metadata.id),
+    })
+
     // 1. 添加用户消息
     this.store.add(this._sessionId, {
       role: "user",
