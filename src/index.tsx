@@ -227,6 +227,12 @@ program
         }
       }
 
+      // Load settings for team mode
+      const settings = loadSettings()
+      const teamModel = getConfig(options.model, "ANTHROPIC_MODEL", settings, "claude-sonnet-4-20250514")
+      const teamBaseURL = getConfig(options.baseUrl, "ANTHROPIC_BASE_URL", settings, "https://api.anthropic.com")
+      const teamApiKey = getConfig(undefined, "ANTHROPIC_AUTH_TOKEN", settings, process.env.ANTHROPIC_API_KEY || "")
+
       const manager = new TeamManager({
         mode: options.team as TeamMode,
         objective,
@@ -234,6 +240,9 @@ program
         profile: options.teamProfile,
         budget: options.teamBudget ? parseInt(options.teamBudget, 10) : undefined,
         timeout: options.teamTimeout ? parseInt(options.teamTimeout, 10) : undefined,
+        model: teamModel,
+        baseURL: teamBaseURL,
+        apiKey: teamApiKey,
       })
 
       try {
