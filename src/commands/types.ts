@@ -10,6 +10,8 @@ export interface CommandContext {
   exit: () => void
   updateContextUsage: () => void
   showSessionList?: () => void
+  toggleDumpPrompt?: () => void
+  getDumpStatus?: () => { enabled: boolean; path: string }
 }
 
 /**

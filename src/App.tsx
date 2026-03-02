@@ -328,6 +328,21 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
     sessionStore.close()
   }, [sessionId, dbPath])
 
+  // 切换 Prompt Dump 功能
+  const handleToggleDump = useCallback(() => {
+    const dumper = agent.getPromptDumper()
+    dumper.setEnabled(!dumper.isEnabled())
+  }, [agent])
+
+  // 获取 Prompt Dump 状态
+  const handleGetDumpStatus = useCallback(() => {
+    const dumper = agent.getPromptDumper()
+    return {
+      enabled: dumper.isEnabled(),
+      path: dumper.getDumpPath(),
+    }
+  }, [agent])
+
   // 取消选择
   const handleCancelSessionList = useCallback(() => {
     setShowSessionList(false)
@@ -508,8 +523,10 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       exit,
       updateContextUsage,
       showSessionList: handleShowSessionList,
+      toggleDumpPrompt: handleToggleDump,
+      getDumpStatus: handleGetDumpStatus,
     }),
-    [agent, setMessages, exit, updateContextUsage, handleShowSessionList]
+    [agent, setMessages, exit, updateContextUsage, handleShowSessionList, handleToggleDump, handleGetDumpStatus]
   )
 
   // =========================================================================

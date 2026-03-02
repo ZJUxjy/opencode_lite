@@ -54,7 +54,7 @@ const helpCommand: Command = {
   name: "/help",
   description: "Show available commands",
   handler: (_args: string, ctx: CommandContext) => {
-    const yoloStatus = ctx.agent.isYoloMode() ? "ON 🚀" : "OFF"
+    const yoloStatus = ctx.agent.isYoloMode() ? "ON" : "OFF"
     const mcpStatus = ctx.agent.getMCPStatus()
     const mcpText = mcpStatus.length > 0
       ? `  /mcp          - Show MCP server status (${mcpStatus.filter(s => s.connected).length}/${mcpStatus.length} connected)\n`
@@ -71,6 +71,7 @@ const helpCommand: Command = {
   /yolo         - Toggle YOLO mode (auto-approve all)
   /sessions, /resume  - Show session list and switch sessions
   /skills       - List and manage skills
+  /dump         - Toggle prompt dump for debugging
 ${mcpText}
 Current status:
   YOLO Mode: ${yoloStatus}
@@ -398,6 +399,34 @@ To configure MCP servers, add to your settings.json:
 }
 
 /**
+ * Dump command - toggles prompt dump for debugging
+ */
+const dumpCommand: Command = {
+  name: "/dump",
+  description: "Toggle prompt dump for debugging",
+  handler: (_args: string, ctx: CommandContext) => {
+    if (!ctx.toggleDumpPrompt || !ctx.getDumpStatus) {
+      const message = createSystemMessage("Dump functionality not available")
+      ctx.setMessages((prev) => [...prev, message])
+      return
+    }
+
+    const status = ctx.getDumpStatus()
+    ctx.toggleDumpPrompt()
+    const newStatus = ctx.getDumpStatus()
+
+    const lines: string[] = []
+    lines.push(`${newStatus.enabled ? "Prompt dump enabled" : "Prompt dump disabled"}`)
+    if (newStatus.enabled) {
+      lines.push(`Dump file: ${newStatus.path}`)
+    }
+
+    const message = createSystemMessage(lines.join("\n"))
+    ctx.setMessages((prev) => [...prev, message])
+  },
+}
+
+/**
  * All builtin commands
  * Exported as array for easy registration in CommandRegistry
  */
@@ -412,4 +441,5 @@ export const builtinCommands: Command[] = [
   sessionsCommand,
   skillsCommand,
   mcpCommand,
+  dumpCommand,
 ]
