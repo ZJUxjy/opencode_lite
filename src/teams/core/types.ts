@@ -646,3 +646,23 @@ export interface SharedBlackboard {
   logEvent(event: string, details: Record<string, unknown>): void
   getAuditLog(): Array<{ timestamp: number; event: string; details: Record<string, unknown> }>
 }
+
+// ============================================================================
+// Mode Runner Interface (from kimi branch)
+// ============================================================================
+
+/**
+ * ModeRunner defines the interface for team mode implementations.
+ * Each team mode (worker-reviewer, leader-workers, etc.) implements this interface
+ * to provide its specific collaboration pattern.
+ */
+export interface ModeRunner {
+  readonly mode: TeamMode
+  run(
+    config: TeamConfig,
+    blackboard: SharedBlackboard,
+    costController: CostController,
+    progressTracker: ProgressTracker
+  ): Promise<unknown>
+  cancel(): void
+}
