@@ -79,12 +79,6 @@ export const ReviewArtifactSchema = z.object({
 export type ReviewArtifact = z.infer<typeof ReviewArtifactSchema>
 
 // ============================================================================
-// Additional Exports
-// ============================================================================
-
-export type TestResult = z.infer<typeof TestResultSchema>
-
-// ============================================================================
 // Validation Functions
 // ============================================================================
 
