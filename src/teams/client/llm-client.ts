@@ -237,23 +237,23 @@ ${contract.apiContracts ? `**API Contracts**: ${contract.apiContracts.join(", ")
 
 ## Your Role
 
-You are the WORKER agent. Your job is to implement the objective according to the task contract.
-${iteration > 1 ? `\nThis is iteration ${iteration}. You are refining the implementation based on previous review feedback.` : ""}
+You are the WORKER agent. Your job is to analyze the objective and provide a plan.
+${iteration > 1 ? `\nThis is iteration ${iteration}. You are refining based on previous review feedback.` : ""}
 
-## Instructions
+## CRITICAL INSTRUCTIONS
 
-1. Implement the changes according to the objective and file scope
-2. Run the acceptance checks to verify your work
-3. Report any risks or assumptions you made
-4. Return your response in the structured format below
+1. DO NOT use any tool calls or function calls
+2. DO NOT write code in XML tags like <tool_call > or <invoke>
+3. ONLY return a JSON object in a markdown code block
+4. Describe what changes you would make and why
 
 ## Response Format
 
-Return your response as a JSON object with this exact structure:
+Return ONLY a JSON object in a markdown code block. No other text:
 
 \`\`\`json
 {
-  "summary": "Brief description of what you implemented",
+  "summary": "Brief description of what you plan to implement",
   "changedFiles": ["file1.ts", "file2.ts"],
   "patchRef": "unique-reference-for-this-change",
   "testResults": [
@@ -265,8 +265,9 @@ Return your response as a JSON object with this exact structure:
 \`\`\`
 
 Important:
-- Use file tools (read, write, edit) to make changes
-- Run test commands to verify
+- Describe your implementation plan in the summary
+- List the files that would need to be changed
+- Report any risks or assumptions
 - Return ONLY the JSON object, no other text`
 
     if (previousReview) {
@@ -288,7 +289,7 @@ ${previousReview.suggestions.map((item) => `- ${item}`).join("\n")}`
   }
 
   private buildReviewerPrompt(contract: TaskContract, artifact: WorkArtifact): string {
-    return `You are a code review agent reviewing completed work.
+    return `You are a code review agent reviewing a work plan.
 
 ## Task Contract
 
@@ -315,7 +316,14 @@ ${artifact.assumptions.length > 0 ? artifact.assumptions.map((a) => `- ${a}`).jo
 
 ## Your Role
 
-You are the REVIEWER agent. Your job is to evaluate the work against the task contract and acceptance criteria.
+You are the REVIEWER agent. Your job is to evaluate the work plan against the task contract.
+
+## CRITICAL INSTRUCTIONS
+
+1. DO NOT use any tool calls or function calls
+2. DO NOT write code in XML tags like <tool_call > or <invoke>
+3. ONLY return a JSON object in a markdown code block
+4. Approve if the plan is reasonable
 
 ## Review Criteria
 
@@ -326,7 +334,7 @@ You are the REVIEWER agent. Your job is to evaluate the work against the task co
 
 ## Response Format
 
-Return your response as a JSON object with this exact structure:
+Return ONLY a JSON object in a markdown code block. No other text:
 
 \`\`\`json
 {
