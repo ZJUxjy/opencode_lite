@@ -69,6 +69,8 @@ export class Agent {
   private compressionService: CompressionService
   private skillRegistry: SkillRegistry
   private mcpManager?: MCPManager
+  private mcpInitialized: boolean = false  // MCP 懒加载标志
+  private mcpInitializing: boolean = false  // 防止并发初始化
   private promptDumper: PromptDumper
   private _sessionId: string
   private cwd: string
@@ -309,6 +311,20 @@ export class Agent {
     }
 
     for (const call of toolCalls) {
+      // 懒加载 MCP：如果是 MCP 工具调用，先初始化 MCP
+      if (this.isMCPTool(call.name) && this.mcpManager && !this.mcpInitialized && !this.mcpInitializing) {
+        this.mcpInitializing = true
+        try {
+          await this.mcpManager.initialize()
+          this.mcpInitialized = true
+        } catch (error) {
+          // MCP 初始化失败，记录但不阻止其他工具
+          console.error("MCP initialization failed:", error)
+        } finally {
+          this.mcpInitializing = false
+        }
+      }
+
       this.events.onToolCall?.(call)
 
       // 策略检查
@@ -400,6 +416,13 @@ export class Agent {
    */
   get sessionId(): string {
     return this._sessionId
+  }
+
+  /**
+   * 获取当前工作目录
+   */
+  getCwd(): string {
+    return this.cwd
   }
 
   getHistory(): Message[] {
@@ -695,5 +718,30 @@ export class Agent {
       tools:
         state.status.type === "connected" ? state.status.tools?.length || 0 : 0,
     }))
+  }
+
+  /**
+   * 检查工具名是否为 MCP 工具
+   */
+  private isMCPTool(toolName: string): boolean {
+    // MCP 工具名格式：mcp_server_toolname
+    if (toolName.startsWith("mcp_")) {
+      return true
+    }
+
+    // 检查是否是 MCP 工具的原始名称（通过 ToolRegistry 的 MCP 工具列表）
+    if (this.mcpManager) {
+      const allMCPTools = this.mcpManager.getAllTools()
+      return allMCPTools.some(t => t.name === toolName || t.name.endsWith(`_${toolName}`))
+    }
+
+    return false
+  }
+
+  /**
+   * 获取 MCP 初始化状态
+   */
+  isMCPInitialized(): boolean {
+    return this.mcpInitialized
   }
 }

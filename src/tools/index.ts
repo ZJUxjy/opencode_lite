@@ -15,6 +15,7 @@ import {
   showSkillTool,
   getActiveSkillsPromptTool,
 } from "./skill.js"
+import { webSearchTool } from "./web-search.js"
 import type { MCPManager } from "../mcp/manager.js"
 import { createMCPToolWrapper } from "../mcp/tools.js"
 
@@ -67,6 +68,7 @@ export class ToolRegistry {
       deactivateSkillTool,
       showSkillTool,
       getActiveSkillsPromptTool,
+      webSearchTool,
     ]
 
     // 如果是 subagent，过滤掉 subagent 工具以防止递归
@@ -129,7 +131,29 @@ export class ToolRegistry {
   }
 
   get(name: string) {
-    return this.tools.get(name)
+    // 首先尝试精确匹配
+    const tool = this.tools.get(name)
+    if (tool) return tool
+
+    // 如果工具名不是 mcp_ 前缀，尝试查找对应的 MCP 工具
+    // 例如：用户调用 "web_search"，我们查找 "mcp_*_web_search"
+    if (!name.startsWith("mcp_") && this.mcpManager) {
+      // 遍历所有 MCP 工具，查找原始名称匹配的
+      for (const [toolName, t] of this.tools) {
+        if (toolName.startsWith("mcp_") && t.mcpServer) {
+          // 解析 MCP 工具名：mcp_server_tool -> tool
+          const parts = toolName.split("_")
+          if (parts.length >= 3) {
+            const originalName = parts.slice(2).join("_").replace(/_\d+$/, "")
+            if (originalName === name) {
+              return t
+            }
+          }
+        }
+      }
+    }
+
+    return undefined
   }
 
   getAll() {

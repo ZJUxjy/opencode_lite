@@ -155,14 +155,14 @@ export class MCPConnection {
       this.onToolsChange?.(this.tools)
 
       // 设置关闭监听
-      transport.onClose(() => {
+      transport.onclose = () => {
         this.handleDisconnect("Transport closed")
-      })
+      }
 
       // 设置错误监听
-      transport.onError((error: Error) => {
+      transport.onerror = (error: Error) => {
         this.handleError(error)
-      })
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error)

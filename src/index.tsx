@@ -300,8 +300,8 @@ program
       dumpPrompt,
     })
 
-    // 初始化 MCP
-    await agent.initializeMCP()
+    // MCP 改为懒加载，不在启动时初始化
+    // await agent.initializeMCP()
 
     // 加载 Skills
     await agent.loadSkills()

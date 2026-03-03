@@ -209,10 +209,13 @@ export function useCommandInput({
           // Add new entry, keeping max size
           const newHistory = [...prev, trimmed]
           if (newHistory.length > MAX_INPUT_HISTORY) {
-            return newHistory.slice(-MAX_INPUT_HISTORY)
+            const trimmedHistory = newHistory.slice(-MAX_INPUT_HISTORY)
+            // 使用 setTimeout 避免在渲染期间更新父组件状态
+            setTimeout(() => onHistoryChange?.(trimmedHistory), 0)
+            return trimmedHistory
           }
-          // Notify parent component to persist
-          onHistoryChange?.(newHistory)
+          // 使用 setTimeout 避免在渲染期间更新父组件状态
+          setTimeout(() => onHistoryChange?.(newHistory), 0)
           return newHistory
         })
       }
@@ -230,8 +233,11 @@ export function useCommandInput({
         const cmd = registry.get(cmdName)
 
         if (cmd) {
-          // Execute command
-          cmd.handler(args.join(" "), commandContext)
+          // 使用 setTimeout 避免在渲染期间更新父组件状态
+          // 修复 "Cannot update a component while rendering a different component" 错误
+          setTimeout(() => {
+            cmd.handler(args.join(" "), commandContext)
+          }, 0)
           return
         }
 

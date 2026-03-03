@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
-import { Box, Text, Static, useInput, useApp, useStdout } from "ink"
+import { Box, Text, Static, useInput, useStdout } from "ink"
 import Spinner from "ink-spinner"
 import { Agent, type AgentEvents } from "./agent.js"
 import { CommandInput } from "./components/CommandInput.js"
@@ -12,6 +12,7 @@ import type { ToolCall } from "./types.js"
 import type { PolicyDecision } from "./policy.js"
 import { getPlanFilePath, readPlanFile, exitPlanMode } from "./plan/manager.js"
 import { buildNewSessionPrompt, buildContinueSessionPrompt } from "./plan/handover.js"
+import { formatToolArgs } from "./utils/formatToolArgs.js"
 
 /**
  * 方案 A 实现：最小改动修复滚动问题
@@ -153,11 +154,30 @@ function MessageItem({ message }: MessageItemProps) {
 // ============================================================================
 
 export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isResumed, resumedSessionTitle }: Props) {
-  const { exit } = useApp()
   const { stdout } = useStdout()
 
   // 终端宽度
   const terminalWidth = stdout?.columns || 80
+
+  // 注册进程退出钩子清理 MCP
+  useEffect(() => {
+    const cleanup = () => {
+      const mcpManager = agent.getMCPManager()
+      if (mcpManager) {
+        mcpManager.dispose().catch(() => {})
+      }
+    }
+
+    process.on('beforeExit', cleanup)
+    process.on('SIGINT', cleanup)
+    process.on('SIGTERM', cleanup)
+
+    return () => {
+      process.off('beforeExit', cleanup)
+      process.off('SIGINT', cleanup)
+      process.off('SIGTERM', cleanup)
+    }
+  }, [agent])
 
   // =========================================================================
   // 状态管理
@@ -373,13 +393,14 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       const policyDecision: PolicyDecision = decision === "always" ? "allow" : decision
       permissionResolveRef.current(policyDecision)
 
-      // 如果是 "always"，让 policy engine 学习
+      // 如果是 "always"，让 policy engine 学习（问题2修复：传入 cwd）
       if (decision === "always" && permissionRequest) {
         agent.getPolicyEngine().learn(
           permissionRequest.toolName,
           permissionRequest.args,
           "allow",
-          true
+          true,
+          agent.getCwd()  // 传入工作目录
         )
       }
 
@@ -516,17 +537,30 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   // Command context for command handlers
   // =========================================================================
 
+  // 自定义退出函数：清理 MCP 并强制退出
+  const handleExit = useCallback(async () => {
+    const mcpManager = agent.getMCPManager()
+    if (mcpManager) {
+      try {
+        await mcpManager.dispose()
+      } catch {
+        // 忽略清理错误
+      }
+    }
+    process.exit(0)
+  }, [agent])
+
   const commandContext: CommandContext = useMemo(
     () => ({
       agent,
       setMessages,
-      exit,
+      exit: handleExit,
       updateContextUsage,
       showSessionList: handleShowSessionList,
       toggleDumpPrompt: handleToggleDump,
       getDumpStatus: handleGetDumpStatus,
     }),
-    [agent, setMessages, exit, updateContextUsage, handleShowSessionList, handleToggleDump, handleGetDumpStatus]
+    [agent, setMessages, handleExit, updateContextUsage, handleShowSessionList, handleToggleDump, handleGetDumpStatus]
   )
 
   // =========================================================================
@@ -577,7 +611,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       onToolCall: (toolCall) => {
         setCurrentTool({
           name: toolCall.name,
-          args: JSON.stringify(toolCall.arguments)
+          args: formatToolArgs(toolCall.arguments)  // 问题3+4修复：格式化显示
         })
       },
 
@@ -668,7 +702,13 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   useInput((input, key) => {
     // Ctrl+C: Exit
     if (key.ctrl && input === "c") {
-      exit()
+      // 先清理 MCP 连接
+      const mcpManager = agent.getMCPManager()
+      if (mcpManager) {
+        mcpManager.dispose().catch(() => {})
+      }
+      // 强制退出进程
+      process.exit(0)
     }
 
     // Escape: Cancel ongoing request

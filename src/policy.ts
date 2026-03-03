@@ -100,6 +100,47 @@ export class PolicyEngine {
         description: "搜索文件内容",
       },
 
+      // Skill 相关工具 - 默认允许（问题1修复）
+      {
+        tool: "list_skills",
+        decision: "allow",
+        description: "列出可用技能",
+      },
+      {
+        tool: "activate_skill",
+        decision: "allow",
+        description: "激活技能",
+      },
+      {
+        tool: "deactivate_skill",
+        decision: "allow",
+        description: "停用技能",
+      },
+      {
+        tool: "show_skill",
+        decision: "allow",
+        description: "显示技能详情",
+      },
+      {
+        tool: "get_active_skills_prompt",
+        decision: "allow",
+        description: "获取激活技能的提示",
+      },
+
+      // 联网搜索 - 默认允许
+      {
+        tool: "web_search",
+        decision: "allow",
+        description: "联网搜索信息",
+      },
+
+      // MCP 工具 - 默认允许（用户主动配置的外部工具）
+      {
+        tool: "mcp_*",
+        decision: "allow",
+        description: "MCP 外部工具（用户已配置）",
+      },
+
       // 写操作 - 询问用户
       {
         tool: "write",
@@ -137,8 +178,33 @@ export class PolicyEngine {
 
   /**
    * 检查工具调用权限（简化接口）
+   * @param toolName 工具名称
+   * @param args 工具参数
+   * @param cwd 工作目录（用于 "Always Allow" 规则匹配）
    */
-  check(toolName: string, args: Record<string, unknown>): PolicyResult {
+  check(toolName: string, args: Record<string, unknown>, cwd?: string): PolicyResult {
+    // 0.5. 对于非 mcp_ 前缀的工具名，也尝试匹配 mcp_* 规则
+    // 这样 LLM 调用 "web_search" 时也能匹配 "mcp_*" 规则
+    if (!toolName.startsWith("mcp_")) {
+      // 先检查是否有 mcp_ 前缀版本的工具能匹配规则
+      for (const rule of this.rules) {
+        if (rule.tool.endsWith("_*") && rule.tool.startsWith("mcp_")) {
+          // mcp_* 规则，检查原始名称是否可能是 MCP 工具
+          // 由于我们不知道完整名称，这里简单地对非内置工具放行
+          const builtinTools = ["read", "write", "edit", "grep", "glob", "bash",
+            "enter_plan_mode", "exit_plan_mode", "task", "get_subagent_result", "parallel_explore",
+            "list_skills", "activate_skill", "deactivate_skill", "show_skill", "get_active_skills_prompt"]
+          if (!builtinTools.includes(toolName) && rule.decision === "allow") {
+            return {
+              decision: rule.decision,
+              reason: rule.description || `规则匹配: ${rule.tool}`,
+              rule,
+            }
+          }
+        }
+      }
+    }
+
     // 0. YOLO 模式：自动批准所有（除了危险操作）
     if (this.yoloMode) {
       // 即使在 YOLO 模式下，仍然阻止极其危险的操作
@@ -172,7 +238,15 @@ export class PolicyEngine {
       }
 
       if (rule.tool !== toolName && rule.tool !== "*") {
-        continue
+        // 支持前缀通配符，如 "mcp_*"
+        if (rule.tool.endsWith("_*")) {
+          const prefix = rule.tool.slice(0, -1) // 移除 "*"，保留下划线
+          if (!toolName.startsWith(prefix)) {
+            continue
+          }
+        } else {
+          continue
+        }
       }
 
       // 检查条件
@@ -198,13 +272,13 @@ export class PolicyEngine {
       }
     }
 
-    // 3. 检查学习的规则
-    const argsHash = this.hashArgs(toolName, args)
-    const learnedDecision = this.learnedRules.get(argsHash)
+    // 3. 检查学习的规则（问题2修复：按工具名 + 工作目录匹配）
+    const ruleKey = this.makeRuleKey(toolName, cwd)
+    const learnedDecision = this.learnedRules.get(ruleKey)
     if (learnedDecision) {
       return {
         decision: learnedDecision,
-        reason: "根据您之前的选择",
+        reason: "根据您之前的选择（Always Allow）",
       }
     }
 
@@ -228,7 +302,15 @@ export class PolicyEngine {
       }
 
       if (rule.tool !== toolName && rule.tool !== "*") {
-        continue
+        // 支持前缀通配符，如 "mcp_*"
+        if (rule.tool.endsWith("_*")) {
+          const prefix = rule.tool.slice(0, -1) // 移除 "*"，保留下划线
+          if (!toolName.startsWith(prefix)) {
+            continue
+          }
+        } else {
+          continue
+        }
       }
 
       // 检查条件
@@ -281,20 +363,25 @@ export class PolicyEngine {
   /**
    * 检查工具调用权限（完整接口）
    */
-  checkPermission(toolCall: ToolCall): PolicyResult {
-    return this.check(toolCall.name, toolCall.arguments)
+  checkPermission(toolCall: ToolCall, cwd?: string): PolicyResult {
+    return this.check(toolCall.name, toolCall.arguments, cwd)
   }
 
   /**
    * 从用户决策中学习（简化接口）
+   * @param toolName 工具名称
+   * @param args 工具参数（不再用于生成哈希）
+   * @param decision 决策
+   * @param always 是否永久记住
+   * @param cwd 工作目录（用于生成规则键）
    */
-  learn(toolName: string, args: Record<string, unknown>, decision: PolicyDecision, always: boolean = true): void {
+  learn(toolName: string, args: Record<string, unknown>, decision: PolicyDecision, always: boolean = true, cwd?: string): void {
     if (!this.config.enableLearning) return
 
     if (always) {
-      // "总是允许/拒绝" - 保存到学习的规则
-      const argsHash = this.hashArgs(toolName, args)
-      this.learnedRules.set(argsHash, decision)
+      // "总是允许/拒绝" - 按工具名 + 工作目录保存规则
+      const ruleKey = this.makeRuleKey(toolName, cwd)
+      this.learnedRules.set(ruleKey, decision)
       this.saveLearnedRules()
     }
   }
@@ -302,8 +389,8 @@ export class PolicyEngine {
   /**
    * 从用户决策中学习（完整接口）
    */
-  learnFromToolCall(toolCall: ToolCall, decision: PolicyDecision, always: boolean = false): void {
-    this.learn(toolCall.name, toolCall.arguments, decision, always)
+  learnFromToolCall(toolCall: ToolCall, decision: PolicyDecision, always: boolean = false, cwd?: string): void {
+    this.learn(toolCall.name, toolCall.arguments, decision, always, cwd)
   }
 
   /**
@@ -335,42 +422,11 @@ export class PolicyEngine {
   }
 
   /**
-   * 生成参数哈希
-   * 使用工具名 + 参数结构生成唯一标识
+   * 生成规则键（问题2修复：按工具名 + 工作目录）
    */
-  private hashArgs(tool: string, args: Record<string, unknown>): string {
-    // 简化参数结构，忽略具体值的细微差异
-    const simplified = this.simplifyArgs(args)
-    return `${tool}:${JSON.stringify(simplified)}`
-  }
-
-  /**
-   * 简化参数对象
-   */
-  private simplifyArgs(args: Record<string, unknown>): Record<string, unknown> {
-    const result: Record<string, unknown> = {}
-
-    for (const [key, value] of Object.entries(args)) {
-      if (typeof value === "string") {
-        // 字符串：只保留长度范围
-        const len = value.length
-        if (len < 50) {
-          result[key] = value  // 短字符串保留原值
-        } else {
-          result[key] = `string(${len})`
-        }
-      } else if (typeof value === "number" || typeof value === "boolean") {
-        result[key] = value
-      } else if (Array.isArray(value)) {
-        result[key] = `array(${value.length})`
-      } else if (typeof value === "object" && value !== null) {
-        result[key] = this.simplifyArgs(value as Record<string, unknown>)
-      } else {
-        result[key] = String(value)
-      }
-    }
-
-    return result
+  private makeRuleKey(toolName: string, cwd?: string): string {
+    const effectiveCwd = cwd || process.cwd()
+    return `${toolName}:${effectiveCwd}`
   }
 
   /**

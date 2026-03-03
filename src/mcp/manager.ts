@@ -66,6 +66,12 @@ export class MCPManager extends EventEmitter {
         this.configs.set(config.name, config)
       }
     }
+
+    // 设置默认错误监听器，避免 ERR_UNHANDLED_ERROR
+    // Node.js EventEmitter 要求 error 事件必须有监听器
+    this.on("error", (serverName: string, error: Error) => {
+      mcpLog.error(`MCP server error [${serverName}]:`, error.message)
+    })
   }
 
   // ==========================================================================
@@ -316,14 +322,18 @@ export class MCPManager extends EventEmitter {
         this.emit("server-status-changed", config.name, status)
 
         if (status.type === "connected") {
-          this.emit("server-connected", config.name, status.tools)
+          // 获取已注册的工具（名称已修改为 mcp_server_tool 格式）
+          const registeredTools = this.getAllTools().filter(t => t.server === config.name)
+          this.emit("server-connected", config.name, registeredTools)
         } else if (status.type === "disconnected") {
           this.emit("server-disconnected", config.name, status.error)
         }
       },
       onToolsChange: (tools) => {
         this.registerServerTools(config.name, tools, connection)
-        this.emit("tools-changed", config.name, tools)
+        // 获取已注册的工具（名称已修改为 mcp_server_tool 格式）
+        const registeredTools = this.getAllTools().filter(t => t.server === config.name)
+        this.emit("tools-changed", config.name, registeredTools)
       },
       onError: (error) => {
         this.emit("error", config.name, error)

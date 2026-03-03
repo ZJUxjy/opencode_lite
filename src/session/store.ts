@@ -4,9 +4,6 @@
  * 管理会话的创建、查询、更新和删除
  */
 
-import Database from "better-sqlite3"
-import { mkdirSync } from "fs"
-import { dirname } from "path"
 import type {
   Session,
   CreateSessionParams,
@@ -14,6 +11,7 @@ import type {
   ListSessionsOptions,
   DBSession,
 } from "./types.js"
+import { DatabaseManager } from "../db.js"
 
 /**
  * SessionStore 类
@@ -21,13 +19,19 @@ import type {
  * 使用 SQLite 存储会话元数据
  */
 export class SessionStore {
-  private db: Database.Database
+  private dbManager: DatabaseManager
 
   constructor(dbPath: string) {
-    // Ensure directory exists
-    mkdirSync(dirname(dbPath), { recursive: true })
-    this.db = new Database(dbPath)
+    // 使用 DatabaseManager 获取共享连接
+    this.dbManager = DatabaseManager.getInstance(dbPath)
     this.init()
+  }
+
+  /**
+   * 获取数据库连接
+   */
+  private get db() {
+    return this.dbManager.getDatabase()
   }
 
   /**
@@ -292,7 +296,8 @@ export class SessionStore {
    * 关闭数据库连接
    */
   close(): void {
-    this.db.close()
+    // 由 DatabaseManager 管理连接生命周期
+    // 这里不再直接关闭
   }
 }
 

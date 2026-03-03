@@ -5,7 +5,7 @@
  */
 
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
-import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js"
+import type { JSONRPCMessage, MessageExtraInfo } from "@modelcontextprotocol/sdk/types.js"
 import type { MCPServerConfig } from "./types.js"
 import { MCPTransportError } from "./errors.js"
 import { mcpLog } from "./logger.js"
@@ -42,12 +42,22 @@ export abstract class MCPTransportBase implements Transport {
 
   /** 是否已连接 */
   protected _connected = false
-  /** 错误处理器 */
-  protected _onError?: (error: Error) => void
-  /** 关闭处理器 */
-  protected _onClose?: () => void
-  /** 消息处理器（由 SDK 设置） */
-  protected _onMessage?: (message: JSONRPCMessage) => void
+
+  // ==========================================================================
+  // SDK Transport 接口属性（SDK 会直接设置这些属性）
+  // ==========================================================================
+
+  /** 消息回调（SDK 直接设置此属性） */
+  onmessage?: <T extends JSONRPCMessage>(message: T, extra?: MessageExtraInfo) => void
+
+  /** 错误回调（SDK 直接设置此属性） */
+  onerror?: (error: Error) => void
+
+  /** 关闭回调（SDK 直接设置此属性） */
+  onclose?: () => void
+
+  /** 会话 ID */
+  sessionId?: string
 
   constructor(config: MCPTransportConfig) {
     this.serverName = config.serverName
@@ -135,30 +145,6 @@ export abstract class MCPTransportBase implements Transport {
     }
   }
 
-  /**
-   * 设置消息处理器
-   * 此方法由 MCP SDK 的 Client 调用
-   */
-  onMessage(handler: (message: JSONRPCMessage) => void): void {
-    this._onMessage = handler
-  }
-
-  /**
-   * 设置关闭处理器
-   * 此方法由 MCP SDK 的 Client 调用
-   */
-  onClose(handler: () => void): void {
-    this._onClose = handler
-  }
-
-  /**
-   * 设置错误处理器
-   * 此方法由 MCP SDK 的 Client 调用
-   */
-  onError(handler: (error: Error) => void): void {
-    this._onError = handler
-  }
-
   // -------------------------------------------------------------------------
   // 状态查询
   // -------------------------------------------------------------------------
@@ -197,8 +183,8 @@ export abstract class MCPTransportBase implements Transport {
    * 触发错误事件
    */
   protected _triggerError(error: Error): void {
-    if (this._onError) {
-      this._onError(error)
+    if (this.onerror) {
+      this.onerror(error)
     }
   }
 
@@ -207,8 +193,8 @@ export abstract class MCPTransportBase implements Transport {
    */
   protected _triggerClose(): void {
     this._connected = false
-    if (this._onClose) {
-      this._onClose()
+    if (this.onclose) {
+      this.onclose()
     }
   }
 
@@ -216,8 +202,8 @@ export abstract class MCPTransportBase implements Transport {
    * 触发消息事件
    */
   protected _triggerMessage(message: JSONRPCMessage): void {
-    if (this._onMessage) {
-      this._onMessage(message)
+    if (this.onmessage) {
+      this.onmessage(message)
     }
   }
 

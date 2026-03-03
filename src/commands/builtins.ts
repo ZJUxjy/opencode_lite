@@ -29,8 +29,19 @@ const exitCommand: Command = {
   name: "/exit",
   aliases: ["/quit"],
   description: "Exit the program",
-  handler: (_args: string, ctx: CommandContext) => {
-    ctx.exit()
+  handler: async (_args: string, ctx: CommandContext) => {
+    // 先清理 MCP 连接
+    const mcpManager = ctx.agent.getMCPManager()
+    if (mcpManager) {
+      try {
+        await mcpManager.dispose()
+      } catch {
+        // 忽略清理错误
+      }
+    }
+
+    // 强制退出进程
+    process.exit(0)
   },
 }
 

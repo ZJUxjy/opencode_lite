@@ -1,8 +1,6 @@
-import Database from "better-sqlite3"
-import { mkdirSync } from "fs"
-import { dirname } from "path"
 import type { Message, ToolCall, ToolResult } from "./types.js"
 import { SessionStore, generateSessionTitle } from "./session/index.js"
+import { DatabaseManager } from "./db.js"
 
 interface DBMessage {
   id: number
@@ -15,15 +13,21 @@ interface DBMessage {
 }
 
 export class MessageStore {
-  private db: Database.Database
+  private dbManager: DatabaseManager
   private sessionStore: SessionStore | null = null
 
   constructor(dbPath: string, sessionStore?: SessionStore) {
-    // Ensure directory exists
-    mkdirSync(dirname(dbPath), { recursive: true })
-    this.db = new Database(dbPath)
+    // 使用 DatabaseManager 获取共享连接
+    this.dbManager = DatabaseManager.getInstance(dbPath)
     this.sessionStore = sessionStore || null
     this.init()
+  }
+
+  /**
+   * 获取数据库连接
+   */
+  private get db() {
+    return this.dbManager.getDatabase()
   }
 
   /**
@@ -113,7 +117,8 @@ export class MessageStore {
   }
 
   close() {
-    this.db.close()
+    // 由 DatabaseManager 管理连接生命周期
+    // 这里不再直接关闭
   }
 }
 
