@@ -8,7 +8,7 @@
  * - SKILL.md: YAML frontmatter + markdown body
  * - Auto-discovery: Scan skills/ directories
  * - Progressive disclosure: metadata → body → resources
- * - Dynamic activation: auto/manual/always policies
+ * - LLM-driven activation: LLM reads descriptions and decides when to activate
  *
  * Usage:
  * ```typescript
@@ -18,17 +18,13 @@
  * const registry = getSkillRegistry()
  * await registry.discoverAndLoad()
  *
- * // 手动激活
+ * // 获取可用 skills 列表（注入到 prompt）
+ * const availableSkills = registry.getAvailableSkillsDescription()
+ *
+ * // 激活 skill（通过 activate_skill 工具调用）
  * registry.activate('my-skill')
  *
- * // 自动激活（基于上下文）
- * registry.autoActivate({
- *   cwd: process.cwd(),
- *   currentFile: 'src/App.tsx',
- *   userInput: 'help me debug this'
- * })
- *
- * // 获取 prompt 注入
+ * // 获取已激活 skills 的 prompt 注入
  * const injection = registry.getActivePromptInjection()
  * ```
  */
