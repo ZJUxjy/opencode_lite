@@ -87,6 +87,8 @@ export interface SubagentResult {
   error?: string
   /** 执行耗时（毫秒） */
   duration?: number
+  /** 终止原因 */
+  terminateReason?: SubagentTerminateReason
 }
 
 /**
@@ -101,6 +103,10 @@ export interface SubagentManagerConfig {
   allowNesting?: boolean
   /** 最大嵌套深度 */
   maxNestingDepth?: number
+  /** 最大 turn 数，默认 15 */
+  maxTurns?: number
+  /** 最大执行时间(毫秒)，默认 5分钟 */
+  maxTimeMs?: number
 }
 
 /**

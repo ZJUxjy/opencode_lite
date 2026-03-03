@@ -10,6 +10,9 @@ import type {
   ExploreTask,
   AggregatedResult,
 } from "./types.js"
+import { SubagentTerminateReason } from "./types.js"
+import { DeadlineTimer } from "./timer.js"
+import { TaskCompleter } from "./completer.js"
 
 /**
  * 子代理管理器
@@ -25,12 +28,17 @@ export class SubagentManager {
   private config: Required<SubagentManagerConfig>
   private events: SubagentEvents = {}
 
+  private completers = new Map<string, TaskCompleter>()
+  private timers = new Map<string, DeadlineTimer>()
+
   constructor(config: SubagentManagerConfig = {}) {
     this.config = {
       maxConcurrent: config.maxConcurrent ?? 3,
       defaultTimeout: config.defaultTimeout ?? 60000,
       allowNesting: config.allowNesting ?? true,
       maxNestingDepth: config.maxNestingDepth ?? 3,
+      maxTurns: config.maxTurns ?? 15,
+      maxTimeMs: config.maxTimeMs ?? 5 * 60 * 1000, // 5分钟
     }
   }
 
@@ -71,6 +79,9 @@ export class SubagentManager {
     }
 
     this.subagents.set(subagent.id, subagent)
+
+    // 为每个 subagent 创建 completer
+    this.completers.set(subagent.id, new TaskCompleter())
 
     // 更新父代理的子代理列表
     if (config.parentId) {
@@ -224,10 +235,20 @@ export class SubagentManager {
     this.updateStatus(id, "running")
     this.events.onStart?.(subagent)
 
+    // 创建 deadline timer
+    const timer = new DeadlineTimer({ timeoutMs: this.config.maxTimeMs })
+    this.timers.set(id, timer)
+    timer.start()
+
     try {
-      // TODO: 实际集成 Agent 执行逻辑
-      // 这里先返回模拟结果
+      // 执行（带时间限制）
       const result = await this.simulateExecution(subagent)
+
+      // 检查终止原因
+      const completer = this.completers.get(id)
+      let terminateReason: SubagentTerminateReason = completer?.isCompleted()
+        ? SubagentTerminateReason.GOAL
+        : SubagentTerminateReason.NO_COMPLETE_CALL
 
       this.setResult(id, result)
 
@@ -236,6 +257,7 @@ export class SubagentManager {
         status: "completed",
         result,
         duration: Date.now() - (subagent.startedAt ?? subagent.createdAt),
+        terminateReason,
       }
     } catch (error: any) {
       const errorMsg = error.message || String(error)
@@ -246,7 +268,11 @@ export class SubagentManager {
         status: "failed",
         error: errorMsg,
         duration: Date.now() - (subagent.startedAt ?? subagent.createdAt),
+        terminateReason: SubagentTerminateReason.ERROR,
       }
+    } finally {
+      timer.destroy()
+      this.timers.delete(id)
     }
   }
 
