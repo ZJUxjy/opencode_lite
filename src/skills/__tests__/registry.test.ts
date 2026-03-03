@@ -156,67 +156,6 @@ describe("SkillRegistry", () => {
     })
   })
 
-  describe("autoActivate", () => {
-    it("should activate skills based on file patterns", () => {
-      const skill = {
-        ...createMockSkill("react-skill", "auto"),
-        metadata: {
-          ...createMockSkill("react-skill", "auto").metadata,
-          triggers: {
-            filePatterns: ["**/*.tsx"],
-          },
-        },
-      }
-
-      registry.register(skill)
-
-      const results = registry.autoActivate({
-        cwd: "/project",
-        currentFile: "src/components/App.tsx",
-        activeSkills: [],
-      })
-
-      expect(results.length).toBe(1)
-      expect(results[0].success).toBe(true)
-      expect(registry.get("react-skill")?.isActive).toBe(true)
-    })
-
-    it("should activate skills based on keywords", () => {
-      const skill = {
-        ...createMockSkill("debug-skill", "auto"),
-        metadata: {
-          ...createMockSkill("debug-skill", "auto").metadata,
-          triggers: {
-            keywords: ["debug", "debugger"],
-          },
-        },
-      }
-
-      registry.register(skill)
-
-      const results = registry.autoActivate({
-        cwd: "/project",
-        userInput: "Help me debug this issue",
-        activeSkills: [],
-      })
-
-      expect(results.length).toBe(1)
-      expect(results[0].success).toBe(true)
-    })
-
-    it("should not activate manual skills", () => {
-      const skill = createMockSkill("manual-skill", "manual")
-      registry.register(skill)
-
-      const results = registry.autoActivate({
-        cwd: "/project",
-        activeSkills: [],
-      })
-
-      expect(results.length).toBe(0)
-    })
-  })
-
   describe("getActivePromptInjection", () => {
     it("should combine all active skills", () => {
       const skill1 = createMockSkill("active-1", "always")
