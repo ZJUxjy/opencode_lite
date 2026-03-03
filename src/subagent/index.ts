@@ -15,4 +15,12 @@ export type {
   ParallelExploreConfig,
   ExploreTask,
   AggregatedResult,
+  // 新增类型
+  SubagentTerminateReason,
+  OutputValidationResult,
+  CompleteTaskParams,
 } from "./types.js"
+
+export { DeadlineTimer } from "./timer.js"
+export { TaskCompleter, completeTaskTool, CompleteTaskSchema } from "./completer.js"
+export { SubagentRunner } from "./runner.js"
