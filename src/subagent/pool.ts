@@ -1,4 +1,4 @@
-import { SubagentRunner, SubagentResult } from "./runner.js"
+import { SubagentRunner, SubagentRunnerResult } from "./runner.js"
 
 export interface SubagentPoolConfig {
   maxConcurrent: number
@@ -27,8 +27,8 @@ export class SubagentPool {
     return this.config.maxConcurrent
   }
 
-  async executeParallel(tasks: SubagentTask[]): Promise<SubagentResult[]> {
-    const results: SubagentResult[] = []
+  async executeParallel(tasks: SubagentTask[]): Promise<SubagentRunnerResult[]> {
+    const results: SubagentRunnerResult[] = []
 
     // Execute in batches based on maxConcurrent
     for (let i = 0; i < tasks.length; i += this.config.maxConcurrent) {
@@ -44,7 +44,7 @@ export class SubagentPool {
     return results
   }
 
-  async executeWithRace(tasks: SubagentTask[]): Promise<SubagentResult> {
+  async executeWithRace(tasks: SubagentTask[]): Promise<SubagentRunnerResult> {
     const promises = tasks.map((task) =>
       this.runner.execute(task.id, task.objective)
     )

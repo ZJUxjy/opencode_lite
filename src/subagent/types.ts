@@ -4,6 +4,7 @@
  * 支持在 Plan Mode 下创建和管理子代理
  */
 
+import type { z } from "zod"
 import type { Message } from "../types.js"
 
 /**
@@ -141,6 +142,37 @@ export interface AggregatedResult {
     failed: number
     duration: number
   }
+}
+
+/**
+ * 子代理终止原因
+ */
+export enum SubagentTerminateReason {
+  GOAL = "goal",                           // 正常完成 (调用了 complete_task)
+  MAX_TURNS = "max_turns",                 // 超过 turn 限制
+  TIMEOUT = "timeout",                     // 超过时间限制
+  ERROR = "error",                         // 执行错误
+  ABORTED = "aborted",                     // 被用户取消
+  NO_COMPLETE_CALL = "no_complete",        // 停止而未调用 complete_task
+  VALIDATION_FAILED = "validation_failed", // 输出验证失败
+}
+
+/**
+ * 输出验证结果
+ */
+export interface OutputValidationResult {
+  success: boolean
+  error?: string
+  data?: unknown
+}
+
+/**
+ * complete_task 工具参数
+ */
+export interface CompleteTaskParams {
+  result: string
+  filesChanged?: string[]
+  success?: boolean
 }
 
 /**
