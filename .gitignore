@@ -8,3 +8,4 @@ settings.json
 
 # Agent Teams artifacts
 .agent-teams/
+.worktrees/
