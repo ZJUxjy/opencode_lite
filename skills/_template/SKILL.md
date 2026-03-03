@@ -10,8 +10,9 @@ id: my-skill
 name: My Skill
 
 # Short description (required)
-# Keep it under 100 characters for the skills list
-description: A brief description of what this skill does
+# Include relevant keywords to help the LLM understand when to activate this skill
+# Example: "Best practices for React development including hooks, components, and JSX patterns"
+description: A clear description that helps LLM understand when to activate this skill. Include relevant keywords and use cases.
 
 # Version (required)
 # Follow semantic versioning
@@ -22,8 +23,8 @@ author: Your Name <email@example.com>
 
 # Activation strategy (required)
 # Options: auto | manual | always
-# - auto: Activated automatically based on triggers
-# - manual: User must explicitly activate it
+# - auto: LLM can activate based on description relevance
+# - manual: Only activated via activate_skill tool or /skill command
 # - always: Always active when loaded
 activation: manual
 
@@ -32,19 +33,6 @@ activation: manual
 tags:
   - example
   - template
-
-# Triggers (required if activation is "auto")
-# Define when this skill should auto-activate
-triggers:
-  # File patterns that trigger this skill (optional)
-  filePatterns:
-    - "**/*.ext"        # Match any .ext file
-    - "src/**/*.ts"     # Match TypeScript files in src
-
-  # Keywords in user input that trigger this skill (optional)
-  keywords:
-    - "keyword1"
-    - "keyword2"
 
 # Dependencies (optional)
 # List of skill IDs that must be activated before this one
