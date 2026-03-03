@@ -24,7 +24,7 @@ export class PromptDumper {
     this.enabled = enabled
     this.startTime = new Date()
     this.dumpPath = join(
-      homedir(),
+      process.cwd(),
       ".lite-opencode",
       "dumps",
       `session-${sessionId}.md`
