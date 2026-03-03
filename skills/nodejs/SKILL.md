@@ -1,23 +1,9 @@
 ---
 id: builtin:nodejs
 name: Node.js Expert
-description: Best practices for Node.js backend development
+description: Best practices for Node.js backend development including Express, Fastify, API design, middleware, error handling, security, and testing. Auto-activates when working on server-side code, APIs, or backend services.
 version: "1.0.0"
 activation: auto
-triggers:
-  filePatterns:
-    - "**/server/**"
-    - "**/api/**"
-    - "**/backend/**"
-    - "**/*.server.ts"
-    - "**/*.routes.ts"
-  keywords:
-    - "api"
-    - "server"
-    - "express"
-    - "fastify"
-    - "endpoint"
-    - "middleware"
 tags:
   - nodejs
   - backend

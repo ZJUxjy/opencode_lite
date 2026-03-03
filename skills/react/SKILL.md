@@ -1,20 +1,9 @@
 ---
 id: builtin:react
 name: React Expert
-description: Best practices for React development including hooks, performance, and patterns
+description: Best practices for React development including components, hooks (useState, useEffect, useReducer), performance optimization (useMemo, useCallback, memo), state management, JSX/TSX patterns, error boundaries, and accessibility.
 version: "1.0.0"
 activation: auto
-triggers:
-  filePatterns:
-    - "**/*.jsx"
-    - "**/*.tsx"
-    - "**/components/**"
-  keywords:
-    - "react"
-    - "component"
-    - "hook"
-    - "jsx"
-    - "tsx"
 tags:
   - react
   - frontend
