@@ -280,6 +280,27 @@ export class SkillRegistry {
   }
 
   /**
+   * 获取可用 skills 的描述列表（供 LLM 参考决定激活哪些）
+   */
+  getAvailableSkillsDescription(): string {
+    const skills = this.getAll()
+
+    if (skills.length === 0) {
+      return ""
+    }
+
+    const lines: string[] = []
+
+    for (const skill of skills) {
+      const status = skill.isActive ? " [ACTIVE]" : ""
+      const activation = skill.metadata.activation === "always" ? " (always-on)" : ""
+      lines.push(`- **${skill.metadata.id}**: ${skill.metadata.description}${status}${activation}`)
+    }
+
+    return lines.join("\n")
+  }
+
+  /**
    * 重新加载 skill
    */
   async reload(id: string): Promise<SkillActivationResult> {

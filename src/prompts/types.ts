@@ -21,6 +21,8 @@ export interface PromptContext {
   date: Date
   /** Skills prompt injection */
   skills?: string
+  /** List of available skills with descriptions (for LLM to decide activation) */
+  availableSkills?: string
 }
 
 /**
