@@ -166,6 +166,7 @@ export class Agent {
 
     // 4. 生成 system prompt
     const skillPrompt = this.skillRegistry.getActivePromptInjection()
+    const availableSkills = this.skillRegistry.getAvailableSkillsDescription()
     const systemPrompt = this.promptProvider.getSystemPrompt({
       model: this.llm.getModelId(),
       cwd: this.cwd,
@@ -173,6 +174,7 @@ export class Agent {
       tools: this.tools.getDefinitions(),
       date: new Date(),
       skills: skillPrompt,
+      availableSkills: availableSkills,
     })
 
     // 5. 使用 ReActRunner 执行

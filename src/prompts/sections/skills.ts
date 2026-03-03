@@ -3,22 +3,39 @@ import type { PromptSection, PromptContext } from "../types.js"
 /**
  * Skills Section
  *
- * 渲染已激活的 skills 内容
- * 只有在有激活的 skills 时才显示
+ * Renders:
+ * 1. Available skills list (always shown when skills are loaded)
+ * 2. Active skills content (shown when skills are activated)
  */
 export const skillsSection: PromptSection = {
   name: "skills",
 
   enabled: (ctx: PromptContext) => {
-    // 只有当有激活的 skills 时才启用
-    return !!ctx.skills && ctx.skills.length > 0
+    // Show when there are available skills OR active skills
+    return !!ctx.availableSkills || (!!ctx.skills && ctx.skills.length > 0)
   },
 
   render: (ctx: PromptContext) => {
-    if (!ctx.skills) {
-      return ""
+    const parts: string[] = []
+
+    // Show available skills for LLM to decide activation
+    if (ctx.availableSkills) {
+      parts.push(`# Available Skills
+
+The following skills are available. Use \`activate_skill\` tool to activate relevant skills based on the task.
+
+${ctx.availableSkills}
+`)
     }
 
-    return ctx.skills
+    // Show active skills content
+    if (ctx.skills && ctx.skills.length > 0) {
+      parts.push(`# Active Skills
+
+${ctx.skills}
+`)
+    }
+
+    return parts.join("\n---\n\n")
   },
 }

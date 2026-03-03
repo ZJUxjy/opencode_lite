@@ -4,7 +4,6 @@
  * 负责：
  * - 管理所有已加载的 skills
  * - 处理 skill 激活/停用
- * - 自动激活逻辑（基于触发器）
  * - 生成 prompt 注入内容
  */
 
@@ -227,80 +226,6 @@ export class SkillRegistry {
   }
 
   /**
-   * 自动激活（基于上下文）
-   */
-  autoActivate(context: SkillContext): SkillActivationResult[] {
-    const results: SkillActivationResult[] = []
-
-    for (const skill of this.getAll()) {
-      // 跳过已激活的
-      if (skill.isActive) continue
-
-      // 跳过手动激活的
-      if (skill.metadata.activation === "manual") continue
-
-      // 检查触发条件
-      if (this.shouldAutoActivate(skill, context)) {
-        const result = this.activate(skill.metadata.id)
-        results.push(result)
-      }
-    }
-
-    return results
-  }
-
-  /**
-   * 检查是否应该自动激活
-   */
-  private shouldAutoActivate(skill: Skill, context: SkillContext): boolean {
-    const triggers = skill.metadata.triggers
-
-    if (!triggers) {
-      // 没有触发条件时，auto 模式等同于 manual
-      return false
-    }
-
-    // 检查文件模式
-    if (triggers.filePatterns && context.currentFile) {
-      for (const pattern of triggers.filePatterns) {
-        if (this.matchGlob(context.currentFile, pattern)) {
-          return true
-        }
-      }
-    }
-
-    // 检查关键词
-    if (triggers.keywords && context.userInput) {
-      const input = context.userInput.toLowerCase()
-      for (const keyword of triggers.keywords) {
-        if (input.includes(keyword.toLowerCase())) {
-          return true
-        }
-      }
-    }
-
-    return false
-  }
-
-  /**
-   * 简单的 glob 匹配
-   */
-  private matchGlob(path: string, pattern: string): boolean {
-    // 转换为正则表达式
-    const regex = new RegExp(
-      "^" +
-        pattern
-          .replace(/\*\*/g, "{{GLOBSTAR}}")
-          .replace(/\*/g, "[^/]*")
-          .replace(/\?/g, ".")
-          .replace(/\{\{GLOBSTAR\}\}/g, ".*") +
-        "$"
-    )
-
-    return regex.test(path)
-  }
-
-  /**
    * 生成 prompt 注入内容
    */
   private generatePromptInjection(skill: Skill): string {
@@ -352,6 +277,27 @@ export class SkillRegistry {
     }
 
     return sections.join("\n")
+  }
+
+  /**
+   * 获取可用 skills 的描述列表（供 LLM 参考决定激活哪些）
+   */
+  getAvailableSkillsDescription(): string {
+    const skills = this.getAll()
+
+    if (skills.length === 0) {
+      return ""
+    }
+
+    const lines: string[] = []
+
+    for (const skill of skills) {
+      const status = skill.isActive ? " [ACTIVE]" : ""
+      const activation = skill.metadata.activation === "always" ? " (always-on)" : ""
+      lines.push(`- **${skill.metadata.id}**: ${skill.metadata.description}${status}${activation}`)
+    }
+
+    return lines.join("\n")
   }
 
   /**

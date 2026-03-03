@@ -26,19 +26,11 @@ export interface SkillMetadata {
   tags?: string[]
   /**
    * 激活策略
-   * - auto: 自动激活（基于触发器）
-   * - manual: 手动激活（通过 /skill 命令）
-   * - always: 总是激活
+   * - auto: 可被 LLM 自动激活（基于 description 匹配）
+   * - manual: 仅通过 /skill 命令或 activate_skill 工具激活
+   * - always: 加载时自动激活
    */
   activation: "auto" | "manual" | "always"
-  /**
-   * 触发条件（auto 模式下使用）
-   * 文件路径匹配 glob 模式时自动激活
-   */
-  triggers?: {
-    filePatterns?: string[]
-    keywords?: string[]
-  }
   /**
    * 依赖的其他 skills
    */

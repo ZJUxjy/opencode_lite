@@ -203,28 +203,6 @@ Displays the full skill definition including:
     lines.push(skill.metadata.description)
     lines.push(``)
 
-    // Triggers (if auto)
-    if (skill.metadata.activation === "auto" && skill.metadata.triggers) {
-      lines.push(`## Auto-activation Triggers`)
-      lines.push(``)
-
-      if (skill.metadata.triggers.filePatterns) {
-        lines.push(`File patterns:`)
-        for (const pattern of skill.metadata.triggers.filePatterns) {
-          lines.push(`- \`${pattern}\``)
-        }
-        lines.push(``)
-      }
-
-      if (skill.metadata.triggers.keywords) {
-        lines.push(`Keywords:`)
-        for (const keyword of skill.metadata.triggers.keywords) {
-          lines.push(`- "${keyword}"`)
-        }
-        lines.push(``)
-      }
-    }
-
     // Dependencies
     if (skill.metadata.dependencies?.length) {
       lines.push(`## Dependencies`)
