@@ -129,9 +129,6 @@ function validateMetadata(metadata: Record<string, unknown>, skillDir: string): 
     author: metadata.author as string | undefined,
     tags: (metadata.tags as string[]) ?? [],
     activation: activation as "auto" | "manual" | "always",
-    triggers: metadata.triggers as
-      | { filePatterns?: string[]; keywords?: string[] }
-      | undefined,
     dependencies: (metadata.dependencies as string[]) ?? [],
     conflicts: (metadata.conflicts as string[]) ?? [],
   }
