@@ -25,6 +25,11 @@ export interface AgentConfig {
   mcp?: MCPManagerOptions
   /** Dump prompts and responses to file for debugging */
   dumpPrompt?: boolean
+  /**
+   * 是否作为 subagent 运行
+   * 如果为 true，将禁用 subagent 相关工具以防止递归调用
+   */
+  isSubagent?: boolean
 }
 
 export interface AgentEvents {
@@ -74,7 +79,7 @@ export class Agent {
 
   constructor(sessionId: string, config: AgentConfig) {
     this.llm = new LLMClient(config.llm)
-    this.tools = new ToolRegistry()
+    this.tools = new ToolRegistry({ isSubagent: config.isSubagent ?? false })
     this.store = new MessageStore(config.dbPath)
     this.loopDetection = new LoopDetectionService(config.loopDetection)
     this.policyEngine = new PolicyEngine(config.policy)
@@ -135,14 +140,6 @@ export class Agent {
    * 执行 Agent 循环
    */
   async run(userInput: string): Promise<string> {
-    // 0. 自动激活匹配的 skills
-    this.skillRegistry.autoActivate({
-      userInput,
-      currentFile: undefined, // 可以从上下文获取
-      cwd: this.cwd,
-      activeSkills: this.skillRegistry.getActive().map(s => s.metadata.id),
-    })
-
     // 1. 添加用户消息
     this.store.add(this._sessionId, {
       role: "user",

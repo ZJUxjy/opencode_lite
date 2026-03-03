@@ -18,13 +18,39 @@ import {
 import type { MCPManager } from "../mcp/manager.js"
 import { createMCPToolWrapper } from "../mcp/tools.js"
 
+/**
+ * Subagent 工具名称列表
+ * 这些工具在 subagent 中被禁用，以防止递归调用
+ */
+const SUBAGENT_TOOLS = [
+  "task",
+  "get_subagent_result",
+  "parallel_explore",
+  "enter_plan_mode",
+  "exit_plan_mode",
+]
+
+/**
+ * ToolRegistry 配置
+ */
+export interface ToolRegistryConfig {
+  /**
+   * 是否作为 subagent 运行
+   * 如果为 true，将禁用 subagent 相关工具以防止递归
+   */
+  isSubagent?: boolean
+}
+
 export class ToolRegistry {
   private tools = new Map<string, Tool>()
   private mcpManager?: MCPManager
+  private isSubagent: boolean
 
-  constructor() {
-    // 注册内置工具
-    ;[
+  constructor(config: ToolRegistryConfig = {}) {
+    this.isSubagent = config.isSubagent ?? false
+
+    // 所有内置工具
+    const allTools = [
       bashTool,
       readTool,
       writeTool,
@@ -41,7 +67,14 @@ export class ToolRegistry {
       deactivateSkillTool,
       showSkillTool,
       getActiveSkillsPromptTool,
-    ].forEach((tool) => this.register(tool))
+    ]
+
+    // 如果是 subagent，过滤掉 subagent 工具以防止递归
+    const toolsToRegister = this.isSubagent
+      ? allTools.filter((tool) => !SUBAGENT_TOOLS.includes(tool.name))
+      : allTools
+
+    toolsToRegister.forEach((tool) => this.register(tool))
   }
 
   /**

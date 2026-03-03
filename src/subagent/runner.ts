@@ -31,6 +31,7 @@ export class SubagentRunner {
     const agentConfig: AgentConfig = {
       cwd: this.config.workingDir,
       dbPath: path.join(os.homedir(), ".lite-opencode", "history.db"),
+      isSubagent: true,  // 防止 subagent 递归调用 subagent 工具
     }
 
     const agent = new Agent(sessionId, agentConfig)
