@@ -136,3 +136,14 @@ export {
   type MCPLogger,
   type MCPLogLevel,
 } from "./logger.js"
+
+// ============================================================================
+// 统计导出
+// ============================================================================
+
+export {
+  MCPStatsTracker,
+  type ToolCallRecord,
+  type ServerStats,
+  type MCPStats,
+} from "./stats.js"

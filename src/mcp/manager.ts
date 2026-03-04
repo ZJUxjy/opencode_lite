@@ -21,6 +21,7 @@ import {
   MCPConfigError,
 } from "./errors.js"
 import { mcpLog } from "./logger.js"
+import { MCPStatsTracker, type ServerStats } from "./stats.js"
 
 // ============================================================================
 // 管理器选项
@@ -41,6 +42,7 @@ export class MCPManager extends EventEmitter {
   private connections: Map<string, MCPConnection> = new Map()
   private configs: Map<string, MCPServerConfig> = new Map()
   private enabled: boolean
+  private stats: MCPStatsTracker
 
   /**
    * 工具注册表：toolName -> { tool: MCPToolInfo, connection: MCPConnection }
@@ -59,6 +61,7 @@ export class MCPManager extends EventEmitter {
   constructor(options: MCPManagerOptions = {}) {
     super()
     this.enabled = options.enabled ?? true
+    this.stats = new MCPStatsTracker()
 
     // 初始化服务器配置
     if (options.servers) {
@@ -220,11 +223,27 @@ export class MCPManager extends EventEmitter {
       throw new MCPToolNotFoundError(parsed.server, parsed.tool || toolName)
     }
 
-    return await entry.connection.callTool(
-      entry.originalName,
-      args,
-      timeoutMs
-    )
+    const startTime = Date.now()
+    // 获取服务器名称（从 connection 的 config 中获取）
+    const serverName = (entry.connection as unknown as { config: { name: string } }).config.name
+
+    try {
+      const result = await entry.connection.callTool(
+        entry.originalName,
+        args,
+        timeoutMs
+      )
+
+      const duration = Date.now() - startTime
+      this.stats.recordCall(serverName, toolName, duration, true)
+
+      return result
+    } catch (error) {
+      const duration = Date.now() - startTime
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      this.stats.recordCall(serverName, toolName, duration, false, errorMsg)
+      throw error
+    }
   }
 
   // ==========================================================================
@@ -306,6 +325,49 @@ export class MCPManager extends EventEmitter {
    */
   isEnabled(): boolean {
     return this.enabled
+  }
+
+  /**
+   * 获取统计追踪器
+   */
+  getStats(): MCPStatsTracker {
+    return this.stats
+  }
+
+  /**
+   * 获取服务器健康状态
+   *
+   * @param name 服务器名称
+   * @returns 健康状态信息
+   */
+  getServerHealth(name: string): {
+    status: "healthy" | "degraded" | "unhealthy"
+    connected: boolean
+    stats?: ServerStats
+  } {
+    const connection = this.connections.get(name)
+    const serverStats = this.stats.getServerStats(name)
+
+    if (!connection) {
+      return { status: "unhealthy", connected: false }
+    }
+
+    const status = connection.getStatus()
+    const connected = status.type === "connected"
+
+    if (!connected) {
+      return { status: "unhealthy", connected: false }
+    }
+
+    // 基于最近错误率判断健康状态
+    if (serverStats && serverStats.totalCalls > 0) {
+      const errorRate = serverStats.failedCalls / serverStats.totalCalls
+      if (errorRate > 0.5) {
+        return { status: "degraded", connected: true, stats: serverStats }
+      }
+    }
+
+    return { status: "healthy", connected: true, stats: serverStats }
   }
 
   // ==========================================================================
