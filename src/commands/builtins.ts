@@ -12,6 +12,10 @@ const exitCommand: Command = {
   aliases: ["/quit"],
   description: "Exit the program",
   handler: async (_args: string, ctx: CommandContext) => {
+    // 显示恢复提示
+    process.stdout.write('\n📋 To resume this session, run:\n')
+    process.stdout.write(`   lite-opencode --resume ${ctx.agent.sessionId}\n\n`)
+
     // 先清理 MCP 连接
     const mcpManager = ctx.agent.getMCPManager()
     if (mcpManager) {

@@ -62,25 +62,42 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
 
   // 注册进程退出钩子清理 MCP 并显示恢复命令
   useEffect(() => {
-    const cleanup = () => {
-      const mcpManager = agent.getMCPManager()
-      if (mcpManager) {
-        mcpManager.dispose().catch(() => {})
-      }
-      // 显示恢复会话的命令
-      console.log('\n\n📋 To resume this session, run:')
-      console.log(`   lite-opencode --resume ${sessionId}`)
-      console.log(`   # or: lite-opencode --continue`)
+    // 同步显示恢复命令（必须在异步清理前执行）
+    const showResumeHint = () => {
+      // 使用 process.stdout.write 同步输出
+      process.stdout.write('\n\n📋 To resume this session, run:\n')
+      process.stdout.write(`   lite-opencode --resume ${sessionId}\n\n`)
     }
 
-    process.on('beforeExit', cleanup)
-    process.on('SIGINT', cleanup)
-    process.on('SIGTERM', cleanup)
+    // 异步清理 MCP
+    const cleanupMCP = async () => {
+      const mcpManager = agent.getMCPManager()
+      if (mcpManager) {
+        await mcpManager.dispose().catch(() => {})
+      }
+    }
+
+    const handleExit = () => {
+      showResumeHint()
+      // 让进程自然退出
+    }
+
+    const handleSigint = () => {
+      showResumeHint()
+      // 同步清理后立即退出
+      cleanupMCP().finally(() => {
+        process.exit(0)
+      })
+    }
+
+    process.on('beforeExit', handleExit)
+    process.on('SIGINT', handleSigint)
+    process.on('SIGTERM', handleExit)
 
     return () => {
-      process.off('beforeExit', cleanup)
-      process.off('SIGINT', cleanup)
-      process.off('SIGTERM', cleanup)
+      process.off('beforeExit', handleExit)
+      process.off('SIGINT', handleSigint)
+      process.off('SIGTERM', handleExit)
     }
   }, [agent, sessionId])
 
@@ -687,6 +704,9 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   useInput((input, key) => {
     // Ctrl+C: Exit
     if (key.ctrl && input === "c") {
+      // 显示恢复提示
+      process.stdout.write('\n\n📋 To resume this session, run:\n')
+      process.stdout.write(`   lite-opencode --resume ${sessionId}\n\n`)
       // 先清理 MCP 连接
       const mcpManager = agent.getMCPManager()
       if (mcpManager) {
