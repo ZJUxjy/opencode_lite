@@ -380,4 +380,65 @@ program
     )
   })
 
+// Token management commands
+program
+  .command("config")
+  .description("Manage configuration")
+  .addCommand(
+    new Command("set-token")
+      .description("Store an API token securely")
+      .argument("<provider>", "Provider name (anthropic, openai, minimax, gemini, deepseek, custom)")
+      .argument("<key>", "API key")
+      .action(async (provider, key) => {
+        const { getTokenService } = await import("./tokens/index.js")
+        const service = getTokenService()
+        try {
+          await service.setToken(provider, key)
+          const storageType = await service.getStorageType()
+          console.log(`✅ Token for ${provider} stored securely (${storageType})`)
+        } catch (error) {
+          console.error(`❌ Failed to store token: ${error instanceof Error ? error.message : String(error)}`)
+          process.exit(1)
+        }
+      })
+  )
+  .addCommand(
+    new Command("list-tokens")
+      .description("List stored tokens")
+      .action(async () => {
+        const { getTokenService } = await import("./tokens/index.js")
+        const service = getTokenService()
+        const tokens = await service.listTokens()
+        const storageType = await service.getStorageType()
+
+        if (tokens.length === 0) {
+          console.log("No tokens stored.")
+          return
+        }
+
+        console.log(`# Stored Tokens (${tokens.length})`)
+        console.log(`Storage: ${storageType}`)
+        console.log("")
+        for (const token of tokens) {
+          console.log(`- ${token.provider}`)
+        }
+      })
+  )
+  .addCommand(
+    new Command("delete-token")
+      .description("Delete a stored API token")
+      .argument("<provider>", "Provider name (anthropic, openai, minimax, gemini, deepseek, custom)")
+      .action(async (provider) => {
+        const { getTokenService } = await import("./tokens/index.js")
+        const service = getTokenService()
+        try {
+          await service.deleteToken(provider)
+          console.log(`🗑️ Token for ${provider} deleted`)
+        } catch (error) {
+          console.error(`❌ Failed to delete token: ${error instanceof Error ? error.message : String(error)}`)
+          process.exit(1)
+        }
+      })
+  )
+
 program.parse()
