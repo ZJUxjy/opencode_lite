@@ -64,10 +64,10 @@ export function CommandInput({
             onSubmit={handleSubmit}
             placeholder={
               isProcessing
-                ? "Waiting for response..."
+                ? "[LLM is thinking... Type to queue next message]"
                 : "Type a message... (/ for commands, ↑↓ for history)"
             }
-            showCursor={!isProcessing}
+            showCursor={true}
           />
         </Box>
       </Box>

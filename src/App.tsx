@@ -189,6 +189,9 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   // 处理状态
   const [isProcessing, setIsProcessing] = useState(false)
 
+  // 输入队列（当 LLM 思考时，用户输入会缓存到这里）
+  const [inputQueue, setInputQueue] = useState<string[]>([])
+
   // 上下文使用情况 - 初始化时直接从 agent 获取，避免重复渲染
   const [contextUsage, setContextUsage] = useState(() => agent.getContextUsage())
 
@@ -569,7 +572,13 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
 
   const handleSubmit = useCallback(async (value: string) => {
     const trimmed = value.trim()
-    if (!trimmed || isProcessing) return
+    if (!trimmed) return
+
+    // 如果正在处理，将输入加入队列
+    if (isProcessing) {
+      setInputQueue(prev => [...prev, trimmed])
+      return
+    }
 
     // Note: Command handling is now done by CommandInput component
     // This callback only handles regular messages
@@ -694,6 +703,19 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
     setIsProcessing(false)
     updateContextUsage()
   }, [agent, isProcessing])
+
+  // =========================================================================
+  // 处理输入队列
+  // =========================================================================
+
+  useEffect(() => {
+    // 当处理完成且队列中有输入时，自动处理下一个
+    if (!isProcessing && inputQueue.length > 0) {
+      const nextInput = inputQueue[0]
+      setInputQueue(prev => prev.slice(1))
+      handleSubmit(nextInput)
+    }
+  }, [isProcessing, inputQueue, handleSubmit])
 
   // =========================================================================
   // 键盘快捷键
@@ -860,7 +882,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
           底部状态栏 + 输入框
           ===================================================================== */}
       <Box flexDirection="column">
-        {/* 状态栏 */}
+        {/* 状态栏 - 参考 Claude Code 显示更多信息 */}
         <Box marginBottom={1}>
           <Text>
             <Text color={contextStatus.color}>
@@ -876,10 +898,23 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
               </Text>
             )}
             {isProcessing && <Text color="cyan"> ● Processing...</Text>}
+            {inputQueue.length > 0 && (
+              <Text color="yellow"> ⏳ Queue: {inputQueue.length}</Text>
+            )}
           </Text>
         </Box>
 
-        {/* 输入框 - 限制宽度防止溢出 */}
+        {/* 快捷提示 */}
+        <Box marginBottom={1}>
+          <Text dimColor>
+            {isProcessing
+              ? "Type to queue next message • Ctrl+C to cancel"
+              : "↑↓ History • / Commands • Tab Complete • Ctrl+C Exit"
+            }
+          </Text>
+        </Box>
+
+        {/* 输入框 */}
         <CommandInput
           isProcessing={isProcessing}
           onSubmit={handleSubmit}
@@ -887,6 +922,11 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
           initialHistory={inputHistory}
           onHistoryChange={handleSaveInputHistory}
         />
+
+        {/* 底部横线 */}
+        <Box marginTop={1}>
+          <Text dimColor>{'─'.repeat(terminalWidth)}</Text>
+        </Box>
       </Box>
     </Box>
   )
