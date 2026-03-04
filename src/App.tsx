@@ -60,13 +60,17 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   // 终端宽度
   const terminalWidth = stdout?.columns || 80
 
-  // 注册进程退出钩子清理 MCP
+  // 注册进程退出钩子清理 MCP 并显示恢复命令
   useEffect(() => {
     const cleanup = () => {
       const mcpManager = agent.getMCPManager()
       if (mcpManager) {
         mcpManager.dispose().catch(() => {})
       }
+      // 显示恢复会话的命令
+      console.log('\n\n📋 To resume this session, run:')
+      console.log(`   lite-opencode --resume ${sessionId}`)
+      console.log(`   # or: lite-opencode --continue`)
     }
 
     process.on('beforeExit', cleanup)
@@ -78,7 +82,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       process.off('SIGINT', cleanup)
       process.off('SIGTERM', cleanup)
     }
-  }, [agent])
+  }, [agent, sessionId])
 
   // =========================================================================
   // 状态管理
@@ -805,10 +809,10 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
 
           这部分内容会频繁更新，不会进入 Static
           ===================================================================== */}
-      <Box flexDirection="column" marginBottom={1} width={terminalWidth}>
+      <Box flexDirection="column" width={terminalWidth}>
         {/* 思考过程流式输出 */}
         {displayReasoning && (
-          <Box marginBottom={1} flexDirection="column">
+          <Box flexDirection="column">
             <Text dimColor italic wrap="wrap">
               💭 {displayReasoning}
               {isProcessing && <Text dimColor>▌</Text>}
@@ -818,7 +822,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
 
         {/* 流式文本输出 */}
         {(displayText || isProcessing) && (
-          <Box marginBottom={1}>
+          <Box>
             {displayText ? (
               <Text wrap="wrap">
                 {displayText}
@@ -870,7 +874,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       {/* =====================================================================
           分隔线：明确划分输出区域和输入区域（自适应终端宽度）
           ===================================================================== */}
-      <Box marginBottom={1}>
+      <Box>
         <Text dimColor>{'─'.repeat(terminalWidth)}</Text>
       </Box>
 
@@ -878,7 +882,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
           Session 选择器
           ===================================================================== */}
       {showSessionList && (
-        <Box flexDirection="column" marginTop={1} marginBottom={1}>
+        <Box flexDirection="column" marginTop={1}>
           <SessionList
             sessions={availableSessions}
             currentCwd={workingDir}
@@ -890,11 +894,25 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       )}
 
       {/* =====================================================================
-          底部状态栏 + 输入框
+          底部输入框 + 横线 + 状态栏
           ===================================================================== */}
       <Box flexDirection="column">
+        {/* 输入框 */}
+        <CommandInput
+          isProcessing={isProcessing}
+          onSubmit={handleSubmit}
+          commandContext={commandContext}
+          initialHistory={inputHistory}
+          onHistoryChange={handleSaveInputHistory}
+        />
+
+        {/* 底部横线 */}
+        <Box>
+          <Text dimColor>{'─'.repeat(terminalWidth)}</Text>
+        </Box>
+
         {/* 状态栏 + 快捷提示 合并在一行 */}
-        <Box marginBottom={1}>
+        <Box>
           <Text>
             <Text color={contextStatus.color}>
               ▌Context: {contextStatus.percent}%
@@ -931,20 +949,6 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
               }
             </Text>
           </Text>
-        </Box>
-
-        {/* 输入框 */}
-        <CommandInput
-          isProcessing={isProcessing}
-          onSubmit={handleSubmit}
-          commandContext={commandContext}
-          initialHistory={inputHistory}
-          onHistoryChange={handleSaveInputHistory}
-        />
-
-        {/* 底部横线 */}
-        <Box marginTop={1}>
-          <Text dimColor>{'─'.repeat(terminalWidth)}</Text>
         </Box>
       </Box>
     </Box>
