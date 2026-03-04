@@ -166,13 +166,51 @@ Key TUI techniques:
 - **Ref + throttling**: Streaming text uses `useRef` with 150ms batched updates to reduce re-renders
 - **Stable keys**: Messages use unique IDs, not array indices
 
+### Message System (`src/messages/`)
+
+Messages are organized with types, metadata, and filtering:
+
+**Message Types:**
+- `text` - Regular text message
+- `tool_call` - Tool invocation
+- `tool_result` - Tool execution result
+- `reasoning` - Chain of thought
+- `error` - Error message
+- `notification` - System notification
+
+**Color Coding:**
+| Type | Border | Background |
+|------|--------|------------|
+| text | gray | transparent |
+| tool_call | blue | #1a1a2e |
+| tool_result | green | #0a1a0a |
+| reasoning | yellow | #1a1a0a |
+| error | red | #1a0a0a |
+| notification | cyan | #0a1a1a |
+
+**Keyboard Shortcuts:**
+- `Ctrl+E`: Expand all message groups
+- `Ctrl+O`: Collapse all message groups
+- `Ctrl+H`: Toggle system message visibility
+- `Ctrl+C`: Exit application
+- `Escape`: Cancel ongoing request
+
+**Message Filter Tool:**
+```
+filter_messages mode="show_all"       # Show all messages
+filter_messages mode="hide_system"    # Hide system/tool messages
+filter_messages mode="show_errors_only" # Only show errors
+filter_messages mode="compact"        # Collapse all groups
+```
+
 ### Tools (`src/tools/`)
 
-11 built-in tools:
+12 built-in tools:
 - **File**: `read`, `write`, `edit`, `grep`, `glob`
 - **System**: `bash`
 - **Plan Mode**: `enter_plan_mode`, `exit_plan_mode`, `task`, `get_subagent_result`, `parallel_explore`
 - **Skills**: `list_skills`, `activate_skill`, `deactivate_skill`, `show_skill`, `get_active_skills_prompt`
+- **UI**: `filter_messages`
 
 ### Skills System (`src/skills/`)
 
