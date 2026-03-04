@@ -33,6 +33,43 @@ node dist/index.js --session <id>                     # Use/create specific sess
 # Advanced Options
 node dist/index.js --no-stream                        # Disable streaming output
 node dist/index.js --compression-threshold <0-1>      # Set context compression threshold (default: 0.92)
+
+# Token Management
+node dist/index.js config set-token <provider> <key>  # Store API key securely
+node dist/index.js config list-tokens                 # List stored tokens
+node dist/index.js config delete-token <provider>     # Delete a stored token
+```
+
+### Token Management
+
+API keys can be stored securely using system keyring (macOS Keychain, Windows Credential Manager, Linux Secret Service) or encrypted file storage.
+
+**Set a token:**
+```bash
+lite-opencode config set-token anthropic sk-ant-xxxxx
+lite-opencode config set-token openai sk-xxxxx
+```
+
+**List stored tokens:**
+```bash
+lite-opencode config list-tokens
+```
+
+**Delete a token:**
+```bash
+lite-opencode config delete-token anthropic
+```
+
+**Use in settings.json:**
+Tokens stored securely take precedence over settings.json values.
+
+```json
+{
+  "env": {
+    // These will be overridden by secure tokens if present
+    "ANTHROPIC_API_KEY": "..."
+  }
+}
 ```
 
 ## Architecture
