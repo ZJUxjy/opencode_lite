@@ -136,6 +136,7 @@ export interface SkillRegistryEvents {
   onSkillLoaded?: (skill: Skill) => void
   onSkillActivated?: (skill: Skill) => void
   onSkillDeactivated?: (skillId: string) => void
+  onSkillReloaded?: (skill: Skill) => void
   onSkillError?: (skillId: string, error: Error) => void
 }
 

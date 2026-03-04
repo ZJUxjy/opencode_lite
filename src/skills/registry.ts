@@ -18,6 +18,7 @@ import type {
   SkillLoadOptions,
 } from "./types.js"
 import { SkillLoader } from "./loader.js"
+import { SkillWatcher } from "./watcher.js"
 
 /**
  * Skill 注册表
@@ -27,6 +28,7 @@ export class SkillRegistry {
   private loader = new SkillLoader()
   private events: SkillRegistryEvents = {}
   private discoveryConfig: SkillDiscoveryConfig
+  private watcher?: SkillWatcher
 
   constructor(
     discoveryConfig: Partial<SkillDiscoveryConfig> = {},
@@ -41,6 +43,82 @@ export class SkillRegistry {
       recursive: discoveryConfig.recursive ?? false,
     }
     this.events = events
+  }
+
+  /**
+   * Enable hot reload watching
+   */
+  enableHotReload(): void {
+    if (this.watcher) return
+
+    this.watcher = new SkillWatcher({
+      paths: this.discoveryConfig.searchPaths,
+      debounceMs: 300,
+      recursive: true,
+    })
+
+    // Handle skill changes
+    this.watcher.on("skill-changed", async (skillId, path) => {
+      console.log(`[Skills] Detected change in ${skillId}, reloading...`)
+      await this.handleSkillChange(skillId, path)
+    })
+
+    this.watcher.on("skill-added", async (path) => {
+      console.log(`[Skills] New skill detected at ${path}, loading...`)
+      await this.handleSkillAdded(path)
+    })
+
+    this.watcher.on("error", (error) => {
+      console.error("[Skills] Watcher error:", error)
+    })
+
+    this.watcher.start()
+  }
+
+  /**
+   * Disable hot reload watching
+   */
+  disableHotReload(): void {
+    this.watcher?.stop()
+    this.watcher = undefined
+  }
+
+  /**
+   * Handle skill file change
+   */
+  private async handleSkillChange(skillId: string, path: string): Promise<void> {
+    // Check if it's an existing skill
+    const existingSkill = this.skills.get(skillId)
+
+    if (existingSkill) {
+      try {
+        const result = await this.reload(skillId)
+        if (result.success) {
+          this.events.onSkillReloaded?.(result.skill!)
+        } else {
+          this.events.onSkillError?.(skillId, new Error(result.error))
+        }
+      } catch (error) {
+        this.events.onSkillError?.(
+          skillId,
+          error instanceof Error ? error : new Error(String(error))
+        )
+      }
+    }
+  }
+
+  /**
+   * Handle new skill detected
+   */
+  private async handleSkillAdded(path: string): Promise<void> {
+    try {
+      const skill = await this.loader.loadFromDirectory(path)
+      if (skill) {
+        this.register(skill)
+      }
+    } catch (error) {
+      console.error(`[Skills] Failed to load new skill from ${path}:`, error)
+    }
   }
 
   /**

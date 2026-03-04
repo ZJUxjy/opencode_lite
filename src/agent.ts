@@ -7,7 +7,7 @@ import { PolicyEngine, type PolicyConfig, type PolicyDecision, type PolicyResult
 import { PromptProvider } from "./prompts/index.js"
 import { ReActRunner, type Strategy, type ReActEvents } from "./react/index.js"
 import { CompressionService, type CompressionLevel, type CompressionPreview, type CompressionResult } from "./compression.js"
-import { SkillRegistry, getSkillRegistry } from "./skills/index.js"
+import { SkillRegistry, getSkillRegistry, type Skill } from "./skills/index.js"
 import { MCPManager, type MCPManagerOptions, setGlobalMCPManager } from "./mcp/index.js"
 import { PromptDumper } from "./utils/promptDumper.js"
 
@@ -745,5 +745,30 @@ export class Agent {
    */
   isMCPInitialized(): boolean {
     return this.mcpInitialized
+  }
+
+  /**
+   * 启用 Skill 热重载
+   */
+  enableSkillHotReload(
+    callback?: (skill: Skill, action: "reloaded" | "loaded") => void
+  ): void {
+    const registry = getSkillRegistry()
+
+    // Set up event handlers
+    const originalOnReloaded = registry["events"].onSkillReloaded
+    const originalOnLoaded = registry["events"].onSkillLoaded
+
+    registry["events"].onSkillReloaded = (skill) => {
+      originalOnReloaded?.(skill)
+      callback?.(skill, "reloaded")
+    }
+
+    registry["events"].onSkillLoaded = (skill) => {
+      originalOnLoaded?.(skill)
+      callback?.(skill, "loaded")
+    }
+
+    registry.enableHotReload()
   }
 }

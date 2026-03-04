@@ -293,3 +293,41 @@ from activated skills. Useful for debugging skill behavior.`,
     return injection
   },
 }
+
+/**
+ * 重新加载 Skill
+ */
+export const reloadSkillTool: Tool = {
+  name: "reload_skill",
+  description: `Reload a skill from disk, picking up any changes made to its SKILL.md file.
+
+Useful when you've edited a skill file and want to apply changes without restarting.
+
+Example: reload_skill id="builtin:git"`,
+
+  parameters: z.object({
+    id: z.string().describe("The skill ID to reload"),
+  }),
+
+  execute: async (params) => {
+    const registry = getSkillRegistry()
+    const result = await registry.reload(params.id)
+
+    if (!result.success) {
+      return `Failed to reload skill: ${result.error}`
+    }
+
+    const lines: string[] = []
+    lines.push(`✅ Reloaded skill: ${result.skill!.metadata.name}`)
+    lines.push(``)
+    lines.push(`Version: ${result.skill!.metadata.version}`)
+    lines.push(`Status: ${result.skill!.isActive ? "Active" : "Inactive"}`)
+
+    if (result.promptInjection) {
+      lines.push(``)
+      lines.push(`The skill's prompt injection has been updated.`)
+    }
+
+    return lines.join("\n")
+  },
+}
