@@ -61,6 +61,21 @@ function getConfig(
 }
 
 /**
+ * 将 settings.env 中的环境变量应用到 process.env
+ * 这样 MCP 配置中的 ${VAR} 占位符才能正确解析
+ */
+function applySettingsEnvToProcess(settings: SettingsConfig): void {
+  if (settings.env) {
+    for (const [key, value] of Object.entries(settings.env)) {
+      // 不覆盖已存在的环境变量（优先级：shell env > settings.env）
+      if (process.env[key] === undefined) {
+        process.env[key] = value
+      }
+    }
+  }
+}
+
+/**
  * 解析会话参数，确定要使用的会话ID和是否为新会话
  */
 function resolveSession(
@@ -231,6 +246,7 @@ program
 
       // Load settings for team mode
       const settings = loadSettings()
+      applySettingsEnvToProcess(settings)
       const teamModel = getConfig(options.model, "ANTHROPIC_MODEL", settings, "claude-sonnet-4-20250514")
       const teamBaseURL = getConfig(options.baseUrl, "ANTHROPIC_BASE_URL", settings, "https://api.anthropic.com")
       const teamApiKey = getConfig(undefined, "ANTHROPIC_AUTH_TOKEN", settings, process.env.ANTHROPIC_API_KEY || "")
@@ -275,6 +291,7 @@ program
 
     // 加载 settings.json
     const settings = loadSettings()
+    applySettingsEnvToProcess(settings)
 
     // 获取配置（优先级：CLI > settings.json > 环境变量 > 默认值）
     const baseURL = getConfig(options.baseUrl, "ANTHROPIC_BASE_URL", settings, "https://api.anthropic.com")
