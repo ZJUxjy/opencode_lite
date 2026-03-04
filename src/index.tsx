@@ -441,4 +441,29 @@ program
       })
   )
 
+// MCP management commands
+program
+  .command("mcp")
+  .description("MCP server management")
+  .addCommand(
+    new Command("status")
+      .description("Show MCP server status and statistics")
+      .argument("[server]", "Specific server name (optional)")
+      .action(async (server) => {
+        const { mcpStatusTool } = await import("./tools/mcp-status.js")
+        const result = await mcpStatusTool.execute({ server })
+        console.log(result)
+      })
+  )
+  .addCommand(
+    new Command("diagnose")
+      .description("Diagnose MCP configuration and connectivity issues")
+      .argument("[server]", "Specific server name (optional)")
+      .action(async (server) => {
+        const { mcpDiagnoseTool } = await import("./tools/mcp-status.js")
+        const result = await mcpDiagnoseTool.execute({ server })
+        console.log(result)
+      })
+  )
+
 program.parse()
