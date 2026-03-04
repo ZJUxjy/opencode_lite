@@ -267,6 +267,42 @@ Model Context Protocol support for external tools via `settings.json`:
 - Tools from MCP servers are automatically registered and available to the agent
 - See `src/mcp/` for implementation details
 
+### MCP Status Monitoring
+
+Monitor MCP (Model Context Protocol) server health and usage:
+
+**CLI commands:**
+```bash
+lite-opencode mcp status              # Show all servers status
+lite-opencode mcp status <server>     # Show specific server
+lite-opencode mcp diagnose            # Diagnose all servers
+lite-opencode mcp diagnose <server>   # Diagnose specific server
+```
+
+**Using tools in session:**
+```
+mcp_status                    # Show all servers
+mcp_status server="my-mcp"    # Show specific server
+mcp_diagnose                  # Diagnose all servers
+mcp_diagnose server="my-mcp"  # Diagnose specific server
+```
+
+**Status indicators:**
+- 🟢 Connected and healthy
+- ⚠️ Connected but degraded (high error rate > 50%)
+- 🔴 Disconnected or unhealthy
+
+**Statistics tracked:**
+- Total calls per server
+- Success/failure rates
+- Average response time
+- Recent errors
+
+**Status bar display:**
+- `🔌 MCP 2/2` - All servers connected and healthy
+- `⚠ MCP 1/2 (1 degraded)` - Some servers have high error rate
+- `🔴 MCP 1/2` - Some servers disconnected
+
 ### Context Management
 
 - Token estimation: ~4 characters per token
