@@ -13,6 +13,7 @@ import * as path from "path"
 import * as os from "os"
 import * as fs from "fs"
 import { parseDumpOption } from "./cli/dump-option.js"
+import { getTokenService } from "./tokens/index.js"
 
 // 从 settings.json 加载配置
 import type { MCPGlobalConfig } from "./mcp/config.js"
@@ -71,6 +72,38 @@ function applySettingsEnvToProcess(settings: SettingsConfig): void {
       if (process.env[key] === undefined) {
         process.env[key] = value
       }
+    }
+  }
+}
+
+/**
+ * 从 TokenService 加载 API keys 到 process.env
+ * 优先级：现有环境变量 > TokenService > settings.json
+ */
+async function loadTokensFromService(): Promise<void> {
+  const tokenService = getTokenService()
+
+  const providerEnvMap: Record<string, string> = {
+    anthropic: "ANTHROPIC_API_KEY",
+    openai: "OPENAI_API_KEY",
+    minimax: "MINIMAX_API_KEY",
+    gemini: "GEMINI_API_KEY",
+    deepseek: "DEEPSEEK_API_KEY",
+  }
+
+  for (const [provider, envKey] of Object.entries(providerEnvMap)) {
+    // 如果环境变量已设置，不覆盖
+    if (process.env[envKey]) {
+      continue
+    }
+
+    try {
+      const token = await tokenService.getToken(provider as any)
+      if (token) {
+        process.env[envKey] = token
+      }
+    } catch {
+      // 忽略错误，继续处理下一个 provider
     }
   }
 }
@@ -247,6 +280,10 @@ program
       // Load settings for team mode
       const settings = loadSettings()
       applySettingsEnvToProcess(settings)
+
+      // 从 TokenService 加载 API keys
+      await loadTokensFromService()
+
       const teamModel = getConfig(options.model, "ANTHROPIC_MODEL", settings, "claude-sonnet-4-20250514")
       const teamBaseURL = getConfig(options.baseUrl, "ANTHROPIC_BASE_URL", settings, "https://api.anthropic.com")
       const teamApiKey = getConfig(undefined, "ANTHROPIC_AUTH_TOKEN", settings, process.env.ANTHROPIC_API_KEY || "")
@@ -293,7 +330,10 @@ program
     const settings = loadSettings()
     applySettingsEnvToProcess(settings)
 
-    // 获取配置（优先级：CLI > settings.json > 环境变量 > 默认值）
+    // 从 TokenService 加载 API keys
+    await loadTokensFromService()
+
+    // 获取配置（优先级：CLI > settings.json > 环境变量 > TokenService > 默认值）
     const baseURL = getConfig(options.baseUrl, "ANTHROPIC_BASE_URL", settings, "https://api.anthropic.com")
     const model = getConfig(options.model, "ANTHROPIC_MODEL", settings, "claude-sonnet-4-20250514")
     const apiKey = getConfig(undefined, "ANTHROPIC_AUTH_TOKEN", settings, process.env.ANTHROPIC_API_KEY || "")
