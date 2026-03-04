@@ -114,6 +114,7 @@ This is a lightweight AI coding agent implementing the ReAct (Reasoning + Acting
 | `src/compression.ts` | Progressive context compression (light → moderate → aggressive) |
 | `src/loopDetection.ts` | Three-layer loop detection (tool calls, content repetition, LLM-assisted) |
 | `src/policy.ts` | Policy engine for permission control |
+| `src/policy/risk.ts` | Risk level classification (low/medium/high) for tools |
 | `src/mcp/` | Model Context Protocol integration for external tools |
 | `src/App.tsx` | Ink-based TUI with Static/dynamic separation for proper scrolling |
 | `src/index.tsx` | CLI entry point with commander |
@@ -213,6 +214,26 @@ tags: [git, version-control]
 - `manual` - User activates via `activate_skill` tool or `/skills` command
 - `always` - Always active when loaded
 
+**Skills Hot Reload**:
+
+Skills can be reloaded automatically when their SKILL.md files change:
+
+Enable hot reload:
+```
+/skills watch
+```
+
+Manual reload:
+```
+reload_skill id="builtin:git"
+```
+
+When hot reload is enabled:
+- Changes to SKILL.md are automatically detected
+- Skills are reloaded with preserved activation state
+- UI shows notification when skills are reloaded
+- 300ms debounce prevents excessive reloads
+
 ### Configuration
 
 Config loaded from `settings.json` (search order):
@@ -241,6 +262,41 @@ Config loaded from `settings.json` (search order):
 ```
 
 **Priority**: CLI arguments > settings.json > environment variables > defaults
+
+### Risk-Based Approval
+
+The policy engine supports three risk levels for tool operations:
+
+| Risk Level | Tools | Behavior |
+|------------|-------|----------|
+| **Low** | read, glob, grep, list_skills, show_skill, get_active_skills_prompt, web_search, get_subagent_result | Auto-approved by default |
+| **Medium** | write, edit, activate_skill, deactivate_skill, enter_plan_mode, exit_plan_mode | Prompts for approval |
+| **High** | bash, task, parallel_explore, mcp_* | Prompts for approval |
+
+**Configure in `settings.json`:**
+
+```json
+{
+  "policy": {
+    "risk": {
+      "autoApprove": ["low"],
+      "promptApprove": ["medium", "high"],
+      "deny": []
+    }
+  }
+}
+```
+
+**Configuration options:**
+- `autoApprove`: Risk levels that are automatically approved without prompting
+- `promptApprove`: Risk levels that require user confirmation
+- `deny`: Risk levels that are always denied
+
+**UI Display:**
+When a permission prompt appears, the risk level is shown with:
+- ✓ GREEN for low risk operations
+- ! YELLOW for medium risk operations
+- ⚠ RED for high risk operations
 
 ### Session Management
 
