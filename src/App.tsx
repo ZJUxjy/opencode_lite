@@ -199,11 +199,30 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   const [inputHistory, setInputHistory] = useState<string[]>([])
 
   // MCP 状态
-  const [mcpStatus, setMcpStatus] = useState<{ connected: number; total: number }>(() => {
+  const [mcpStatus, setMcpStatus] = useState<{
+    connected: number
+    total: number
+    healthy: number
+    degraded: number
+  }>(() => {
     const status = agent.getMCPStatus()
+    const mcpManager = agent.getMCPManager()
+    let healthy = 0
+    let degraded = 0
+
+    if (mcpManager) {
+      for (const s of status) {
+        const health = mcpManager.getServerHealth(s.name)
+        if (health.status === "healthy") healthy++
+        else if (health.status === "degraded") degraded++
+      }
+    }
+
     return {
       connected: status.filter((s) => s.connected).length,
       total: status.length,
+      healthy,
+      degraded,
     }
   })
 
@@ -244,9 +263,23 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
     const loadMCPStatus = () => {
       const status = agent.getMCPStatus()
       if (status.length > 0) {
+        const mcpManager = agent.getMCPManager()
+        let healthy = 0
+        let degraded = 0
+
+        if (mcpManager) {
+          for (const s of status) {
+            const health = mcpManager.getServerHealth(s.name)
+            if (health.status === "healthy") healthy++
+            else if (health.status === "degraded") degraded++
+          }
+        }
+
         setMcpStatus({
           connected: status.filter((s) => s.connected).length,
           total: status.length,
+          healthy,
+          degraded,
         })
         const toolCount = status.reduce((sum, s) => sum + s.tools, 0)
         setMessages((prev) => [
@@ -893,8 +926,19 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
             {agent.isYoloMode() && <Text color="yellow" bold> 🚀 YOLO</Text>}
             {agent.isPlanMode() && <Text color="magenta" bold> 📋 PLAN</Text>}
             {mcpStatus.total > 0 && (
-              <Text color={mcpStatus.connected === mcpStatus.total ? "green" : "yellow"}>
-                {' '}🔌 MCP {mcpStatus.connected}/{mcpStatus.total}
+              <Text
+                color={
+                  mcpStatus.degraded > 0
+                    ? "yellow"
+                    : mcpStatus.connected === mcpStatus.total
+                      ? "green"
+                      : "red"
+                }
+              >
+                {" "}
+                {mcpStatus.degraded > 0 ? "⚠" : mcpStatus.connected === mcpStatus.total ? "🔌" : "🔴"}
+                {" "}MCP {mcpStatus.connected}/{mcpStatus.total}
+                {mcpStatus.degraded > 0 && <Text dimColor> ({mcpStatus.degraded} degraded)</Text>}
               </Text>
             )}
             {isProcessing && <Text color="cyan"> ● Processing...</Text>}
