@@ -127,8 +127,8 @@ export class PromptDumper {
    * Initialize the dump file with session header
    */
   private initializeFile(): void {
-    // Ensure directory exists
-    const dir = join(homedir(), ".lite-opencode", "dumps")
+    // Ensure directory exists (use same path as dumpPath)
+    const dir = join(process.cwd(), ".lite-opencode", "dumps")
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
     }

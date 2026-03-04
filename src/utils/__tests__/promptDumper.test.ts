@@ -6,29 +6,23 @@ import { PromptDumper } from "../promptDumper.js"
 import type { Message } from "../../types.js"
 import type { ChatResponse } from "../../llm.js"
 
-// Mock the os.homedir to use a temp directory
-const mockHomedir = join(tmpdir(), `prompt-dumper-test-${Date.now()}`)
-vi.mock("os", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("os")>()
-  return {
-    ...actual,
-    homedir: () => mockHomedir,
-  }
-})
+// Mock process.cwd to use a temp directory
+const mockCwd = join(tmpdir(), `prompt-dumper-test-${Date.now()}`)
+vi.spyOn(process, "cwd").mockReturnValue(mockCwd)
 
 describe("PromptDumper", () => {
   let dumper: PromptDumper
   const sessionId = "test-session-123"
 
   beforeEach(async () => {
-    // Create the mock home directory
-    await mkdir(mockHomedir, { recursive: true })
+    // Create the mock cwd directory
+    await mkdir(mockCwd, { recursive: true })
   })
 
   afterEach(async () => {
     // Cleanup
     try {
-      await rm(mockHomedir, { recursive: true, force: true })
+      await rm(mockCwd, { recursive: true, force: true })
     } catch {
       // Ignore cleanup errors
     }
@@ -46,10 +40,10 @@ describe("PromptDumper", () => {
       expect(dumper.isEnabled()).toBe(false)
     })
 
-    it("should create dump file path in ~/.lite-opencode/dumps/", () => {
+    it("should create dump file path in .lite-opencode/dumps/", () => {
       dumper = new PromptDumper(sessionId, true)
       const path = dumper.getDumpPath()
-      expect(path).toBe(join(mockHomedir, ".lite-opencode", "dumps", `session-${sessionId}.md`))
+      expect(path).toBe(join(mockCwd, ".lite-opencode", "dumps", `session-${sessionId}.md`))
     })
   })
 
@@ -249,7 +243,7 @@ describe("PromptDumper", () => {
 
       // The directory shouldn't exist yet
       await expect(
-        readFile(join(mockHomedir, ".lite-opencode", "dumps"), "utf-8")
+        readFile(join(mockCwd, ".lite-opencode", "dumps"), "utf-8")
       ).rejects.toThrow()
 
       dumper.dumpRequest("Test", [])
