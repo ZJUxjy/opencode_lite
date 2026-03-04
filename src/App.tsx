@@ -6,6 +6,7 @@ import { CommandInput } from "./components/CommandInput.js"
 import { PermissionPrompt } from "./components/PermissionPrompt.js"
 import { PlanFollowupPrompt, type PlanFollowupDecision } from "./components/PlanFollowupPrompt.js"
 import { SessionList } from "./components/SessionList.js"
+import { MessageItem } from "./components/MessageItem.js"
 import { Session, SessionStore } from "./session/index.js"
 import type { CommandContext, PermissionRequest, PermissionDecision } from "./commands/types.js"
 import type { ToolCall } from "./types.js"
@@ -13,6 +14,16 @@ import type { PolicyDecision } from "./policy.js"
 import { getPlanFilePath, readPlanFile, exitPlanMode } from "./plan/manager.js"
 import { buildNewSessionPrompt, buildContinueSessionPrompt } from "./plan/handover.js"
 import { formatToolArgs } from "./utils/formatToolArgs.js"
+// New message system imports
+import {
+  type UIMessage,
+  type MessageGroup,
+  type MessageFilter,
+  createUserMessage,
+  createAssistantMessage,
+  createSystemMessage,
+  createToolMessage,
+} from "./messages/types.js"
 
 /**
  * 方案 A 实现：最小改动修复滚动问题
@@ -37,116 +48,6 @@ interface Props {
   dbPath: string
   isResumed?: boolean
   resumedSessionTitle?: string
-}
-
-interface Message {
-  id: string  // 稳定的唯一 ID，避免使用索引作为 key
-  role: "user" | "assistant" | "system"
-  content: string
-  reasoning?: string
-  timestamp: number
-}
-
-// ============================================================================
-// 工具函数
-// ============================================================================
-
-// 全局计数器，确保同一毫秒内的 ID 唯一
-let messageCounter = 0
-
-/**
- * 生成唯一的消息 ID
- */
-function generateMessageId(): string {
-  const timestamp = Date.now()
-  const counter = messageCounter++
-  const random = Math.random().toString(36).slice(2, 6)
-  return `msg-${timestamp}-${counter}-${random}`
-}
-
-/**
- * 创建用户消息
- */
-function createUserMessage(content: string): Message {
-  return {
-    id: generateMessageId(),
-    role: "user",
-    content,
-    timestamp: Date.now(),
-  }
-}
-
-/**
- * 创建助手消息
- */
-function createAssistantMessage(content: string, reasoning?: string): Message {
-  return {
-    id: generateMessageId(),
-    role: "assistant",
-    content,
-    reasoning,
-    timestamp: Date.now(),
-  }
-}
-
-/**
- * 创建系统消息
- */
-function createSystemMessage(content: string): Message {
-  return {
-    id: generateMessageId(),
-    role: "system",
-    content,
-    timestamp: Date.now(),
-  }
-}
-
-// ============================================================================
-// 消息渲染组件
-// ============================================================================
-
-interface MessageItemProps {
-  message: Message
-}
-
-/**
- * 单条消息渲染组件
- * 注意：必须使用 message.id 作为 key，不能使用索引
- * 长文本会自动换行
- */
-function MessageItem({ message }: MessageItemProps) {
-  if (message.role === "user") {
-    return (
-      <Box flexDirection="column" marginBottom={1}>
-        <Text wrap="wrap">
-          <Text bold color="blue">&gt; </Text>
-          <Text>{message.content}</Text>
-        </Text>
-      </Box>
-    )
-  }
-
-  if (message.role === "assistant") {
-    return (
-      <Box flexDirection="column" marginBottom={1}>
-        {message.reasoning && (
-          <Text dimColor color="gray" wrap="wrap">
-            💭 {message.reasoning.length > 200
-              ? message.reasoning.slice(0, 200) + "..."
-              : message.reasoning}
-          </Text>
-        )}
-        <Text wrap="wrap">{message.content}</Text>
-      </Box>
-    )
-  }
-
-  // system
-  return (
-    <Box flexDirection="column" marginBottom={1}>
-      <Text dimColor wrap="wrap">{message.content}</Text>
-    </Box>
-  )
 }
 
 // ============================================================================
@@ -184,7 +85,10 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   // =========================================================================
 
   // 已完成的消息列表（会进入 Static 组件）
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<UIMessage[]>([])
+
+  // 消息过滤模式
+  const [messageFilter, setMessageFilter] = useState<MessageFilter>("show_all")
 
   // 处理状态
   const [isProcessing, setIsProcessing] = useState(false)
@@ -253,6 +157,22 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
             createSystemMessage(`🎯 Loaded ${skillCount} skills. Use /skills to view and activate.`)
           ])
         }
+
+        // Enable hot reload
+        agent.enableSkillHotReload((skill, action) => {
+          // Show notification when skill is reloaded
+          if (action === "reloaded") {
+            setMessages((prev) => [
+              ...prev,
+              createSystemMessage(`🔄 Skill reloaded: ${skill.metadata.name}`)
+            ])
+          } else if (action === "loaded") {
+            setMessages((prev) => [
+              ...prev,
+              createSystemMessage(`✨ New skill detected: ${skill.metadata.name}`)
+            ])
+          }
+        })
       } catch (error) {
         // Silent fail - skills are optional
       }
@@ -298,12 +218,15 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
 
       if (historyMessages.length > 0) {
         // 转换历史消息为 UI Message 格式
-        const uiMessages: Message[] = historyMessages.map((msg, index) => ({
+        const uiMessages: UIMessage[] = historyMessages.map((msg, index) => ({
           id: `hist-${sessionId}-${index}-${Date.now()}`,
           role: msg.role,
+          type: "text" as const,
           content: msg.content || "",
-          reasoning: undefined, // 历史消息不保留 reasoning
-          timestamp: Date.now() - (historyMessages.length - index) * 1000, // 估算时间戳
+          metadata: {
+            timestamp: Date.now() - (historyMessages.length - index) * 1000,
+            priority: "normal" as const,
+          },
         }))
 
         // 添加恢复提示作为第一条消息
@@ -769,6 +692,33 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       process.exit(0)
     }
 
+    // Ctrl+E: Expand all message groups
+    if (key.ctrl && input === "e" && !isProcessing) {
+      setMessages(prev =>
+        prev.map(msg => ({
+          ...msg,
+          metadata: { ...msg.metadata, collapsed: false }
+        }))
+      )
+    }
+
+    // Ctrl+O: Collapse all message groups
+    if (key.ctrl && input === "o" && !isProcessing) {
+      setMessages(prev =>
+        prev.map(msg => ({
+          ...msg,
+          metadata: { ...msg.metadata, collapsed: true }
+        }))
+      )
+    }
+
+    // Ctrl+H: Toggle system message visibility
+    if (key.ctrl && input === "h" && !isProcessing) {
+      setMessageFilter(prev =>
+        prev === "hide_system" ? "show_all" : "hide_system"
+      )
+    }
+
     // Escape: Cancel ongoing request
     if (key.escape && isProcessing) {
       agent.abort()
@@ -808,6 +758,30 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   // =========================================================================
   // 渲染
   // =========================================================================
+  // 消息过滤
+  // =========================================================================
+
+  const filteredMessages = useMemo(() => {
+    switch (messageFilter) {
+      case "hide_system":
+        return messages.filter(msg =>
+          msg.role !== "system" && msg.role !== "tool"
+        )
+      case "show_errors_only":
+        return messages.filter(msg =>
+          msg.type === "error"
+        )
+      case "compact":
+        return messages.map(msg => ({
+          ...msg,
+          metadata: { ...msg.metadata, collapsed: true }
+        }))
+      default:
+        return messages
+    }
+  }, [messages, messageFilter])
+
+  // =========================================================================
 
   return (
     <Box flexDirection="column">
@@ -818,8 +792,9 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
           1. 使用 message.id 作为 key，而不是索引
           2. 只包含已完成的消息，不包含流式内容
           3. Static 组件会将内容输出到主缓冲区，支持滚动
+          4. 消息根据 messageFilter 进行过滤
           ===================================================================== */}
-      <Static items={messages}>
+      <Static items={filteredMessages}>
         {(message) => (
           <MessageItem key={message.id} message={message} />
         )}
@@ -952,7 +927,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
             <Text dimColor>
               {isProcessing
                 ? "Type to queue • Ctrl+C cancel"
-                : "↑↓ History • / Commands • Ctrl+C Exit"
+                : "↑↓ History • / Commands • Ctrl+E Expand • Ctrl+O Collapse • Ctrl+H Hide System"
               }
             </Text>
           </Text>

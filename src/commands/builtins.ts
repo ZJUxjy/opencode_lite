@@ -1,26 +1,8 @@
-import type { Command, CommandContext, Message } from "./types.js"
+import type { Command, CommandContext } from "./types.js"
+import { createSystemMessage } from "../messages/types.js"
 
-/**
- * Generate a unique message ID
- * (Mirrors the implementation in App.tsx for consistency)
- */
-function generateMessageId(): string {
-  const timestamp = Date.now()
-  const random = Math.random().toString(36).slice(2, 6)
-  return `msg-${timestamp}-${random}`
-}
-
-/**
- * Create a system message for display in the UI
- */
-function createSystemMessage(content: string): Message {
-  return {
-    id: generateMessageId(),
-    role: "system",
-    content,
-    timestamp: Date.now(),
-  }
-}
+// Re-export createSystemMessage for use in other command handlers if needed
+export { createSystemMessage }
 
 /**
  * Exit command - terminates the application
@@ -294,12 +276,36 @@ const sessionsCommand: Command = {
 
 /**
  * Skills command - list and manage skills
+ * Usage:
+ *   /skills       - List all skills
+ *   /skills watch - Toggle hot reload watching
  */
 const skillsCommand: Command = {
   name: "/skills",
   aliases: ["/skill"],
   description: "List and manage skills",
-  handler: (_args: string, ctx: CommandContext) => {
+  handler: (args: string, ctx: CommandContext) => {
+    const trimmedArgs = args.trim().toLowerCase()
+
+    // Handle watch subcommand
+    if (trimmedArgs === "watch") {
+      const registry = ctx.agent.getSkillRegistry()
+
+      // Check if hot reload is currently enabled by looking for watcher
+      const isWatching = !!(registry as any)["watcher"]
+
+      if (isWatching) {
+        registry.disableHotReload()
+        const message = createSystemMessage("⏸️  Skill hot reload disabled")
+        ctx.setMessages((prev) => [...prev, message])
+      } else {
+        registry.enableHotReload()
+        const message = createSystemMessage("▶️  Skill hot reload enabled - changes to SKILL.md files will auto-reload")
+        ctx.setMessages((prev) => [...prev, message])
+      }
+      return
+    }
+
     const skills = ctx.agent.getSkills()
 
     if (skills.length === 0) {
@@ -348,6 +354,7 @@ Each skill is a directory containing a SKILL.md file with YAML frontmatter.`
 
     lines.push(`---`)
     lines.push(`To activate a skill, use: activate_skill tool with id="skill-id"`)
+    lines.push(`To toggle hot reload, use: /skills watch`)
 
     const message = createSystemMessage(lines.join("\n"))
     ctx.setMessages((prev) => [...prev, message])

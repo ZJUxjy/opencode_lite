@@ -20,6 +20,15 @@ export type MessageType =
   | "notification"   // System notification
 
 /**
+ * Message filter modes
+ */
+export type MessageFilter =
+  | "show_all"       // Show all messages
+  | "hide_system"    // Hide system/tool messages
+  | "show_errors_only" // Only show error messages
+  | "compact"        // Collapse all groups
+
+/**
  * Metadata for message display and grouping
  */
 export interface MessageMetadata {

@@ -1,5 +1,6 @@
 import type { Agent } from "../agent.js"
 import type { RiskClassification } from "../policy/risk.js"
+import type { UIMessage } from "../messages/types.js"
 
 /**
  * Command execution context
@@ -7,7 +8,7 @@ import type { RiskClassification } from "../policy/risk.js"
  */
 export interface CommandContext {
   agent: Agent
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>
+  setMessages: React.Dispatch<React.SetStateAction<UIMessage[]>>
   exit: () => void
   updateContextUsage: () => void
   showSessionList?: () => void
@@ -16,15 +17,9 @@ export interface CommandContext {
 }
 
 /**
- * Message interface (mirrors App.tsx internal type)
+ * Re-export UIMessage for backward compatibility
  */
-export interface Message {
-  id: string
-  role: "user" | "assistant" | "system"
-  content: string
-  reasoning?: string
-  timestamp: number
-}
+export type { UIMessage }
 
 /**
  * Command definition
