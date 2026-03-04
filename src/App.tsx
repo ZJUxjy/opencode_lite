@@ -882,7 +882,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
           底部状态栏 + 输入框
           ===================================================================== */}
       <Box flexDirection="column">
-        {/* 状态栏 - 参考 Claude Code 显示更多信息 */}
+        {/* 状态栏 + 快捷提示 合并在一行 */}
         <Box marginBottom={1}>
           <Text>
             <Text color={contextStatus.color}>
@@ -901,16 +901,13 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
             {inputQueue.length > 0 && (
               <Text color="yellow"> ⏳ Queue: {inputQueue.length}</Text>
             )}
-          </Text>
-        </Box>
-
-        {/* 快捷提示 */}
-        <Box marginBottom={1}>
-          <Text dimColor>
-            {isProcessing
-              ? "Type to queue next message • Ctrl+C to cancel"
-              : "↑↓ History • / Commands • Tab Complete • Ctrl+C Exit"
-            }
+            <Text dimColor> | </Text>
+            <Text dimColor>
+              {isProcessing
+                ? "Type to queue • Ctrl+C cancel"
+                : "↑↓ History • / Commands • Ctrl+C Exit"
+              }
+            </Text>
           </Text>
         </Box>
 
