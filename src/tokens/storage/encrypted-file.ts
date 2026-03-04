@@ -16,7 +16,7 @@ interface EncryptedData {
 
 interface TokenStore {
   version: number
-  tokens: Record<TokenProvider, { key: string; createdAt: string }>
+  tokens: Partial<Record<TokenProvider, { key: string; createdAt: string }>>
 }
 
 /**

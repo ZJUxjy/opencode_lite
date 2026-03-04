@@ -1,12 +1,30 @@
 import type { TokenStorage, TokenProvider, TokenInfo } from "../types.js"
 
-// Try to import keytar, but don't fail if not available
-let keytar: typeof import("keytar") | null = null
-try {
-  keytar = await import("keytar")
-} catch {
-  // keytar not available
+// Keytar type definitions (for optional dependency)
+interface Keytar {
+  setPassword(service: string, account: string, password: string): Promise<void>
+  getPassword(service: string, account: string): Promise<string | null>
+  deletePassword(service: string, account: string): Promise<boolean>
+  findCredentials(service: string): Promise<Array<{ account: string; password: string }>>
 }
+
+// Try to import keytar, but don't fail if not available
+let keytar: Keytar | null = null
+
+// Dynamic import with proper error handling
+async function initializeKeytar(): Promise<void> {
+  try {
+    // @ts-expect-error keytar is optional dependency
+    const keytarModule = await import("keytar")
+    keytar = keytarModule as Keytar
+  } catch {
+    // keytar not available - will fallback to file storage
+    keytar = null
+  }
+}
+
+// Initialize on module load
+await initializeKeytar()
 
 const SERVICE_NAME = "lite-opencode"
 

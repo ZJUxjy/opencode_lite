@@ -160,8 +160,8 @@ Example: mcp_diagnose server="my-server"`,
         lines.push("❌ Not connected")
         lines.push(`   Status: ${state.status.type}`)
 
-        if (state.status.type === "error" && "error" in state.status && state.status.error) {
-          lines.push(`   Error: ${state.status.error.message}`)
+        if (state.status.type === "disconnected" && state.status.error) {
+          lines.push(`   Error: ${state.status.error}`)
         }
 
         lines.push("")

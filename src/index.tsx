@@ -459,7 +459,7 @@ program
       .argument("[server]", "Specific server name (optional)")
       .action(async (server) => {
         const { mcpStatusTool } = await import("./tools/mcp-status.js")
-        const result = await mcpStatusTool.execute({ server })
+        const result = await mcpStatusTool.execute({ server }, { cwd: process.cwd(), messages: [] })
         console.log(result)
       })
   )
@@ -469,7 +469,7 @@ program
       .argument("[server]", "Specific server name (optional)")
       .action(async (server) => {
         const { mcpDiagnoseTool } = await import("./tools/mcp-status.js")
-        const result = await mcpDiagnoseTool.execute({ server })
+        const result = await mcpDiagnoseTool.execute({ server }, { cwd: process.cwd(), messages: [] })
         console.log(result)
       })
   )
