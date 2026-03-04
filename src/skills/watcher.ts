@@ -6,6 +6,7 @@
 
 import { watch, type FSWatcher } from "fs"
 import { join } from "path"
+import { homedir } from "os"
 import { EventEmitter } from "events"
 
 export interface SkillWatcherEvents {
@@ -25,6 +26,16 @@ const DEFAULT_OPTIONS: SkillWatcherOptions = {
   paths: [],
   debounceMs: 300,
   recursive: true,
+}
+
+/**
+ * Expand ~ to home directory
+ */
+function expandHome(filepath: string): string {
+  if (filepath.startsWith("~/")) {
+    return join(homedir(), filepath.slice(2))
+  }
+  return filepath
 }
 
 /**
@@ -70,11 +81,12 @@ export class SkillWatcher extends EventEmitter {
    * Add a directory to watch
    */
   addPath(path: string): void {
-    if (this.isWatching && !this.watchers.has(path)) {
-      this.watchDirectory(path)
+    const expandedPath = expandHome(path)
+    if (this.isWatching && !this.watchers.has(expandedPath)) {
+      this.watchDirectory(expandedPath)
     }
-    if (!this.options.paths.includes(path)) {
-      this.options.paths.push(path)
+    if (!this.options.paths.includes(expandedPath)) {
+      this.options.paths.push(expandedPath)
     }
   }
 
@@ -82,18 +94,22 @@ export class SkillWatcher extends EventEmitter {
    * Remove a directory from watching
    */
   removePath(path: string): void {
-    const watcher = this.watchers.get(path)
+    const expandedPath = expandHome(path)
+    const watcher = this.watchers.get(expandedPath)
     if (watcher) {
       watcher.close()
-      this.watchers.delete(path)
+      this.watchers.delete(expandedPath)
     }
-    this.options.paths = this.options.paths.filter((p) => p !== path)
+    this.options.paths = this.options.paths.filter((p) => expandHome(p) !== expandedPath)
   }
 
   private watchDirectory(path: string): void {
+    // Expand ~ to home directory
+    const expandedPath = expandHome(path)
+
     try {
       const watcher = watch(
-        path,
+        expandedPath,
         { recursive: this.options.recursive },
         (eventType, filename) => {
           if (!filename) return
@@ -101,7 +117,7 @@ export class SkillWatcher extends EventEmitter {
           // Only care about SKILL.md files
           if (!filename.includes("SKILL") && !filename.includes("skill")) return
 
-          const fullPath = join(path, filename)
+          const fullPath = join(expandedPath, filename)
 
           // Debounce to avoid multiple rapid reloads
           this.debounce(fullPath, () => {
