@@ -12,8 +12,8 @@ import type { Tool } from "../types.js"
 
 const execAsync = promisify(exec)
 
-// Exa AI API Key - 从环境变量或使用默认值
-const EXA_API_KEY = process.env.EXA_API_KEY || "526ee416-07ec-4e72-aa87-c85c4a18c4af"
+// Exa AI API Key - 从环境变量读取（通过 settings.json 的 env.EXA_API_KEY 配置）
+const EXA_API_KEY = process.env.EXA_API_KEY
 const EXA_API_URL = "https://api.exa.ai/search"
 
 interface SearchResult {
@@ -36,6 +36,11 @@ interface ExaSearchResult {
  * 使用 Exa AI API 进行搜索（AI 优化的语义搜索）
  */
 async function searchExa(query: string, numResults: number = 10, timeoutMs: number = 20000): Promise<SearchResult[]> {
+  // 检查 API Key 是否配置
+  if (!EXA_API_KEY) {
+    throw new Error("EXA_API_KEY not configured. Please add it to settings.json: { \"env\": { \"EXA_API_KEY\": \"your-key\" } }")
+  }
+
   const requestBody = {
     query,
     type: "auto",
