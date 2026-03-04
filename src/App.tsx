@@ -411,14 +411,17 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   const handlePolicyAsk = useCallback((toolCall: ToolCall): Promise<PolicyDecision> => {
     return new Promise((resolve) => {
       permissionResolveRef.current = resolve
+      // Get risk classification for this tool call
+      const risk = agent.getPolicyEngine().classifyRisk(toolCall.name, toolCall.arguments)
       setPermissionRequest({
         id: toolCall.id,
         toolName: toolCall.name,
         description: getToolDescription(toolCall),
         args: toolCall.arguments,
+        risk,
       })
     })
-  }, [])
+  }, [agent])
 
   /**
    * 处理用户决策

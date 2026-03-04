@@ -1,4 +1,5 @@
 import type { Agent } from "../agent.js"
+import type { RiskClassification } from "../policy/risk.js"
 
 /**
  * Command execution context
@@ -102,6 +103,7 @@ export interface PermissionRequest {
   toolName: string
   description: string
   args: Record<string, unknown>
+  risk?: RiskClassification
 }
 
 /**

@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from "react"
 import { Box, Text, useInput } from "ink"
 import type { PermissionPromptProps, PermissionDecision } from "../commands/types.js"
+import type { RiskLevel } from "../policy/risk.js"
+
+/** Risk level styling */
+const RISK_STYLES: Record<RiskLevel, { color: string; icon: string; label: string }> = {
+  low: { color: "green", icon: "✓", label: "LOW RISK" },
+  medium: { color: "yellow", icon: "!", label: "MEDIUM RISK" },
+  high: { color: "red", icon: "⚠", label: "HIGH RISK" },
+}
 
 /** Permission options for selection */
 const OPTIONS: { label: string; value: PermissionDecision; color: string; description: string }[] = [
@@ -163,6 +171,16 @@ export function PermissionPrompt({
           {request.description || formatArgs(request.args)}
         </Text>
       </Box>
+
+      {/* Risk level display */}
+      {request.risk && (
+        <Box marginTop={1}>
+          <Text color={RISK_STYLES[request.risk.level].color}>
+            {RISK_STYLES[request.risk.level].icon}{" "}
+            {RISK_STYLES[request.risk.level].label}: {request.risk.reason}
+          </Text>
+        </Box>
+      )}
 
       {/* Options with highlight selection */}
       <Box flexDirection="column" marginTop={1}>
