@@ -8,6 +8,7 @@ import { watch, type FSWatcher } from "fs"
 import { join } from "path"
 import { homedir } from "os"
 import { EventEmitter } from "events"
+import { existsSync } from "fs"
 
 export interface SkillWatcherEvents {
   "skill-changed": (skillId: string, path: string) => void
@@ -106,6 +107,11 @@ export class SkillWatcher extends EventEmitter {
   private watchDirectory(path: string): void {
     // Expand ~ to home directory
     const expandedPath = expandHome(path)
+
+    // Skip if directory doesn't exist
+    if (!existsSync(expandedPath)) {
+      return
+    }
 
     try {
       const watcher = watch(
