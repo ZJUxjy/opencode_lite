@@ -16,6 +16,7 @@ import {
   getActiveSkillsPromptTool,
 } from "./skill.js"
 import { webSearchTool } from "./web-search.js"
+import { listTokensTool, setTokenTool, deleteTokenTool } from "./token.js"
 import type { MCPManager } from "../mcp/manager.js"
 import { createMCPToolWrapper } from "../mcp/tools.js"
 
@@ -69,6 +70,9 @@ export class ToolRegistry {
       showSkillTool,
       getActiveSkillsPromptTool,
       webSearchTool,
+      listTokensTool,
+      setTokenTool,
+      deleteTokenTool,
     ]
 
     // 如果是 subagent，过滤掉 subagent 工具以防止递归
