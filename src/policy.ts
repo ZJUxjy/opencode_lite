@@ -52,11 +52,11 @@ export interface PolicyResult {
  * 策略引擎配置
  */
 export interface PolicyConfig {
-  defaultDecision: PolicyDecision  // 默认决策，默认为 "ask"
-  enableLearning: boolean          // 是否启用决策学习
-  learnedRulesPath?: string        // 学习的规则存储路径
-  riskConfig?: RiskConfig          // 风险等级配置
-  customRiskRules?: ToolRiskRule[] // 自定义风险规则
+  defaultDecision?: PolicyDecision  // 默认决策，默认为 "ask"
+  enableLearning?: boolean          // 是否启用决策学习
+  learnedRulesPath?: string         // 学习的规则存储路径
+  riskConfig?: RiskConfig           // 风险等级配置
+  customRiskRules?: ToolRiskRule[]  // 自定义风险规则
 }
 
 const DEFAULT_CONFIG: PolicyConfig = {
@@ -307,7 +307,7 @@ export class PolicyEngine {
 
     // 4. 返回默认决策
     return {
-      decision: this.config.defaultDecision,
+      decision: this.config.defaultDecision || "ask",
       reason: "默认策略",
     }
   }
@@ -429,7 +429,7 @@ export class PolicyEngine {
    * @param cwd 工作目录（用于生成规则键）
    */
   learn(toolName: string, args: Record<string, unknown>, decision: PolicyDecision, always: boolean = true, cwd?: string): void {
-    if (!this.config.enableLearning) return
+    if (this.config.enableLearning === false) return
 
     if (always) {
       // "总是允许/拒绝" - 按工具名 + 工作目录保存规则

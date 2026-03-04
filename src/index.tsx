@@ -17,11 +17,16 @@ import { getTokenService } from "./tokens/index.js"
 
 // 从 settings.json 加载配置
 import type { MCPGlobalConfig } from "./mcp/config.js"
+import type { RiskConfig } from "./policy/risk.js"
 
 interface SettingsConfig {
   env?: Record<string, string>
   timeout?: number
   mcp?: MCPGlobalConfig
+  policy?: {
+    risk?: RiskConfig
+    yoloMode?: boolean
+  }
 }
 
 function loadSettings(): SettingsConfig {
@@ -355,6 +360,9 @@ program
       compressionThreshold: parseFloat(options.compressionThreshold),
       mcp: settings.mcp,
       dumpPrompt,
+      policy: settings.policy?.risk ? {
+        riskConfig: settings.policy.risk,
+      } : undefined,
     })
 
     // MCP 改为懒加载，不在启动时初始化
