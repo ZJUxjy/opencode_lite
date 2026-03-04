@@ -147,3 +147,27 @@ export {
   type ServerStats,
   type MCPStats,
 } from "./stats.js"
+
+// ============================================================================
+// 全局实例管理
+// ============================================================================
+
+/**
+ * 全局 MCPManager 实例
+ * 用于在工具中访问 MCP 状态
+ */
+let globalMCPManager: import("./manager.js").MCPManager | null = null
+
+/**
+ * 设置全局 MCPManager 实例
+ */
+export function setGlobalMCPManager(manager: import("./manager.js").MCPManager): void {
+  globalMCPManager = manager
+}
+
+/**
+ * 获取全局 MCPManager 实例
+ */
+export function getMCPManager(): import("./manager.js").MCPManager | null {
+  return globalMCPManager
+}

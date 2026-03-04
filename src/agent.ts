@@ -8,7 +8,7 @@ import { PromptProvider } from "./prompts/index.js"
 import { ReActRunner, type Strategy, type ReActEvents } from "./react/index.js"
 import { CompressionService, type CompressionLevel, type CompressionPreview, type CompressionResult } from "./compression.js"
 import { SkillRegistry, getSkillRegistry } from "./skills/index.js"
-import { MCPManager, type MCPManagerOptions } from "./mcp/manager.js"
+import { MCPManager, type MCPManagerOptions, setGlobalMCPManager } from "./mcp/index.js"
 import { PromptDumper } from "./utils/promptDumper.js"
 
 export interface AgentConfig {
@@ -107,6 +107,8 @@ export class Agent {
         enabled: config.mcp.enabled ?? true,
       })
       this.tools.setMCPManager(this.mcpManager)
+      // 设置全局实例，供工具访问
+      setGlobalMCPManager(this.mcpManager)
     }
 
     // 初始化 ReAct Runner
