@@ -1,4 +1,12 @@
 import type { ToolCall } from "./types.js"
+import type { RiskConfig, RiskClassification, ToolRiskRule } from "./policy/risk.js"
+import {
+  classifyToolRisk,
+  shouldAutoApprove,
+  shouldDeny,
+  DEFAULT_RISK_CONFIG,
+  DEFAULT_TOOL_RISK_RULES,
+} from "./policy/risk.js"
 
 /**
  * 策略决策类型
@@ -47,11 +55,14 @@ export interface PolicyConfig {
   defaultDecision: PolicyDecision  // 默认决策，默认为 "ask"
   enableLearning: boolean          // 是否启用决策学习
   learnedRulesPath?: string        // 学习的规则存储路径
+  riskConfig?: RiskConfig          // 风险等级配置
+  customRiskRules?: ToolRiskRule[] // 自定义风险规则
 }
 
 const DEFAULT_CONFIG: PolicyConfig = {
   defaultDecision: "ask",
   enableLearning: true,
+  riskConfig: DEFAULT_RISK_CONFIG,
 }
 
 /**
@@ -72,9 +83,12 @@ export class PolicyEngine {
   private yoloMode: boolean = false
   /** Plan Mode：只读模式 */
   private planMode: boolean = false
+  /** Risk classification rules */
+  private riskRules: ToolRiskRule[]
 
   constructor(config: Partial<PolicyConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
+    this.riskRules = config.customRiskRules || DEFAULT_TOOL_RISK_RULES
     this.initializeDefaultRules()
   }
 
@@ -230,6 +244,15 @@ export class PolicyEngine {
       if (planResult) return planResult
     }
 
+    // 1.5. Risk-based decision (NEW)
+    if (!this.yoloMode && !this.planMode) {
+      const riskClassification = classifyToolRisk(toolName, args, this.riskRules)
+      const riskDecision = this.makeRiskBasedDecision(riskClassification, toolName)
+      if (riskDecision) {
+        return riskDecision
+      }
+    }
+
     // 2. 检查预定义规则（按顺序，先匹配的优先）
     for (const rule of this.rules) {
       // 检查模式匹配
@@ -287,6 +310,36 @@ export class PolicyEngine {
       decision: this.config.defaultDecision,
       reason: "默认策略",
     }
+  }
+
+  /**
+   * Make decision based on risk classification
+   * Returns null if the decision should continue to normal rule checking
+   */
+  private makeRiskBasedDecision(
+    risk: RiskClassification,
+    toolName: string
+  ): PolicyResult | null {
+    const riskConfig = this.config.riskConfig || DEFAULT_RISK_CONFIG
+
+    // Check if this risk level should be auto-approved
+    if (shouldAutoApprove(risk, riskConfig)) {
+      return {
+        decision: "allow",
+        reason: `Auto-approved: ${risk.reason} (${risk.level} risk)`,
+      }
+    }
+
+    // Check if this risk level should be denied
+    if (shouldDeny(risk, riskConfig)) {
+      return {
+        decision: "deny",
+        reason: `Denied: ${risk.reason} (${risk.level} risk)`,
+      }
+    }
+
+    // Continue to normal rule checking for medium/high risk
+    return null
   }
 
   /**
@@ -473,6 +526,16 @@ export class PolicyEngine {
    */
   getLearnedRulesCount(): number {
     return this.learnedRules.size
+  }
+
+  /**
+   * Classify the risk level of a tool call
+   * @param toolName Tool name
+   * @param args Tool arguments
+   * @returns Risk classification result
+   */
+  classifyRisk(toolName: string, args: Record<string, unknown>): RiskClassification {
+    return classifyToolRisk(toolName, args, this.riskRules)
   }
 
   /**
