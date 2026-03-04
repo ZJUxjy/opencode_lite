@@ -21,12 +21,20 @@ interface TokenStore {
 
 /**
  * Derive encryption key from machine-specific data
- * This provides basic obfuscation - not as secure as keyring
+ *
+ * ⚠️  SECURITY WARNING:
+ * This provides obfuscation-level protection only, NOT strong encryption.
+ * The key can be derived by anyone who knows the username and platform.
+ *
+ * For production security:
+ * - Use system keyring (via KeyringStorage) when available
+ * - Or prompt for a master password to derive a proper key
+ * - This fallback is intended to prevent casual snooping only
  */
 function deriveKey(): Buffer {
-  // Use machine-specific data as salt
-  const salt = `${process.env.USER || process.env.USERNAME}-${process.platform}`
-  return scryptSync(salt, "lite-opencode-salt", 32)
+  // Use machine-specific data as salt - predictable but better than hardcoded
+  const machineId = `${process.env.USER || process.env.USERNAME || "unknown"}-${process.platform}-${process.arch}`
+  return scryptSync(machineId, "lite-opencode-v1-salt", 32, { N: 16384, r: 8, p: 1 })
 }
 
 /**

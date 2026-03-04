@@ -19,7 +19,8 @@ describe("TokenService", () => {
 
   it("should return null for non-existent token", async () => {
     const service = new TokenService({ fallbackToFile: true })
-    const retrieved = await service.getToken("nonexistent" as any)
+    // Test with valid provider but no token set
+    const retrieved = await service.getToken("gemini")
     expect(retrieved).toBeNull()
   })
 

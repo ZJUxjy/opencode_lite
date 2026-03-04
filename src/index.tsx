@@ -107,8 +107,11 @@ async function loadTokensFromService(): Promise<void> {
       if (token) {
         process.env[envKey] = token
       }
-    } catch {
-      // 忽略错误，继续处理下一个 provider
+    } catch (error) {
+      // Log warning but continue - token service may not be available
+      if (process.env.DEBUG) {
+        console.warn(`[Token] Failed to load ${provider}:`, error)
+      }
     }
   }
 }

@@ -148,9 +148,17 @@ export class SkillWatcher extends EventEmitter {
     if (eventType === "change") {
       this.emit("skill-changed", skillId, fullPath)
     } else if (eventType === "rename") {
-      // File was added or removed
-      // Need to check if file exists to know which
-      this.emit("skill-added", fullPath)
+      // File was added or removed - check if it still exists
+      import("fs/promises")
+        .then(({ access }) => access(fullPath))
+        .then(() => {
+          // File exists - it was added
+          this.emit("skill-added", fullPath)
+        })
+        .catch(() => {
+          // File doesn't exist - it was removed
+          this.emit("skill-removed", skillId)
+        })
     }
   }
 
