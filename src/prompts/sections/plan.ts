@@ -6,7 +6,7 @@
  */
 
 import type { PromptSection } from "../types.js"
-import { isPlanModeEnabled, getPlanFilePath } from "../../plan/manager.js"
+import { isPlanModeEnabledCurrent, getPlanFilePathCurrent } from "../../plan/manager.js"
 
 /**
  * Plan Mode 5阶段工作流 Section
@@ -21,10 +21,10 @@ import { isPlanModeEnabled, getPlanFilePath } from "../../plan/manager.js"
 export const planModeSection: PromptSection = {
   name: "plan",
 
-  enabled: () => isPlanModeEnabled(),
+  enabled: () => isPlanModeEnabledCurrent(),
 
   render: () => {
-    const planFilePath = getPlanFilePath()
+    const planFilePath = getPlanFilePathCurrent()
 
     return `## 🎯 Plan Mode Active
 

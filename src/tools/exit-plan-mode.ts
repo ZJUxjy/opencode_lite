@@ -1,6 +1,6 @@
 import { z } from "zod"
 import type { Tool } from "../types.js"
-import { exitPlanMode, getPlanFilePath, isPlanModeEnabled } from "../plan/manager.js"
+import { exitPlanModeCurrent, getPlanFilePathCurrent, isPlanModeEnabledCurrent } from "../plan/manager.js"
 
 /**
  * 退出 Plan Mode 工具
@@ -26,11 +26,11 @@ Only call this when:
 - You are ready to present the plan for user approval`,
   parameters: z.object({}),
   execute: async (_params, ctx) => {
-    if (!isPlanModeEnabled()) {
+    if (!isPlanModeEnabledCurrent()) {
       return "Not in Plan Mode. No action taken."
     }
 
-    const { planFilePath } = exitPlanMode()
+    const { planFilePath } = exitPlanModeCurrent()
     ctx.setPlanMode?.(false)  // 同步 PolicyEngine 状态
     const relativePath = planFilePath.replace(ctx.cwd, ".")
 

@@ -7,7 +7,29 @@ export {
   getPlanFilePath,
   isPlanFilePath,
   readPlanFile,
+  clearPlanModeManagerCache,
+  // 全局上下文便捷函数
+  isPlanModeEnabledCurrent,
+  enterPlanModeCurrent,
+  exitPlanModeCurrent,
+  getPlanFilePathCurrent,
+  isPlanFilePathCurrent,
+  readPlanFileCurrent,
 } from "./manager.js"
+
+export {
+  PlanStore,
+  type PlanState,
+  type PlanRecord,
+} from "./store.js"
+
+export {
+  setPlanContext,
+  getPlanContext,
+  clearPlanContext,
+  requirePlanContext,
+  type PlanContext,
+} from "./context.js"
 
 export {
   generatePlanFile,

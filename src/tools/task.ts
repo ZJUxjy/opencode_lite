@@ -1,7 +1,7 @@
 import { z } from "zod"
 import type { Tool } from "../types.js"
 import { getSubagentManager } from "../subagent/manager.js"
-import { isPlanModeEnabled } from "../plan/manager.js"
+import { isPlanModeEnabledCurrent } from "../plan/manager.js"
 import type { ExploreTask } from "../subagent/types.js"
 
 const MAX_PARALLEL_SUBAGENTS = 3
@@ -50,7 +50,7 @@ Important:
     const { type, prompt } = params
 
     // 检查是否在 Plan Mode
-    if (!isPlanModeEnabled()) {
+    if (!isPlanModeEnabledCurrent()) {
       return `Error: task tool is only available in Plan Mode.
 Use enter_plan_mode first to enable subagent capabilities.`
     }
@@ -188,7 +188,7 @@ Up to 3 tasks can run in parallel.`,
   execute: async (params) => {
     const { tasks, aggregation = "merge" } = params
 
-    if (!isPlanModeEnabled()) {
+    if (!isPlanModeEnabledCurrent()) {
       return `Error: parallel_explore is only available in Plan Mode.`
     }
 

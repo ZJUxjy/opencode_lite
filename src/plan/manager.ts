@@ -2,20 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs"
 import { join, relative, resolve, isAbsolute, parse } from "path"
 import { randomBytes } from "crypto"
 import { getLiteOpencodeBaseDir } from "../utils/config.js"
+import { PlanStore, type PlanState } from "./store.js"
+import type { DatabaseManager } from "../db.js"
+import { getPlanContext, requirePlanContext, type PlanContext } from "./context.js"
 
-// Plan Mode 状态
-interface PlanModeState {
-  isEnabled: boolean
-  slug: string | null
-  hasExited: boolean
-  needsExitAttachment: boolean
-}
-
-// 每个会话的 Plan Mode 状态
-const planModeStates = new Map<string, PlanModeState>()
-const planSlugCache = new Map<string, string>()
-
-const DEFAULT_SESSION_KEY = "default"
 const MAX_SLUG_ATTEMPTS = 10
 
 // Slug 生成词库
@@ -44,12 +34,33 @@ const SLUG_NOUNS = [
  * - Plan Mode 状态管理（进入/退出/查询）
  * - 计划文件路径管理
  * - Slug 生成和缓存
+ * - 与会话的关联持久化
  */
 export class PlanModeManager {
-  private sessionKey: string
+  private sessionId: string
+  private planStore: PlanStore
+  private _cachedState: PlanState | null = null
 
-  constructor(sessionKey: string = DEFAULT_SESSION_KEY) {
-    this.sessionKey = sessionKey
+  constructor(sessionId: string, dbPathOrManager: string | DatabaseManager) {
+    this.sessionId = sessionId
+    this.planStore = new PlanStore(
+      typeof dbPathOrManager === "string" ? dbPathOrManager : dbPathOrManager.getDbPath()
+    )
+  }
+
+  /**
+   * 获取当前状态
+   */
+  private getState(): PlanState {
+    if (this._cachedState) {
+      return this._cachedState
+    }
+
+    const filePath = this.getPlanFilePath()
+    const slug = this.getSlug()
+    const state = this.planStore.getOrCreate(this.sessionId, filePath, slug)
+    this._cachedState = state
+    return state
   }
 
   /**
@@ -59,11 +70,13 @@ export class PlanModeManager {
     const state = this.getState()
     state.isEnabled = true
     state.hasExited = false
-    state.needsExitAttachment = false
 
-    const planFilePath = this.getPlanFilePath()
+    this.planStore.update(this.sessionId, {
+      isEnabled: true,
+      hasExited: false,
+    })
 
-    return { planFilePath }
+    return { planFilePath: state.filePath! }
   }
 
   /**
@@ -73,11 +86,13 @@ export class PlanModeManager {
     const state = this.getState()
     state.isEnabled = false
     state.hasExited = true
-    state.needsExitAttachment = true
 
-    const planFilePath = this.getPlanFilePath()
+    this.planStore.update(this.sessionId, {
+      isEnabled: false,
+      hasExited: true,
+    })
 
-    return { planFilePath }
+    return { planFilePath: state.filePath! }
   }
 
   /**
@@ -88,11 +103,47 @@ export class PlanModeManager {
   }
 
   /**
+   * 检查是否需要附加 exit 信息
+   */
+  needsExitAttachment(): boolean {
+    const state = this.getState()
+    return state.hasExited && !state.isEnabled
+  }
+
+  /**
    * 获取计划文件路径
    */
   getPlanFilePath(): string {
-    const slug = this.getOrCreateSlug()
+    const slug = this.getSlug()
     return join(this.getPlanDirectory(), `${slug}.md`)
+  }
+
+  /**
+   * 获取 slug
+   */
+  private getSlug(): string {
+    const existing = this.planStore.get(this.sessionId)
+    if (existing?.slug) {
+      return existing.slug
+    }
+
+    const dir = this.getPlanDirectory()
+    let slug: string | null = null
+
+    // 尝试生成不冲突的 slug
+    for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
+      slug = generateSlug()
+      const path = join(dir, `${slug}.md`)
+      if (!existsSync(path) && !this.planStore.findBySlug(slug)) break
+    }
+
+    if (!slug) slug = generateSlug()
+
+    // 保存到数据库以便持久化
+    const filePath = join(dir, `${slug}.md`)
+    this.planStore.getOrCreate(this.sessionId, filePath, slug)
+
+    return slug
   }
 
   /**
@@ -109,7 +160,7 @@ export class PlanModeManager {
     }
 
     // 检查文件名是否匹配当前 slug
-    const expectedSlug = this.getOrCreateSlug()
+    const expectedSlug = this.getSlug()
     const targetName = parse(target).name
 
     return targetName === expectedSlug || targetName.startsWith(`${expectedSlug}-agent-`)
@@ -167,51 +218,17 @@ export class PlanModeManager {
   }
 
   /**
-   * 获取或创建 slug
+   * 获取 PlanStore 实例（用于高级操作）
    */
-  private getOrCreateSlug(): string {
-    const cached = planSlugCache.get(this.sessionKey)
-    if (cached) return cached
-
-    const dir = this.getPlanDirectory()
-    let slug: string | null = null
-
-    // 尝试生成不冲突的 slug
-    for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
-      slug = generateSlug()
-      const path = join(dir, `${slug}.md`)
-      if (!existsSync(path)) break
-    }
-
-    if (!slug) slug = generateSlug()
-
-    planSlugCache.set(this.sessionKey, slug)
-    return slug
+  getStore(): PlanStore {
+    return this.planStore
   }
 
   /**
-   * 获取当前状态
+   * 获取会话 ID
    */
-  private getState(): PlanModeState {
-    let state = planModeStates.get(this.sessionKey)
-    if (!state) {
-      state = {
-        isEnabled: false,
-        slug: null,
-        hasExited: false,
-        needsExitAttachment: false,
-      }
-      planModeStates.set(this.sessionKey, state)
-    }
-    return state
-  }
-
-  /**
-   * 重置状态（用于测试）
-   */
-  static reset(): void {
-    planModeStates.clear()
-    planSlugCache.clear()
+  getSessionId(): string {
+    return this.sessionId
   }
 }
 
@@ -231,55 +248,142 @@ function randomIndex(length: number): number {
 }
 
 /**
- * 获取全局 Plan Mode 管理器实例
+ * 全局管理器缓存（按 sessionId）
  */
-let globalManager: PlanModeManager | null = null
+const managerCache = new Map<string, PlanModeManager>()
 
-export function getPlanModeManager(sessionKey?: string): PlanModeManager {
-  if (!globalManager || sessionKey) {
-    globalManager = new PlanModeManager(sessionKey)
+/**
+ * 获取 Plan Mode 管理器实例
+ */
+export function getPlanModeManager(
+  sessionId: string,
+  dbPath: string
+): PlanModeManager {
+  const key = `${sessionId}:${dbPath}`
+  if (!managerCache.has(key)) {
+    managerCache.set(key, new PlanModeManager(sessionId, dbPath))
   }
-  return globalManager
+  return managerCache.get(key)!
 }
 
 /**
- * 检查是否在 Plan Mode
+ * 清除缓存（用于测试）
  */
-export function isPlanModeEnabled(): boolean {
-  return getPlanModeManager().isEnabled()
+export function clearPlanModeManagerCache(): void {
+  managerCache.clear()
 }
 
 /**
- * 进入 Plan Mode
+ * 检查是否在 Plan Mode（需要传入 sessionId）
  */
-export function enterPlanMode(): { planFilePath: string } {
-  return getPlanModeManager().enter()
+export function isPlanModeEnabled(sessionId: string, dbPath: string): boolean {
+  return getPlanModeManager(sessionId, dbPath).isEnabled()
 }
 
 /**
- * 退出 Plan Mode
+ * 进入 Plan Mode（需要传入 sessionId）
  */
-export function exitPlanMode(): { planFilePath: string } {
-  return getPlanModeManager().exit()
+export function enterPlanMode(
+  sessionId: string,
+  dbPath: string
+): { planFilePath: string } {
+  return getPlanModeManager(sessionId, dbPath).enter()
 }
 
 /**
- * 获取计划文件路径
+ * 退出 Plan Mode（需要传入 sessionId）
  */
-export function getPlanFilePath(): string {
-  return getPlanModeManager().getPlanFilePath()
+export function exitPlanMode(
+  sessionId: string,
+  dbPath: string
+): { planFilePath: string } {
+  return getPlanModeManager(sessionId, dbPath).exit()
 }
 
 /**
- * 检查路径是否为计划文件
+ * 获取计划文件路径（需要传入 sessionId）
  */
-export function isPlanFilePath(path: string): boolean {
-  return getPlanModeManager().isPlanFilePath(path)
+export function getPlanFilePath(sessionId: string, dbPath: string): string {
+  return getPlanModeManager(sessionId, dbPath).getPlanFilePath()
 }
 
 /**
- * 读取计划文件
+ * 检查路径是否为计划文件（需要传入 sessionId）
  */
-export function readPlanFile(): { content: string; exists: boolean; planFilePath: string } {
-  return getPlanModeManager().readPlanFile()
+export function isPlanFilePath(
+  sessionId: string,
+  dbPath: string,
+  path: string
+): boolean {
+  return getPlanModeManager(sessionId, dbPath).isPlanFilePath(path)
+}
+
+/**
+ * 读取计划文件（需要传入 sessionId）
+ */
+export function readPlanFile(
+  sessionId: string,
+  dbPath: string
+): { content: string; exists: boolean; planFilePath: string } {
+  return getPlanModeManager(sessionId, dbPath).readPlanFile()
+}
+
+// ============================================================================
+// 全局上下文便捷函数（自动从当前上下文获取 sessionId 和 dbPath）
+// ============================================================================
+
+/**
+ * 获取当前上下文的 Plan Mode 管理器
+ */
+function getCurrentManager(): PlanModeManager {
+  const ctx = requirePlanContext()
+  return getPlanModeManager(ctx.sessionId, ctx.dbPath)
+}
+
+/**
+ * 检查是否在 Plan Mode（使用全局上下文）
+ */
+export function isPlanModeEnabledCurrent(): boolean {
+  const ctx = getPlanContext()
+  if (!ctx) return false
+  return getPlanModeManager(ctx.sessionId, ctx.dbPath).isEnabled()
+}
+
+/**
+ * 进入 Plan Mode（使用全局上下文）
+ */
+export function enterPlanModeCurrent(): { planFilePath: string } {
+  return getCurrentManager().enter()
+}
+
+/**
+ * 退出 Plan Mode（使用全局上下文）
+ */
+export function exitPlanModeCurrent(): { planFilePath: string } {
+  return getCurrentManager().exit()
+}
+
+/**
+ * 获取计划文件路径（使用全局上下文）
+ */
+export function getPlanFilePathCurrent(): string {
+  return getCurrentManager().getPlanFilePath()
+}
+
+/**
+ * 检查路径是否为计划文件（使用全局上下文）
+ */
+export function isPlanFilePathCurrent(path: string): boolean {
+  return getCurrentManager().isPlanFilePath(path)
+}
+
+/**
+ * 读取计划文件（使用全局上下文）
+ */
+export function readPlanFileCurrent(): {
+  content: string
+  exists: boolean
+  planFilePath: string
+} {
+  return getCurrentManager().readPlanFile()
 }

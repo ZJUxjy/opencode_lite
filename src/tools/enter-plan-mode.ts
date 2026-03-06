@@ -1,6 +1,6 @@
 import { z } from "zod"
 import type { Tool } from "../types.js"
-import { enterPlanMode, getPlanFilePath } from "../plan/manager.js"
+import { enterPlanModeCurrent, getPlanFilePathCurrent } from "../plan/manager.js"
 
 /**
  * 进入 Plan Mode 工具
@@ -27,7 +27,7 @@ Use this when:
 - The user explicitly asks you to plan first`,
   parameters: z.object({}),
   execute: async (_params, ctx) => {
-    const { planFilePath } = enterPlanMode()
+    const { planFilePath } = enterPlanModeCurrent()
     ctx.setPlanMode?.(true)  // 同步 PolicyEngine 状态
     const relativePath = planFilePath.replace(ctx.cwd, ".")
 

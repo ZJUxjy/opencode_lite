@@ -11,7 +11,7 @@ import { Session, SessionStore } from "./session/index.js"
 import type { CommandContext, PermissionRequest, PermissionDecision } from "./commands/types.js"
 import type { ToolCall } from "./types.js"
 import type { PolicyDecision } from "./policy.js"
-import { getPlanFilePath, readPlanFile, exitPlanMode } from "./plan/manager.js"
+import { getPlanFilePathCurrent, readPlanFileCurrent, exitPlanModeCurrent, setPlanContext } from "./plan/index.js"
 import { buildNewSessionPrompt, buildContinueSessionPrompt } from "./plan/handover.js"
 import { formatToolArgs } from "./utils/formatToolArgs.js"
 // New message system imports
@@ -100,6 +100,11 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       process.off('SIGTERM', handleExit)
     }
   }, [agent, sessionId])
+
+  // 初始化 Plan Mode 上下文
+  useEffect(() => {
+    setPlanContext({ sessionId, dbPath })
+  }, [sessionId, dbPath])
 
   // =========================================================================
   // 状态管理
@@ -402,7 +407,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       return
     }
 
-    const { content: planContent } = readPlanFile()
+    const { content: planContent } = readPlanFileCurrent()
 
     if (decision === "new_session") {
       // 在新会话中实现（简化版：清空当前消息并添加计划作为初始提示）
@@ -614,7 +619,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
 
         // 检测 exit_plan_mode 工具执行，显示 PlanFollowup
         if (toolCall.name === "exit_plan_mode" && result.includes("Successfully exited")) {
-          const planPath = getPlanFilePath()
+          const planPath = getPlanFilePathCurrent()
           setPlanFilePath(planPath)
           setPlanFollowupVisible(true)
         }
