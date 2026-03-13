@@ -72,6 +72,47 @@ Tokens stored securely take precedence over settings.json values.
 }
 ```
 
+### Provider Configuration
+
+Configure LLM providers interactively:
+
+```bash
+# Interactive configuration wizard
+lite-opencode config
+
+# List all configured providers
+lite-opencode config list
+
+# Switch default provider
+lite-opencode config switch anthropic
+
+# Show provider details
+lite-opencode config show [provider]
+```
+
+**In-session tools:**
+
+```
+show_config                    # Show current configuration
+switch_provider provider="openai"  # Switch provider for current session
+```
+
+**Configuration files:**
+- `~/.lite-opencode/providers.json` - Provider configurations (non-sensitive)
+- API keys stored securely in system keyring or encrypted file
+
+**Supported providers:**
+| Provider | Default Model |
+|----------|---------------|
+| Anthropic | claude-sonnet-4-6 |
+| OpenAI | gpt-4o |
+| Gemini | gemini-2.0-flash |
+| DeepSeek | deepseek-chat |
+| MiniMax | MiniMax-Text-01 |
+| Kimi | moonshot-v1-128k |
+
+**Configuration priority:** CLI args > ProviderService > settings.json > env vars > defaults
+
 ## Architecture
 
 This is a lightweight AI coding agent implementing the ReAct (Reasoning + Acting) pattern with dual strategy support.
