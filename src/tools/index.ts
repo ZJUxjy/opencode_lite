@@ -20,6 +20,7 @@ import { webSearchTool } from "./web-search.js"
 import { listTokensTool, setTokenTool, deleteTokenTool } from "./token.js"
 import { mcpStatusTool, mcpDiagnoseTool } from "./mcp-status.js"
 import { filterMessagesTool } from "./message-filter.js"
+import { showConfigTool, switchProviderTool } from "./provider-config.js"
 import type { MCPManager } from "../mcp/manager.js"
 import { createMCPToolWrapper } from "../mcp/tools.js"
 
@@ -80,6 +81,8 @@ export class ToolRegistry {
       mcpStatusTool,
       mcpDiagnoseTool,
       filterMessagesTool,
+      showConfigTool,
+      switchProviderTool,
     ]
 
     // 如果是 subagent，过滤掉 subagent 工具以防止递归
