@@ -392,90 +392,161 @@ program
     )
   })
 
-// Token management commands
+// Provider configuration commands
 program
   .command("config")
-  .description("Manage configuration")
-  .addCommand(
-    new Command("set-token")
-      .description("Store an API token securely")
-      .argument("<provider>", "Provider name (anthropic, openai, minimax, gemini, deepseek, custom)")
-      .argument("<key>", "API key")
-      .action(async (provider, key) => {
-        const { getTokenService } = await import("./tokens/index.js")
-        const service = getTokenService()
-        try {
-          await service.setToken(provider, key)
-          const storageType = await service.getStorageType()
-          console.log(`✅ Token for ${provider} stored securely (${storageType})`)
-        } catch (error) {
-          console.error(`❌ Failed to store token: ${error instanceof Error ? error.message : String(error)}`)
-          process.exit(1)
-        }
-      })
-  )
-  .addCommand(
-    new Command("list-tokens")
-      .description("List stored tokens")
-      .action(async () => {
-        const { getTokenService } = await import("./tokens/index.js")
-        const service = getTokenService()
-        const tokens = await service.listTokens()
-        const storageType = await service.getStorageType()
+  .description("Configure LLM providers (runs interactive wizard by default)")
+  .action(async () => {
+    const { runConfigWizard } = await import("./cli/config-wizard.js")
+    await runConfigWizard()
+  })
 
-        if (tokens.length === 0) {
-          console.log("No tokens stored.")
-          return
-        }
+program
+  .command("config list")
+  .description("List all configured providers")
+  .action(async () => {
+    const { ProviderConfigService } = await import("./providers/service.js")
+    const service = new ProviderConfigService()
+    const providers = service.listProviders()
+    const builtinProviders = service.getBuiltinProviders()
 
-        console.log(`# Stored Tokens (${tokens.length})`)
-        console.log(`Storage: ${storageType}`)
-        console.log("")
-        for (const token of tokens) {
-          console.log(`- ${token.provider}`)
-        }
-      })
-  )
-  .addCommand(
-    new Command("delete-token")
-      .description("Delete a stored API token")
-      .argument("<provider>", "Provider name (anthropic, openai, minimax, gemini, deepseek, custom)")
-      .action(async (provider) => {
-        const { getTokenService } = await import("./tokens/index.js")
-        const service = getTokenService()
-        try {
-          await service.deleteToken(provider)
-          console.log(`🗑️ Token for ${provider} deleted`)
-        } catch (error) {
-          console.error(`❌ Failed to delete token: ${error instanceof Error ? error.message : String(error)}`)
-          process.exit(1)
-        }
-      })
-  )
+    if (providers.length === 0 && builtinProviders.every(p => !p.configured)) {
+      console.log("No providers configured. Run 'lite-opencode config' to set up.")
+      return
+    }
+
+    console.log("\n# Configured Providers\n")
+
+    for (const p of builtinProviders) {
+      const marker = p.configured ? "✓" : "○"
+      const defaultMarker = p.config?.isDefault ? " (default)" : ""
+      console.log(`  ${marker} ${p.info.name}${defaultMarker}`)
+      if (p.configured && p.config) {
+        console.log(`      Model: ${p.config.defaultModel}`)
+        console.log(`      Base URL: ${p.config.baseUrl}`)
+      }
+    }
+
+    console.log("\nRun 'lite-opencode config' to add or modify providers.")
+  })
+
+program
+  .command("config switch <provider>")
+  .description("Switch default provider")
+  .action(async (providerId: string) => {
+    const { ProviderConfigService } = await import("./providers/service.js")
+    const service = new ProviderConfigService()
+
+    try {
+      service.setDefault(providerId)
+      service.save()
+      console.log(`✓ Switched default provider to '${providerId}'`)
+    } catch (error) {
+      console.error(`❌ ${error instanceof Error ? error.message : String(error)}`)
+      process.exit(1)
+    }
+  })
+
+program
+  .command("config show [provider]")
+  .description("Show provider configuration details")
+  .action(async (providerId?: string) => {
+    const { ProviderConfigService } = await import("./providers/service.js")
+    const service = new ProviderConfigService()
+
+    try {
+      const provider = providerId
+        ? service.getProvider(providerId)
+        : service.getDefaultProvider()
+
+      if (!provider) {
+        console.log(`Provider '${providerId}' not found.`)
+        return
+      }
+
+      console.log(`\n# ${provider.name}\n`)
+      console.log(`  ID: ${provider.id}`)
+      console.log(`  Model: ${provider.defaultModel}`)
+      console.log(`  Base URL: ${provider.baseUrl}`)
+      console.log(`  Default: ${provider.isDefault ? "Yes" : "No"}`)
+      console.log()
+    } catch (error) {
+      console.error(`❌ ${error instanceof Error ? error.message : String(error)}`)
+      process.exit(1)
+    }
+  })
+
+// Token management commands
+program
+  .command("config set-token <provider> <key>")
+  .description("Store an API token securely")
+  .action(async (provider: string, key: string) => {
+    const { getTokenService } = await import("./tokens/index.js")
+    const service = getTokenService()
+    try {
+      await service.setToken(provider as any, key)
+      const storageType = await service.getStorageType()
+      console.log(`✅ Token for ${provider} stored securely (${storageType})`)
+    } catch (error) {
+      console.error(`❌ Failed to store token: ${error instanceof Error ? error.message : String(error)}`)
+      process.exit(1)
+    }
+  })
+
+program
+  .command("config list-tokens")
+  .description("List stored tokens")
+  .action(async () => {
+    const { getTokenService } = await import("./tokens/index.js")
+    const service = getTokenService()
+    const tokens = await service.listTokens()
+    const storageType = await service.getStorageType()
+
+    if (tokens.length === 0) {
+      console.log("No tokens stored.")
+      return
+    }
+
+    console.log(`# Stored Tokens (${tokens.length})`)
+    console.log(`Storage: ${storageType}`)
+    console.log("")
+    for (const token of tokens) {
+      console.log(`- ${token.provider}`)
+    }
+  })
+
+program
+  .command("config delete-token <provider>")
+  .description("Delete a stored API token")
+  .action(async (provider: string) => {
+    const { getTokenService } = await import("./tokens/index.js")
+    const service = getTokenService()
+    try {
+      await service.deleteToken(provider as any)
+      console.log(`🗑️ Token for ${provider} deleted`)
+    } catch (error) {
+      console.error(`❌ Failed to delete token: ${error instanceof Error ? error.message : String(error)}`)
+      process.exit(1)
+    }
+  })
 
 // MCP management commands
 program
-  .command("mcp")
-  .description("MCP server management")
-  .addCommand(
-    new Command("status")
-      .description("Show MCP server status and statistics")
-      .argument("[server]", "Specific server name (optional)")
-      .action(async (server) => {
-        const { mcpStatusTool } = await import("./tools/mcp-status.js")
-        const result = await mcpStatusTool.execute({ server }, { cwd: process.cwd(), messages: [] })
-        console.log(result)
-      })
-  )
-  .addCommand(
-    new Command("diagnose")
-      .description("Diagnose MCP configuration and connectivity issues")
-      .argument("[server]", "Specific server name (optional)")
-      .action(async (server) => {
-        const { mcpDiagnoseTool } = await import("./tools/mcp-status.js")
-        const result = await mcpDiagnoseTool.execute({ server }, { cwd: process.cwd(), messages: [] })
-        console.log(result)
-      })
-  )
+  .command("mcp status [server]")
+  .description("Show MCP server status and statistics")
+  .action(async (server?: string) => {
+    const { mcpStatusTool } = await import("./tools/mcp-status.js")
+    const result = await mcpStatusTool.execute({ server }, { cwd: process.cwd(), messages: [] })
+    console.log(result)
+  })
+
+program
+  .command("mcp diagnose [server]")
+  .description("Diagnose MCP configuration and connectivity issues")
+  .action(async (server?: string) => {
+    const { mcpDiagnoseTool } = await import("./tools/mcp-status.js")
+    const result = await mcpDiagnoseTool.execute({ server }, { cwd: process.cwd(), messages: [] })
+    console.log(result)
+  })
 
 program.parse()
