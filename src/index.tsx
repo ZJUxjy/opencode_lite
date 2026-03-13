@@ -342,10 +342,35 @@ program
     // 从 TokenService 加载 API keys
     await loadTokensFromService()
 
-    // 获取配置（优先级：CLI > settings.json > 环境变量 > TokenService > 默认值）
-    const baseURL = getConfig(options.baseUrl, "ANTHROPIC_BASE_URL", settings, "https://api.anthropic.com")
-    const model = getConfig(options.model, "ANTHROPIC_MODEL", settings, "claude-sonnet-4-20250514")
-    const apiKey = getConfig(undefined, "ANTHROPIC_AUTH_TOKEN", settings, process.env.ANTHROPIC_API_KEY || "")
+    // Load provider configuration
+    const { ProviderConfigService } = await import("./providers/service.js")
+    const providerService = new ProviderConfigService()
+
+    // Get LLM config from provider service (if configured)
+    let llmConfigFromProvider: { model: string; baseURL: string; apiKey: string } | null = null
+    try {
+      if (providerService.hasProviders()) {
+        llmConfigFromProvider = await providerService.getLLMConfig()
+      }
+    } catch (error) {
+      // Provider service not configured, fall back to settings
+    }
+
+    // 获取配置（优先级：CLI > ProviderService > settings > env > defaults）
+    const baseURL =
+      options.baseUrl ??
+      llmConfigFromProvider?.baseURL ??
+      getConfig(undefined, "ANTHROPIC_BASE_URL", settings, "https://api.anthropic.com")
+
+    const model =
+      options.model ??
+      llmConfigFromProvider?.model ??
+      getConfig(undefined, "ANTHROPIC_MODEL", settings, "claude-sonnet-4-20250514")
+
+    const apiKey =
+      llmConfigFromProvider?.apiKey ??
+      getConfig(undefined, "ANTHROPIC_AUTH_TOKEN", settings, process.env.ANTHROPIC_API_KEY || "")
+
     const timeoutStr = getConfig(undefined, "API_TIMEOUT_MS", settings, "120000")
     const timeout = parseInt(timeoutStr, 10)
 
