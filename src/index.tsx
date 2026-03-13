@@ -418,16 +418,19 @@ program
   })
 
 // Provider configuration commands
-program
+const configCommand = program
   .command("config")
-  .description("Configure LLM providers (runs interactive wizard by default)")
+  .description("Configure LLM providers")
+
+// Default action: run wizard
+configCommand
   .action(async () => {
     const { runConfigWizard } = await import("./cli/config-wizard.js")
     await runConfigWizard()
   })
 
-program
-  .command("config list")
+configCommand
+  .command("list")
   .description("List all configured providers")
   .action(async () => {
     const { ProviderConfigService } = await import("./providers/service.js")
@@ -455,8 +458,8 @@ program
     console.log("\nRun 'lite-opencode config' to add or modify providers.")
   })
 
-program
-  .command("config switch <provider>")
+configCommand
+  .command("switch <provider>")
   .description("Switch default provider")
   .action(async (providerId: string) => {
     const { ProviderConfigService } = await import("./providers/service.js")
@@ -472,8 +475,8 @@ program
     }
   })
 
-program
-  .command("config show [provider]")
+configCommand
+  .command("show [provider]")
   .description("Show provider configuration details")
   .action(async (providerId?: string) => {
     const { ProviderConfigService } = await import("./providers/service.js")
@@ -502,8 +505,8 @@ program
   })
 
 // Token management commands
-program
-  .command("config set-token <provider> <key>")
+configCommand
+  .command("set-token <provider> <key>")
   .description("Store an API token securely")
   .action(async (provider: string, key: string) => {
     const { getTokenService } = await import("./tokens/index.js")
@@ -518,8 +521,8 @@ program
     }
   })
 
-program
-  .command("config list-tokens")
+configCommand
+  .command("list-tokens")
   .description("List stored tokens")
   .action(async () => {
     const { getTokenService } = await import("./tokens/index.js")
@@ -540,8 +543,8 @@ program
     }
   })
 
-program
-  .command("config delete-token <provider>")
+configCommand
+  .command("delete-token <provider>")
   .description("Delete a stored API token")
   .action(async (provider: string) => {
     const { getTokenService } = await import("./tokens/index.js")
@@ -556,8 +559,12 @@ program
   })
 
 // MCP management commands
-program
-  .command("mcp status [server]")
+const mcpCommand = program
+  .command("mcp")
+  .description("MCP server management")
+
+mcpCommand
+  .command("status [server]")
   .description("Show MCP server status and statistics")
   .action(async (server?: string) => {
     const { mcpStatusTool } = await import("./tools/mcp-status.js")
@@ -565,8 +572,8 @@ program
     console.log(result)
   })
 
-program
-  .command("mcp diagnose [server]")
+mcpCommand
+  .command("diagnose [server]")
   .description("Diagnose MCP configuration and connectivity issues")
   .action(async (server?: string) => {
     const { mcpDiagnoseTool } = await import("./tools/mcp-status.js")
