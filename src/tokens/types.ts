@@ -1,4 +1,4 @@
-export type TokenProvider = "anthropic" | "openai" | "minimax" | "gemini" | "deepseek" | "custom"
+export type TokenProvider = "anthropic" | "openai" | "minimax" | "gemini" | "deepseek" | "kimi" | "custom"
 
 export interface TokenInfo {
   provider: TokenProvider

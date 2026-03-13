@@ -1,7 +1,7 @@
 // src/providers/__tests__/service.test.ts
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
-import { mkdirSync, rmSync, existsSync } from "fs"
+import { mkdirSync, rmSync, existsSync, readFileSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import { ProviderConfigService } from "../service.js"
@@ -13,7 +13,8 @@ describe("ProviderConfigService", () => {
   let service: ProviderConfigService
 
   beforeEach(() => {
-    tempDir = mkdirSync(join(tmpdir(), `provider-test-${Date.now()}`), { recursive: true })
+    tempDir = join(tmpdir(), `provider-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+    mkdirSync(tempDir, { recursive: true })
     configPath = join(tempDir, "providers.json")
     service = new ProviderConfigService(configPath)
   })
@@ -136,6 +137,11 @@ describe("ProviderConfigService", () => {
 
   describe("getBuiltinProviders", () => {
     it("should return all builtin providers with configured status", () => {
+      // Verify we start with no providers configured
+      const initialProviders = service.listProviders()
+      expect(initialProviders).toHaveLength(0)
+
+      // Add one provider
       service.setProvider("anthropic", {
         name: "Anthropic",
         provider: "anthropic",
@@ -149,6 +155,7 @@ describe("ProviderConfigService", () => {
       const anthropic = builtinProviders.find((p) => p.id === "anthropic")
       expect(anthropic?.configured).toBe(true)
 
+      // Verify openai is not configured (only anthropic was added)
       const openai = builtinProviders.find((p) => p.id === "openai")
       expect(openai?.configured).toBe(false)
     })

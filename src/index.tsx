@@ -94,6 +94,7 @@ async function loadTokensFromService(): Promise<void> {
     minimax: "MINIMAX_API_KEY",
     gemini: "GEMINI_API_KEY",
     deepseek: "DEEPSEEK_API_KEY",
+    kimi: "KIMI_API_KEY",
   }
 
   for (const [provider, envKey] of Object.entries(providerEnvMap)) {

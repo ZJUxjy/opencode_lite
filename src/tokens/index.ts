@@ -97,6 +97,7 @@ export class TokenService {
       MINIMAX_API_KEY: "minimax",
       GEMINI_API_KEY: "gemini",
       DEEPSEEK_API_KEY: "deepseek",
+      KIMI_API_KEY: "kimi",
     }
 
     for (const [envKey, value] of Object.entries(settings)) {

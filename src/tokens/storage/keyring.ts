@@ -14,7 +14,6 @@ let keytar: Keytar | null = null
 // Dynamic import with proper error handling
 async function initializeKeytar(): Promise<void> {
   try {
-    // @ts-expect-error keytar is optional dependency
     const keytarModule = await import("keytar")
     keytar = keytarModule as Keytar
   } catch {
