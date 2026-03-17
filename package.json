@@ -16,7 +16,8 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.0.0",
-    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/google": "^3.0.43",
+    "@ai-sdk/openai": "^1.3.24",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@types/ink-select-input": "^3.0.5",
     "@types/react": "^19.2.14",
