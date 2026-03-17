@@ -335,6 +335,36 @@ export class LLMClient {
   }
 
   /**
+   * 使用当前 provider 生成文本（带 usage 返回）
+   *
+   * 用于需要追踪 token 使用量的场景（如 Agent Teams）
+   */
+  async generateTextWithUsage(
+    prompt: string,
+    options?: { maxTokens?: number; temperature?: number }
+  ): Promise<{
+    content: string
+    usage: { inputTokens: number; outputTokens: number }
+  }> {
+    const model = this.provider(this.modelId)
+
+    const result = await generateText({
+      model,
+      prompt,
+      maxTokens: options?.maxTokens ?? 16000,
+      temperature: options?.temperature ?? 0.2,
+    })
+
+    return {
+      content: result.text,
+      usage: {
+        inputTokens: result.usage?.promptTokens ?? 0,
+        outputTokens: result.usage?.completionTokens ?? 0,
+      },
+    }
+  }
+
+  /**
    * Abort any ongoing request
    */
   abort(): void {

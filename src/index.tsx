@@ -174,6 +174,7 @@ function resolveSession(
       return { sessionId: options.session, isNewSession: false, resumedSession: existingSession }
     }
     // 会话不存在，创建新会话（用户显式指定了ID）
+    console.log(`That session is not found, Creating new session: ${options.session}`)
     return { sessionId: options.session, isNewSession: true }
   }
 

@@ -9,3 +9,6 @@ settings.json
 # Agent Teams artifacts
 .agent-teams/
 .worktrees/
+glm_settings.json
+openrouter.json
+tmp

@@ -32,7 +32,7 @@ export const BUILTIN_PROVIDERS: BuiltinProviderInfo[] = [
     baseUrl: "https://api.openai.com/v1",
     defaultModel: "gpt-4o",
     envKey: "OPENAI_API_KEY",
-    models: ["gpt-4o", "gpt-4o-mini", "o1", "o3-mini"],
+    models: ["gpt-5", "gpt-4", "o1", "o3-mini"],
   },
   {
     id: "gemini",
@@ -40,7 +40,7 @@ export const BUILTIN_PROVIDERS: BuiltinProviderInfo[] = [
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
     defaultModel: "gemini-2.0-flash",
     envKey: "GEMINI_API_KEY",
-    models: ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+    models: ["gemini-3.0", "gemini-1.5-pro", "gemini-1.5-flash"],
   },
   {
     id: "deepseek",
@@ -52,19 +52,19 @@ export const BUILTIN_PROVIDERS: BuiltinProviderInfo[] = [
   },
   {
     id: "minimax",
-    name: "MiniMax",
-    baseUrl: "https://api.minimax.chat/v1",
-    defaultModel: "MiniMax-Text-01",
+    name: "MiniMax-code-plan",
+    baseUrl: "https://api.minimaxi.com/anthropic",
+    defaultModel: "MiniMax-M2.5",
     envKey: "MINIMAX_API_KEY",
-    models: ["MiniMax-Text-01"],
+    models: ["MiniMax-M2.5"],
   },
   {
     id: "kimi",
-    name: "Kimi (Moonshot)",
-    baseUrl: "https://api.moonshot.cn/v1",
-    defaultModel: "moonshot-v1-128k",
+    name: "Kimi (Moonshot)-code-plan",
+    baseUrl: "https://api.kimi.com/coding",
+    defaultModel: "kimi-k2.5",
     envKey: "KIMI_API_KEY",
-    models: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+    models: ["kimi-k2.5"],
   },
 ]
 

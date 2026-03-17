@@ -200,19 +200,17 @@ export class AgentLLMClient {
   }
 
   /**
-   * Call LLM using the main LLMClient's generateTextForCompression method
-   * which supports multiple providers
+   * Call LLM using the main LLMClient's generateTextWithUsage method
+   * which supports multiple providers and returns token usage
    */
   private async callLLM(
     prompt: string
   ): Promise<{ content: string; usage?: { inputTokens: number; outputTokens: number } }> {
     // Use LLMClient's method that works with any configured provider
-    const content = await this.llmClient.generateTextForCompression(prompt, 16000)
-
-    return {
-      content,
-      usage: undefined, // generateTextForCompression doesn't return usage
-    }
+    return await this.llmClient.generateTextWithUsage(prompt, {
+      maxTokens: 16000,
+      temperature: this.temperature,
+    })
   }
 
   private buildWorkerPrompt(
