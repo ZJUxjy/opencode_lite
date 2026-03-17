@@ -819,4 +819,50 @@ export class Agent {
       }
     }
   }
+
+  /**
+   * Switch to a different model within current provider
+   * @param modelId - Model ID to switch to
+   * @returns Result message
+   */
+  switchModel(modelId: string): { success: boolean; message: string } {
+    try {
+      // Switch LLM client model
+      this.llm.switchModel(modelId)
+
+      // Save to current provider config
+      const currentProvider = this.providerService.getDefaultProvider()
+      this.providerService.setProvider(currentProvider.id, {
+        name: currentProvider.name,
+        provider: currentProvider.provider,
+        baseUrl: currentProvider.baseUrl,
+        defaultModel: modelId,
+      })
+      this.providerService.save()
+
+      return {
+        success: true,
+        message: `Switched to model: \`${modelId}\`
+- Provider: ${currentProvider.name}
+- Saved as default.`,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to switch model: ${error instanceof Error ? error.message : String(error)}`,
+      }
+    }
+  }
+
+  /**
+   * Get available models for a provider
+   * @param providerId - Optional provider ID, defaults to current provider
+   */
+  getAvailableModels(providerId?: string): string[] {
+    const id = providerId ?? this.providerService.getDefaultProvider()?.id
+    if (!id) return []
+
+    const info = getBuiltinProvider(id as BuiltinProvider)
+    return info?.models ?? []
+  }
 }
