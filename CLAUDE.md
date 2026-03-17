@@ -97,6 +97,18 @@ show_config                    # Show current configuration
 switch_provider provider="openai"  # Switch provider for current session
 ```
 
+**Slash commands:**
+
+```
+/models                            # Open model selection dialog
+/provider                          # Open provider selection/configuration dialog
+```
+
+**Keyboard navigation in dialogs:**
+- `Up/Down` - Navigate options
+- `Enter` - Select
+- `Esc` - Cancel
+
 **Configuration files:**
 - `~/.lite-opencode/providers.json` - Provider configurations (non-sensitive)
 - API keys stored securely in system keyring or encrypted file
