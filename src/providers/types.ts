@@ -12,6 +12,11 @@ export type BuiltinProvider =
   | "kimi"
 
 /**
+ * Supported API protocols
+ */
+export type ProviderProtocol = "anthropic" | "openai" | "google"
+
+/**
  * Provider identifier (builtin or custom)
  */
 export type ProviderId = BuiltinProvider | `custom:${string}`
