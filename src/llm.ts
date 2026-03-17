@@ -1,12 +1,15 @@
 import { generateText, streamText, CoreMessage, Tool } from "ai"
 import { createAnthropic } from "@ai-sdk/anthropic"
 import type { Message, ToolCall } from "./types.js"
+import type { ProviderProtocol } from "./providers/types.js"
 
 export interface LLMConfig {
   model?: string
   baseURL?: string
   apiKey?: string
-  /** 请求超时时间（毫秒），默认 120000 (2分钟) */
+  /** API protocol to use */
+  protocol?: ProviderProtocol
+  /** Request timeout in milliseconds, default 120000 (2 minutes) */
   timeout?: number
 }
 
