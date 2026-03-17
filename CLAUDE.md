@@ -99,6 +99,18 @@ switch_model model="gpt-4o"        # Switch model (auto-saves)
 list_models provider="openai"      # List available models
 ```
 
+**Slash commands:**
+
+```
+/models                            # Open model selection dialog
+/provider                          # Open provider selection/configuration dialog
+```
+
+**Keyboard navigation in dialogs:**
+- `Up/Down` - Navigate options
+- `Enter` - Select
+- `Esc` - Cancel
+
 **Configuration files:**
 - `~/.lite-opencode/providers.json` - Provider configurations (non-sensitive)
 - API keys stored securely in system keyring or encrypted file

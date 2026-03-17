@@ -7,6 +7,11 @@ import { PermissionPrompt } from "./components/PermissionPrompt.js"
 import { PlanFollowupPrompt, type PlanFollowupDecision } from "./components/PlanFollowupPrompt.js"
 import { SessionList } from "./components/SessionList.js"
 import { MessageItem } from "./components/MessageItem.js"
+import { DialogModel, DialogProvider } from "./components/index.js"
+import { parseSlashCommand, type SlashCommand } from "./input/slash-commands.js"
+import { getStatePersistence } from "./state/index.js"
+import { getBuiltinProvider } from "./providers/registry.js"
+import type { BuiltinProvider } from "./providers/types.js"
 import { Session, SessionStore } from "./session/index.js"
 import type { CommandContext, PermissionRequest, PermissionDecision } from "./commands/types.js"
 import type { ToolCall } from "./types.js"
@@ -298,6 +303,14 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   const [showSessionList, setShowSessionList] = useState(false)
   const [availableSessions, setAvailableSessions] = useState<Session[]>([])
 
+  // =========================================================================
+  // Dialog 状态 (Model/Provider Selection)
+  // =========================================================================
+
+  const [activeDialog, setActiveDialog] = useState<SlashCommand | null>(null)
+  const [currentProvider, setCurrentProvider] = useState<string>("anthropic")
+  const [currentModel, setCurrentModel] = useState<string>("claude-sonnet-4-6")
+
   // 加载可用会话
   const loadSessions = useCallback(() => {
     const sessionStore = new SessionStore(dbPath)
@@ -305,6 +318,46 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
     setAvailableSessions(sessions)
     sessionStore.close()
   }, [dbPath])
+
+  // =========================================================================
+  // Dialog Handlers (Model/Provider Selection)
+  // =========================================================================
+
+  // Handle slash command detection
+  const handleSlashCommand = useCallback((command: SlashCommand) => {
+    setActiveDialog(command)
+  }, [])
+
+  // Handle model selection
+  const handleModelSelect = useCallback((provider: string, model: string) => {
+    setCurrentProvider(provider)
+    setCurrentModel(model)
+    setActiveDialog(null)
+    // Add notification message
+    const message = createSystemMessage(`Switched to ${provider}/${model}`)
+    setMessages(prev => [...prev, message])
+    // TODO: Also update agent's LLM client
+  }, [])
+
+  // Handle provider selection
+  const handleProviderSelect = useCallback((provider: string) => {
+    setCurrentProvider(provider)
+    // Get default model for this provider
+    const providerInfo = getBuiltinProvider(provider as BuiltinProvider)
+    if (providerInfo) {
+      setCurrentModel(providerInfo.defaultModel)
+    }
+    setActiveDialog(null)
+    // Add notification message
+    const message = createSystemMessage(`Switched to provider: ${provider}`)
+    setMessages(prev => [...prev, message])
+    // TODO: Also update agent's LLM client
+  }, [])
+
+  // Handle dialog cancel
+  const handleDialogCancel = useCallback(() => {
+    setActiveDialog(null)
+  }, [])
 
   // 显示会话列表
   const handleShowSessionList = useCallback(() => {
@@ -558,6 +611,13 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   const handleSubmit = useCallback(async (value: string) => {
     const trimmed = value.trim()
     if (!trimmed) return
+
+    // Check for slash commands first
+    const command = parseSlashCommand(trimmed)
+    if (command) {
+      handleSlashCommand(command)
+      return
+    }
 
     // 如果正在处理，将输入加入队列
     if (isProcessing) {
@@ -916,6 +976,28 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
             onCancel={handleCancelSessionList}
           />
         </Box>
+      )}
+
+      {/* =====================================================================
+          Model Selection Dialog
+          ===================================================================== */}
+      {activeDialog === "models" && (
+        <DialogModel
+          currentProvider={currentProvider}
+          currentModel={currentModel}
+          onSelect={handleModelSelect}
+          onCancel={handleDialogCancel}
+        />
+      )}
+
+      {/* =====================================================================
+          Provider Selection Dialog
+          ===================================================================== */}
+      {activeDialog === "provider" && (
+        <DialogProvider
+          onSelect={handleProviderSelect}
+          onCancel={handleDialogCancel}
+        />
       )}
 
       {/* =====================================================================
