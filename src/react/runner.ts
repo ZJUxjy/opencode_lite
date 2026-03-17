@@ -16,6 +16,8 @@ import type {
 } from "./types.js"
 import { LLMClient } from "../llm.js"
 import { ToolRegistry } from "../tools/index.js"
+import { LoopDetectionService } from "../loopDetection.js"
+import { PolicyEngine } from "../policy.js"
 import { FCRunner } from "./fc-runner.js"
 import { CoTRunner } from "./cot-runner.js"
 
@@ -49,6 +51,8 @@ export class ReActRunner implements Runner {
   private tools: ToolRegistry
   private config: ReActConfig
   private events: ReActEvents = {}
+  private loopDetection?: LoopDetectionService
+  private policyEngine?: PolicyEngine
 
   // Runner 实例（懒加载）
   private fcRunner: FCRunner | null = null
@@ -57,7 +61,11 @@ export class ReActRunner implements Runner {
   constructor(
     llm: LLMClient,
     tools: ToolRegistry,
-    config: ReActConfig = {}
+    config: ReActConfig = {},
+    dependencies?: {
+      loopDetection?: LoopDetectionService
+      policyEngine?: PolicyEngine
+    }
   ) {
     this.llm = llm
     this.tools = tools
@@ -67,6 +75,8 @@ export class ReActRunner implements Runner {
       enableStreaming: true,
       ...config,
     }
+    this.loopDetection = dependencies?.loopDetection
+    this.policyEngine = dependencies?.policyEngine
   }
 
   /**
@@ -160,6 +170,8 @@ export class ReActRunner implements Runner {
       this.fcRunner = new FCRunner(this.llm, this.tools, {
         maxIterations: this.config.maxIterations,
         enableStreaming: this.config.enableStreaming,
+        loopDetection: this.loopDetection,
+        policyEngine: this.policyEngine,
       })
       this.fcRunner.setEvents(this.events)
     }
@@ -175,6 +187,8 @@ export class ReActRunner implements Runner {
         maxIterations: this.config.maxIterations,
         enableStreaming: this.config.enableStreaming,
         stopWords: this.config.stopWords,
+        loopDetection: this.loopDetection,
+        policyEngine: this.policyEngine,
       })
       this.cotRunner.setEvents(this.events)
     }

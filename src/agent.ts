@@ -13,6 +13,7 @@ import { CompressionService, type CompressionLevel, type CompressionPreview, typ
 import { SkillRegistry, getSkillRegistry, type Skill } from "./skills/index.js"
 import { MCPManager, type MCPManagerOptions, setGlobalMCPManager } from "./mcp/index.js"
 import { PromptDumper } from "./utils/promptDumper.js"
+import { getErrorMessage } from "./utils/error.js"
 
 export interface AgentConfig {
   cwd: string
@@ -118,11 +119,14 @@ export class Agent {
       setGlobalMCPManager(this.mcpManager)
     }
 
-    // 初始化 ReAct Runner
+    // 初始化 ReAct Runner（注入循环检测和策略引擎以保持状态一致性）
     this.reactRunner = new ReActRunner(this.llm, this.tools, {
       strategy: this.strategy,
       maxIterations: 50,
       enableStreaming: this.enableStream,
+    }, {
+      loopDetection: this.loopDetection,
+      policyEngine: this.policyEngine,
     })
 
     // 初始化 PromptDumper
@@ -185,10 +189,23 @@ export class Agent {
       availableSkills: availableSkills,
     })
 
-    // 5. 使用 ReActRunner 执行
-    const result = await this.runWithReAct(messages, this.tools.getDefinitions(), systemPrompt)
-
-    return result
+    // 5. 根据策略选择执行方式
+    // - FC 模式：使用 runWithReAct（支持 Agent 特有功能如消息持久化、prompt dump）
+    // - CoT 模式：委托给 reactRunner（支持 ReAct prompt 模式）
+    const selectedStrategy = this.reactRunner.selectStrategy()
+    if (selectedStrategy === "cot") {
+      // CoT 模式：使用 ReActRunner（它有自己的 CoT 实现）
+      const result = await this.reactRunner.run(messages, this.tools.getDefinitions(), systemPrompt)
+      // 保存最终结果到存储
+      this.store.add(this._sessionId, {
+        role: "assistant",
+        content: result,
+      })
+      return result
+    } else {
+      // FC 模式：使用 Agent 的实现（支持消息持久化、prompt dump 等）
+      return this.runWithReAct(messages, this.tools.getDefinitions(), systemPrompt)
+    }
   }
 
   /**
@@ -230,9 +247,10 @@ export class Agent {
         } else {
           response = await this.llm.chat(workingMessages, tools, systemPrompt)
         }
-      } catch (error: any) {
-        this.events.onResponse?.(`Error: ${error.message}`)
-        return `Error: ${error.message}`
+      } catch (error: unknown) {
+        const errorMessage = getErrorMessage(error)
+        this.events.onResponse?.(`Error: ${errorMessage}`)
+        return `Error: ${errorMessage}`
       }
 
       // Dump response after LLM call
@@ -392,10 +410,11 @@ export class Agent {
         const content = await tool.execute(call.arguments, ctx)
         results.push({ toolCallId: call.id, content })
         this.events.onToolResult?.(call, content)
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const errorMessage = getErrorMessage(error)
         const errorResult = {
           toolCallId: call.id,
-          content: `Error: ${error.message}`,
+          content: `Error: ${errorMessage}`,
           isError: true,
         }
         results.push(errorResult)
@@ -864,5 +883,17 @@ export class Agent {
 
     const info = getBuiltinProvider(id as BuiltinProvider)
     return info?.models ?? []
+  }
+
+  /**
+   * 清理资源
+   *
+   * 在应用退出前调用，确保 MCP 子进程等资源被正确清理
+   */
+  async dispose(): Promise<void> {
+    // 清理 MCP 资源（关闭子进程等）
+    if (this.mcpManager) {
+      await this.mcpManager.dispose()
+    }
   }
 }

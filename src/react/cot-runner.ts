@@ -19,6 +19,7 @@ import { ScratchpadManager } from "./scratchpad.js"
 import { ThoughtPersistence } from "./persistence.js"
 import { LoopDetectionService } from "../loopDetection.js"
 import { PolicyEngine } from "../policy.js"
+import { getErrorMessage } from "../utils/error.js"
 
 /**
  * CoT Runner 配置
@@ -34,6 +35,10 @@ export interface CoTRunnerConfig {
   stopWords?: string[]
   /** 会话 ID（用于持久化） */
   sessionId?: string
+  /** 外部循环检测服务（用于状态共享） */
+  loopDetection?: LoopDetectionService
+  /** 外部策略引擎（用于状态共享） */
+  policyEngine?: PolicyEngine
 }
 
 /**
@@ -69,8 +74,9 @@ export class CoTRunner implements Runner {
     this.tools = tools
     this.parser = new ReActParser()
     this.scratchpad = new ScratchpadManager()
-    this.loopDetection = new LoopDetectionService()
-    this.policyEngine = new PolicyEngine()
+    // 使用外部注入的实例（保持状态一致性），否则创建新实例
+    this.loopDetection = config.loopDetection ?? new LoopDetectionService()
+    this.policyEngine = config.policyEngine ?? new PolicyEngine()
     this.config = {
       maxIterations: 50,
       enableStreaming: true,
@@ -180,9 +186,10 @@ export class CoTRunner implements Runner {
           },
           reactPrompt
         )
-      } catch (error: any) {
-        this.events.onResponse?.(`Error: ${error.message}`)
-        return `Error: ${error.message}`
+      } catch (error: unknown) {
+        const errorMessage = getErrorMessage(error)
+        this.events.onResponse?.(`Error: ${errorMessage}`)
+        return `Error: ${errorMessage}`
       }
 
       // 3. 解析 ReAct 输出
@@ -379,8 +386,8 @@ IMPORTANT:
         result
       )
       return result
-    } catch (error: any) {
-      const errorMsg = `Error: ${error.message}`
+    } catch (error: unknown) {
+      const errorMsg = `Error: ${getErrorMessage(error)}`
       this.events.onToolResult?.(
         { id: `cot-${Date.now()}`, name: action.name, arguments: args },
         errorMsg

@@ -318,6 +318,23 @@ export class LLMClient {
   }
 
   /**
+   * 使用当前 provider 生成文本（用于压缩等场景）
+   *
+   * 使用当前配置的 provider 和模型，而不是硬编码特定 provider
+   */
+  async generateTextForCompression(prompt: string, maxTokens: number = 500): Promise<string> {
+    const model = this.provider(this.modelId)
+
+    const result = await generateText({
+      model,
+      prompt,
+      maxTokens,
+    })
+
+    return result.text.trim()
+  }
+
+  /**
    * Abort any ongoing request
    */
   abort(): void {

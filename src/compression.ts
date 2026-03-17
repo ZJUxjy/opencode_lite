@@ -12,7 +12,6 @@
  */
 
 import type { Message } from "./types.js"
-import { generateText } from "ai"
 import { LLMClient } from "./llm.js"
 
 /**
@@ -330,6 +329,8 @@ Format the summary as bullet points. Be concise but comprehensive.`
 
   /**
    * 使用 LLM 生成摘要
+   *
+   * 使用 LLMClient 的当前 provider，而不是硬编码 Anthropic
    */
   private async generateLlmSummary(content: string, level: CompressionLevel): Promise<string> {
     const levelInstruction = level === "aggressive"
@@ -347,34 +348,10 @@ ${content}
 
 Summary:`
 
-    try {
-      // 创建一个简单的 Anthropic provider
-      const { createAnthropic } = await import("@ai-sdk/anthropic")
+    const maxTokens = level === "aggressive" ? 300 : level === "moderate" ? 500 : 800
 
-      const baseURL = process.env.ANTHROPIC_BASE_URL
-      const apiKey = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN
-      const modelId = process.env.ANTHROPIC_SMALL_FAST_MODEL ||
-        process.env.ANTHROPIC_MODEL ||
-        this.llm.getModelId()
-
-      const anthropicConfig: any = { ...(baseURL && { baseURL }) }
-      if (apiKey) {
-        anthropicConfig.apiKey = apiKey
-      }
-
-      const provider = createAnthropic(anthropicConfig)
-      const model = provider(modelId)
-
-      const result = await generateText({
-        model,
-        prompt,
-        maxTokens: level === "aggressive" ? 300 : level === "moderate" ? 500 : 800,
-      })
-
-      return result.text.trim()
-    } catch (error) {
-      throw error
-    }
+    // 使用 LLMClient 的当前 provider，而不是硬编码 Anthropic
+    return this.llm.generateTextForCompression(prompt, maxTokens)
   }
 
   /**

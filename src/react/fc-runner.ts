@@ -12,6 +12,7 @@ import { LLMClient } from "../llm.js"
 import { ToolRegistry } from "../tools/index.js"
 import { LoopDetectionService } from "../loopDetection.js"
 import { PolicyEngine, type PolicyDecision, type PolicyResult } from "../policy.js"
+import { getErrorMessage } from "../utils/error.js"
 
 /**
  * FC Runner 配置
@@ -23,6 +24,10 @@ export interface FCRunnerConfig {
   enableStreaming?: boolean
   /** 工作目录 */
   cwd?: string
+  /** 外部循环检测服务（用于状态共享） */
+  loopDetection?: LoopDetectionService
+  /** 外部策略引擎（用于状态共享） */
+  policyEngine?: PolicyEngine
 }
 
 /**
@@ -46,8 +51,9 @@ export class FCRunner implements Runner {
   ) {
     this.llm = llm
     this.tools = tools
-    this.loopDetection = new LoopDetectionService()
-    this.policyEngine = new PolicyEngine()
+    // 使用外部注入的实例（保持状态一致性），否则创建新实例
+    this.loopDetection = config.loopDetection ?? new LoopDetectionService()
+    this.policyEngine = config.policyEngine ?? new PolicyEngine()
     this.config = {
       maxIterations: 50,
       enableStreaming: true,
@@ -79,6 +85,8 @@ export class FCRunner implements Runner {
     tools: ToolDefinition[],
     systemPrompt: string
   ): Promise<string> {
+    // 创建副本以避免修改调用方的数组（避免副作用）
+    let workingMessages = [...messages]
     let iterations = 0
     const maxIterations = this.config.maxIterations || 50
 
@@ -92,7 +100,7 @@ export class FCRunner implements Runner {
       try {
         if (this.config.enableStreaming) {
           response = await this.llm.chatStream(
-            messages,
+            workingMessages,
             tools,
             {
               onTextDelta: (text) => this.events.onThought?.(text),
@@ -101,11 +109,12 @@ export class FCRunner implements Runner {
             systemPrompt
           )
         } else {
-          response = await this.llm.chat(messages, tools, systemPrompt)
+          response = await this.llm.chat(workingMessages, tools, systemPrompt)
         }
-      } catch (error: any) {
-        this.events.onResponse?.(`Error: ${error.message}`)
-        return `Error: ${error.message}`
+      } catch (error: unknown) {
+        const errorMessage = getErrorMessage(error)
+        this.events.onResponse?.(`Error: ${errorMessage}`)
+        return `Error: ${errorMessage}`
       }
 
       // 2. 循环检测：检查内容重复
@@ -128,8 +137,8 @@ export class FCRunner implements Runner {
         }
       }
 
-      // 4. 添加 assistant 消息
-      messages.push({
+      // 4. 添加 assistant 消息（修改副本而非原始数组）
+      workingMessages.push({
         role: "assistant",
         content: response.content,
         reasoning: response.reasoning,
@@ -145,8 +154,8 @@ export class FCRunner implements Runner {
       // 6. 执行工具
       const toolResults = await this.executeTools(response.toolCalls)
 
-      // 7. 添加工具结果消息
-      messages.push({
+      // 7. 添加工具结果消息（修改副本而非原始数组）
+      workingMessages.push({
         role: "user",
         content: "",
         toolResults,
@@ -206,13 +215,14 @@ export class FCRunner implements Runner {
         const content = await tool.execute(call.arguments, ctx)
         results.push({ toolCallId: call.id, content })
         this.events.onToolResult?.(call, content)
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const errorMessage = getErrorMessage(error)
         results.push({
           toolCallId: call.id,
-          content: `Error: ${error.message}`,
+          content: `Error: ${errorMessage}`,
           isError: true,
         })
-        this.events.onToolResult?.(call, `Error: ${error.message}`)
+        this.events.onToolResult?.(call, `Error: ${errorMessage}`)
       }
     }
 
