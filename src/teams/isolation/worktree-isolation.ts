@@ -45,18 +45,37 @@ export class WorktreeIsolation {
   }
 
   /**
-   * 批量创建 Worker Worktrees
+   * 批量创建 Worker Worktrees（事务性）
+   *
+   * 如果创建过程中某个 worktree 失败，会自动回滚已创建的所有 worktrees
    */
   async createWorkerWorktrees(count: number): Promise<WorktreeHandle[]> {
     const handles: WorktreeHandle[] = []
 
-    for (let i = 0; i < count; i++) {
-      const workerId = `worker-${i}`
-      const handle = await this.createWorkerWorktree(workerId)
-      handles.push(handle)
-    }
+    try {
+      for (let i = 0; i < count; i++) {
+        const workerId = `worker-${i}`
+        const handle = await this.createWorkerWorktree(workerId)
+        handles.push(handle)
+      }
 
-    return handles
+      return handles
+    } catch (error) {
+      // Rollback: cleanup all created worktrees on failure
+      console.warn(`Failed to create worktrees, rolling back ${handles.length} created worktrees...`)
+
+      await Promise.all(
+        handles.map(async (handle) => {
+          try {
+            await handle.cleanup()
+          } catch (cleanupError) {
+            console.warn(`Failed to cleanup worktree ${handle.workerId} during rollback:`, cleanupError)
+          }
+        })
+      )
+
+      throw error
+    }
   }
 
   /**
