@@ -93,8 +93,10 @@ lite-opencode config show [provider]
 **In-session tools:**
 
 ```
-show_config                    # Show current configuration
-switch_provider provider="openai"  # Switch provider for current session
+show_config                        # Show current configuration
+switch_provider provider="openai"  # Switch provider (auto-saves)
+switch_model model="gpt-4o"        # Switch model (auto-saves)
+list_models provider="openai"      # List available models
 ```
 
 **Configuration files:**
@@ -102,14 +104,14 @@ switch_provider provider="openai"  # Switch provider for current session
 - API keys stored securely in system keyring or encrypted file
 
 **Supported providers:**
-| Provider | Default Model |
-|----------|---------------|
-| Anthropic | claude-sonnet-4-6 |
-| OpenAI | gpt-4o |
-| Gemini | gemini-2.0-flash |
-| DeepSeek | deepseek-chat |
-| MiniMax | MiniMax-Text-01 |
-| Kimi | moonshot-v1-128k |
+| Provider | Default Model | Protocol |
+|----------|---------------|----------|
+| Anthropic | claude-sonnet-4-6 | anthropic |
+| OpenAI | gpt-4o | openai |
+| Gemini | gemini-2.0-flash | google |
+| DeepSeek | deepseek-chat | anthropic (compatible) |
+| MiniMax | MiniMax-Text-01 | anthropic (compatible) |
+| Kimi | moonshot-v1-128k | anthropic (compatible) |
 
 **Configuration priority:** CLI args > ProviderService > settings.json > env vars > defaults
 
