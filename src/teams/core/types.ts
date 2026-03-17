@@ -95,6 +95,11 @@ export const ThinkingBudgetSchema = z.object({
 // Budget Configuration
 // ============================================================================
 
+export interface TokenUsage {
+  input: number
+  output: number
+}
+
 export interface BudgetConfig {
   maxTokens: number
   maxCostUsd?: number

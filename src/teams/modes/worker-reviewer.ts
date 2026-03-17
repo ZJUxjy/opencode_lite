@@ -10,6 +10,7 @@
 import { BaseModeRunner, type TeamResult } from "./base.js"
 import type { TeamConfig, TeamState, TaskContract, WorkArtifact } from "../core/types.js"
 import type { ReviewArtifact } from "../core/contracts.js"
+import { createEmptyWorkArtifact } from "../core/contracts.js"
 
 export interface WorkerOutput {
   summary: string
@@ -91,10 +92,16 @@ export class WorkerReviewerRunner extends BaseModeRunner<string, WorkArtifact> {
 
     // Max iterations reached without approval
     this.state.status = "failed"
+
+    // Handle case where no artifact was produced
+    const finalArtifact = currentArtifact ?? createEmptyWorkArtifact(contract.taskId)
+
     return {
       status: "failed",
-      output: currentArtifact!,
-      error: `Max iterations (${this.config.maxIterations}) reached without approval`,
+      output: finalArtifact,
+      error: currentArtifact
+        ? `Max iterations (${this.config.maxIterations}) reached without approval`
+        : `No artifact produced after ${this.config.maxIterations} iterations`,
       stats: {
         durationMs: Date.now() - startTime,
         tokensUsed: this.state.tokensUsed,
