@@ -20,7 +20,12 @@ import { webSearchTool } from "./web-search.js"
 import { listTokensTool, setTokenTool, deleteTokenTool } from "./token.js"
 import { mcpStatusTool, mcpDiagnoseTool } from "./mcp-status.js"
 import { filterMessagesTool } from "./message-filter.js"
-import { showConfigTool, switchProviderTool } from "./provider-config.js"
+import {
+  showConfigTool,
+  switchProviderTool,
+  switchModelTool,
+  listModelsTool,
+} from "./provider-config.js"
 import type { MCPManager } from "../mcp/manager.js"
 import { createMCPToolWrapper } from "../mcp/tools.js"
 
@@ -83,6 +88,8 @@ export class ToolRegistry {
       filterMessagesTool,
       showConfigTool,
       switchProviderTool,
+      switchModelTool,
+      listModelsTool,
     ]
 
     // 如果是 subagent，过滤掉 subagent 工具以防止递归
@@ -194,3 +201,4 @@ export * from "./enter-plan-mode.js"
 export * from "./exit-plan-mode.js"
 export * from "./task.js"
 export * from "./skill.js"
+export * from "./provider-config.js"
