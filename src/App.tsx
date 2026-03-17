@@ -375,6 +375,16 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
     setActiveDialog(null)
   }, [])
 
+  // Show model selection dialog
+  const showModelDialog = useCallback(() => {
+    setActiveDialog("models")
+  }, [])
+
+  // Show provider selection dialog
+  const showProviderDialog = useCallback(() => {
+    setActiveDialog("provider")
+  }, [])
+
   // 显示会话列表
   const handleShowSessionList = useCallback(() => {
     loadSessions()
@@ -616,8 +626,10 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       showSessionList: handleShowSessionList,
       toggleDumpPrompt: handleToggleDump,
       getDumpStatus: handleGetDumpStatus,
+      showModelDialog,
+      showProviderDialog,
     }),
-    [agent, setMessages, handleExit, updateContextUsage, handleShowSessionList, handleToggleDump, handleGetDumpStatus]
+    [agent, setMessages, handleExit, updateContextUsage, handleShowSessionList, handleToggleDump, handleGetDumpStatus, showModelDialog, showProviderDialog]
   )
 
   // =========================================================================

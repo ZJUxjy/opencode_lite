@@ -68,6 +68,8 @@ const helpCommand: Command = {
   /yolo         - Toggle YOLO mode (auto-approve all)
   /sessions, /resume  - Show session list and switch sessions
   /skills       - List and manage skills
+  /models       - Switch model
+  /provider     - Switch provider
   /dump         - Toggle prompt dump for debugging
 ${mcpText}
 Current status:
@@ -421,6 +423,39 @@ To configure MCP servers, add to your settings.json:
 }
 
 /**
+ * Models command - opens model selection dialog
+ */
+const modelsCommand: Command = {
+  name: "/models",
+  description: "Open model selection dialog",
+  handler: (_args: string, ctx: CommandContext) => {
+    if (ctx.showModelDialog) {
+      ctx.showModelDialog()
+    } else {
+      const message = createSystemMessage("Model selection not available in this context")
+      ctx.setMessages((prev) => [...prev, message])
+    }
+  },
+}
+
+/**
+ * Provider command - opens provider selection dialog
+ */
+const providerCommand: Command = {
+  name: "/provider",
+  aliases: ["/providers"],
+  description: "Open provider selection dialog",
+  handler: (_args: string, ctx: CommandContext) => {
+    if (ctx.showProviderDialog) {
+      ctx.showProviderDialog()
+    } else {
+      const message = createSystemMessage("Provider selection not available in this context")
+      ctx.setMessages((prev) => [...prev, message])
+    }
+  },
+}
+
+/**
  * Dump command - toggles prompt dump for debugging
  */
 const dumpCommand: Command = {
@@ -464,4 +499,6 @@ export const builtinCommands: Command[] = [
   skillsCommand,
   mcpCommand,
   dumpCommand,
+  modelsCommand,
+  providerCommand,
 ]

@@ -14,6 +14,8 @@ export interface CommandContext {
   showSessionList?: () => void
   toggleDumpPrompt?: () => void
   getDumpStatus?: () => { enabled: boolean; path: string }
+  showModelDialog?: () => void
+  showProviderDialog?: () => void
 }
 
 /**
