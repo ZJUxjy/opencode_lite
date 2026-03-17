@@ -329,30 +329,46 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   }, [])
 
   // Handle model selection
-  const handleModelSelect = useCallback((provider: string, model: string) => {
+  const handleModelSelect = useCallback(async (provider: string, model: string) => {
     setCurrentProvider(provider)
     setCurrentModel(model)
     setActiveDialog(null)
+
+    // Update agent's LLM client
+    try {
+      await agent.switchProvider(provider)
+      agent.switchModel(model)
+    } catch (error) {
+      console.error("Failed to switch model:", error)
+    }
+
     // Add notification message
-    const message = createSystemMessage(`Switched to ${provider}/${model}`)
+    const providerInfo = getBuiltinProvider(provider as BuiltinProvider)
+    const message = createSystemMessage(`✓ Switched to ${providerInfo?.name ?? provider} / ${model}`)
     setMessages(prev => [...prev, message])
-    // TODO: Also update agent's LLM client
-  }, [])
+  }, [agent])
 
   // Handle provider selection
-  const handleProviderSelect = useCallback((provider: string) => {
-    setCurrentProvider(provider)
+  const handleProviderSelect = useCallback(async (provider: string) => {
     // Get default model for this provider
     const providerInfo = getBuiltinProvider(provider as BuiltinProvider)
-    if (providerInfo) {
-      setCurrentModel(providerInfo.defaultModel)
-    }
+    const model = providerInfo?.defaultModel ?? "unknown"
+
+    setCurrentProvider(provider)
+    setCurrentModel(model)
     setActiveDialog(null)
+
+    // Update agent's LLM client
+    try {
+      await agent.switchProvider(provider)
+    } catch (error) {
+      console.error("Failed to switch provider:", error)
+    }
+
     // Add notification message
-    const message = createSystemMessage(`Switched to provider: ${provider}`)
+    const message = createSystemMessage(`✓ Switched to ${providerInfo?.name ?? provider} / ${model}`)
     setMessages(prev => [...prev, message])
-    // TODO: Also update agent's LLM client
-  }, [])
+  }, [agent])
 
   // Handle dialog cancel
   const handleDialogCancel = useCallback(() => {
@@ -841,8 +857,9 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
 
   // 获取当前模型显示名称
   const modelDisplayName = useMemo(() => {
-    return agent.getModelDisplayName()
-  }, [agent])
+    const providerInfo = getBuiltinProvider(currentProvider as BuiltinProvider)
+    return `${providerInfo?.name ?? currentProvider}/${currentModel}`
+  }, [currentProvider, currentModel])
 
   // =========================================================================
   // 渲染
