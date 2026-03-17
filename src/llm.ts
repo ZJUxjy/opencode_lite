@@ -251,6 +251,58 @@ export class LLMClient {
   }
 
   /**
+   * Switch to a different provider configuration
+   * @param config - New provider configuration
+   */
+  switchProvider(config: LLMConfig): void {
+    if (config.protocol) {
+      this.protocol = config.protocol
+    }
+    if (config.model) {
+      this.modelId = config.model
+      this.originalModelId = config.model
+    }
+    if (config.baseURL !== undefined) {
+      this.baseURL = config.baseURL
+    }
+    if (config.apiKey !== undefined) {
+      this.apiKey = config.apiKey
+    }
+
+    // Reinitialize provider
+    this.initProvider({
+      model: this.modelId,
+      baseURL: this.baseURL,
+      apiKey: this.apiKey,
+      protocol: this.protocol,
+    })
+
+    if (process.env.DEBUG_LLM === "1") {
+      console.log(`[LLM] Switched provider: protocol=${this.protocol}, model=${this.modelId}`)
+    }
+  }
+
+  /**
+   * Switch to a different model within current provider
+   */
+  switchModel(modelId: string): void {
+    this.modelId = modelId
+    this.originalModelId = modelId
+    this.model = this.provider(modelId)
+
+    if (process.env.DEBUG_LLM === "1") {
+      console.log(`[LLM] Switched model: ${modelId}`)
+    }
+  }
+
+  /**
+   * Get current protocol
+   */
+  getProtocol(): ProviderProtocol {
+    return this.protocol
+  }
+
+  /**
    * 获取当前模型显示名称
    */
   getModelDisplayName(): string {
