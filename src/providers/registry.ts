@@ -1,6 +1,6 @@
 // src/providers/registry.ts
 
-import type { BuiltinProvider } from "./types.js"
+import type { BuiltinProvider, ProviderProtocol } from "./types.js"
 
 /**
  * Built-in provider information
@@ -80,4 +80,24 @@ export function getBuiltinProvider(id: BuiltinProvider): BuiltinProviderInfo | u
  */
 export function isBuiltinProvider(id: string): id is BuiltinProvider {
   return BUILTIN_PROVIDERS.some((p) => p.id === id)
+}
+
+/**
+ * Protocol mapping for each provider
+ * Most Chinese providers use Anthropic-compatible API
+ */
+export const PROTOCOL_MAP: Record<BuiltinProvider, ProviderProtocol> = {
+  anthropic: "anthropic",
+  openai: "openai",
+  gemini: "google",
+  deepseek: "anthropic",
+  minimax: "anthropic",
+  kimi: "anthropic",
+}
+
+/**
+ * Get the protocol for a provider
+ */
+export function getProviderProtocol(id: BuiltinProvider): ProviderProtocol {
+  return PROTOCOL_MAP[id] ?? "anthropic"
 }
