@@ -146,15 +146,17 @@ export class LLMClient {
         break
 
       default: // anthropic
-        // Handle MiniMax special case
-        this.isMiniMax = this.baseURL?.includes("minimax") || false
+        // Determine auth scheme by token format
+        // Anthropic tokens: sk-ant-xxx → use x-api-key header (SDK default)
+        // Other tokens (MiniMax, DeepSeek, etc.) → use Bearer token
+        const useBearerAuth = this.apiKey && !this.apiKey.startsWith("sk-ant-")
         const anthropicConfig: any = {
           ...(this.baseURL && { baseURL: this.baseURL }),
         }
 
         if (this.apiKey) {
           anthropicConfig.apiKey = this.apiKey
-          if (this.isMiniMax) {
+          if (useBearerAuth) {
             anthropicConfig.headers = {
               Authorization: `Bearer ${this.apiKey}`,
             }
