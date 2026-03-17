@@ -1,5 +1,8 @@
 import type { Message, ToolCall, Context, ToolDefinition } from "./types.js"
 import { LLMClient, type LLMConfig } from "./llm.js"
+import { getProviderProtocol, getBuiltinProvider } from "./providers/registry.js"
+import type { BuiltinProvider, ProviderProtocol } from "./providers/types.js"
+import { ProviderConfigService } from "./providers/service.js"
 import { ToolRegistry } from "./tools/index.js"
 import { MessageStore } from "./store.js"
 import { LoopDetectionService, type LoopDetectionConfig } from "./loopDetection.js"
@@ -78,6 +81,7 @@ export class Agent {
   private compressionThreshold: number
   private strategy: Strategy
   private events: AgentEvents = {}
+  private providerService: ProviderConfigService
 
   constructor(sessionId: string, config: AgentConfig) {
     this.llm = new LLMClient(config.llm)
@@ -99,6 +103,9 @@ export class Agent {
     this.enableStream = config.enableStream ?? true
     this.compressionThreshold = config.compressionThreshold ?? 0.92
     this.strategy = config.strategy || "auto"
+
+    // 初始化 ProviderConfigService
+    this.providerService = new ProviderConfigService()
 
     // 初始化 MCP Manager
     if (config.mcp?.servers && config.mcp.servers.length > 0) {
@@ -770,5 +777,46 @@ export class Agent {
     }
 
     registry.enableHotReload()
+  }
+
+  /**
+   * Switch to a different provider
+   * @param providerId - Provider ID to switch to
+   * @returns Result message
+   */
+  async switchProvider(providerId: string): Promise<{ success: boolean; message: string }> {
+    try {
+      // Get provider config
+      const config = await this.providerService.getLLMConfig(providerId)
+
+      // Get protocol for this provider
+      const protocol = getProviderProtocol(providerId as BuiltinProvider)
+
+      // Switch LLM client
+      this.llm.switchProvider({
+        model: config.model,
+        baseURL: config.baseURL,
+        apiKey: config.apiKey,
+        protocol,
+      })
+
+      // Save as default
+      this.providerService.setDefault(providerId)
+      this.providerService.save()
+
+      const providerInfo = getBuiltinProvider(providerId as BuiltinProvider)
+      return {
+        success: true,
+        message: `Switched to **${providerInfo?.name ?? providerId}**
+- Model: \`${config.model}\`
+- Protocol: ${protocol}
+- Saved as default.`,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to switch provider: ${error instanceof Error ? error.message : String(error)}`,
+      }
+    }
   }
 }
