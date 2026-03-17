@@ -8,25 +8,12 @@
  */
 
 import { BaseModeRunner, type TeamResult } from "./base.js"
-import type { TeamConfig, TeamState, TaskContract, WorkArtifact } from "../core/types.js"
+import type { TeamConfig, TeamState, TaskContract, WorkArtifact, WorkerOutput, ReviewerOutput } from "../core/types.js"
 import type { ReviewArtifact } from "../core/contracts.js"
 import { createEmptyWorkArtifact } from "../core/contracts.js"
 
-export interface WorkerOutput {
-  summary: string
-  changedFiles: string[]
-  patchRef: string
-  testResults: Array<{ command: string; passed: boolean }>
-  risks: string[]
-  assumptions: string[]
-}
-
-export interface ReviewerOutput {
-  status: "approved" | "changes_requested"
-  severity: "P0" | "P1" | "P2" | "P3"
-  mustFix: string[]
-  suggestions: string[]
-}
+// Re-export types for backward compatibility
+export type { WorkerOutput, ReviewerOutput } from "../core/types.js"
 
 export interface WorkerReviewerCallbacks {
   askWorker: (objective: string, contract: TaskContract) => Promise<WorkerOutput>

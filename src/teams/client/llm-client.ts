@@ -7,9 +7,13 @@
 
 import { LLMClient } from "../../llm.js"
 import type { TaskContract, WorkArtifact, ReviewArtifact } from "../core/contracts.js"
-import type { CostController } from "../execution/cost-controller.js"
+import type { CostController, WorkerOutput, ReviewerOutput } from "../core/types.js"
+import { WorkerOutputSchema, ReviewerOutputSchema } from "../core/types.js"
 import type { SharedBlackboard } from "../core/types.js"
 import { getErrorMessage } from "../../utils/error.js"
+
+// Re-export types for backward compatibility
+export type { WorkerOutput, ReviewerOutput } from "../core/types.js"
 
 // ============================================================================
 // Agent LLM Config
@@ -21,32 +25,6 @@ export interface AgentLLMConfig {
   temperature?: number
   /** Callback for token usage tracking */
   onTokenUsage?: (usage: { inputTokens: number; outputTokens: number }) => void
-}
-
-// ============================================================================
-// Structured Output Types
-// ============================================================================
-
-export interface WorkerOutput {
-  summary: string
-  changedFiles: string[]
-  patchRef: string
-  testResults: { command: string; passed: boolean; output?: string }[]
-  risks: string[]
-  assumptions: string[]
-  toolCalls?: Array<{
-    tool: string
-    params: Record<string, unknown>
-    result?: string
-  }>
-}
-
-export interface ReviewerOutput {
-  status: "approved" | "changes_requested"
-  severity: "P0" | "P1" | "P2" | "P3"
-  mustFix: string[]
-  suggestions: string[]
-  reviewNotes?: string
 }
 
 // ============================================================================
@@ -377,18 +355,21 @@ Important:
 
       const parsed = JSON.parse(jsonStr.trim())
 
-      // Validate required fields
-      if (!parsed.summary) {
-        throw new Error("Missing required field: summary")
+      // Use Zod schema for validation
+      const result = WorkerOutputSchema.safeParse(parsed)
+
+      if (result.success) {
+        return result.data
       }
 
+      // Fallback for validation errors - return with error info
       return {
-        summary: parsed.summary,
-        changedFiles: parsed.changedFiles || [],
-        patchRef: parsed.patchRef || "",
-        testResults: parsed.testResults || [],
-        risks: parsed.risks || [],
-        assumptions: parsed.assumptions || [],
+        summary: `Worker output validation failed: ${result.error.errors.map((e) => e.message).join(", ")}. Raw: ${content.slice(0, 200)}`,
+        changedFiles: [],
+        patchRef: "",
+        testResults: [],
+        risks: ["Output validation failed - manual review required"],
+        assumptions: [],
       }
     } catch (error) {
       // Fallback: create basic output from raw content
@@ -411,17 +392,21 @@ Important:
 
       const parsed = JSON.parse(jsonStr.trim())
 
-      // Validate required fields
-      if (!parsed.status || !parsed.severity) {
-        throw new Error("Missing required fields: status and/or severity")
+      // Use Zod schema for validation
+      const result = ReviewerOutputSchema.safeParse(parsed)
+
+      if (result.success) {
+        return result.data
       }
 
+      // Fallback for validation errors
       return {
-        status: parsed.status,
-        severity: parsed.severity,
-        mustFix: parsed.mustFix || [],
-        suggestions: parsed.suggestions || [],
-        reviewNotes: parsed.reviewNotes,
+        status: "changes_requested",
+        severity: "P1",
+        mustFix: [
+          `Review output validation failed: ${result.error.errors.map((e) => e.message).join(", ")}`,
+        ],
+        suggestions: ["Please ensure response matches expected format"],
       }
     } catch (error) {
       // Fallback: request changes with parsing error
