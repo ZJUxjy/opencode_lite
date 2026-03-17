@@ -225,7 +225,7 @@ export function ConfigWizard({ onComplete }: WizardProps) {
           {modelItems.length > 0 ? (
             <SelectInput
               items={modelItems}
-              onSelect={(item) => {
+              onSelect={(item: { value: string }) => {
                 setModel(item.value)
                 setStep("set-default")
               }}
