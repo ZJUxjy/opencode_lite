@@ -93,7 +93,6 @@ export class LLMClient {
   private timeout: number
   private baseURL: string | undefined
   private apiKey: string | undefined
-  private isMiniMax = false
   private protocol: ProviderProtocol
   /** Current AbortController for canceling ongoing requests */
   private currentAbortController: AbortController | null = null
