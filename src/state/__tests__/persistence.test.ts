@@ -12,7 +12,9 @@ describe("StatePersistence", () => {
   let state: StatePersistence
 
   beforeEach(() => {
-    tempDir = mkdirSync(join(tmpdir(), `state-test-${Date.now()}`), { recursive: true })
+    const tempPath = join(tmpdir(), `state-test-${Date.now()}`)
+    mkdirSync(tempPath, { recursive: true })
+    tempDir = tempPath
     statePath = join(tempDir, "state.json")
     state = new StatePersistence(statePath)
   })
