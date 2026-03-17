@@ -1,5 +1,7 @@
 import { generateText, streamText, CoreMessage, Tool } from "ai"
 import { createAnthropic } from "@ai-sdk/anthropic"
+import { createOpenAI } from "@ai-sdk/openai"
+import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import type { Message, ToolCall } from "./types.js"
 import type { ProviderProtocol } from "./providers/types.js"
 
@@ -77,62 +79,92 @@ export interface ModelRoutingConfig {
   enabled?: boolean
 }
 
+// Provider and model types
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ProviderInstance = any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ModelInstance = any
+
 export class LLMClient {
-  private model
-  private provider
+  private model!: ModelInstance
+  private provider!: ProviderInstance
   private modelId: string
   private originalModelId: string  // 保存原始模型 ID
   private timeout: number
   private baseURL: string | undefined
   private apiKey: string | undefined
-  private isMiniMax: boolean
+  private isMiniMax = false
+  private protocol: ProviderProtocol
   /** Current AbortController for canceling ongoing requests */
   private currentAbortController: AbortController | null = null
   /** Model routing configuration */
   private modelRouting: ModelRoutingConfig
 
   constructor(config: LLMConfig = {}) {
-    // 优先级: 传入配置 > 环境变量 > 默认值
+    // Priority: passed config > env vars > defaults
+    this.protocol = config.protocol ?? "anthropic"
     this.baseURL = config.baseURL || process.env.ANTHROPIC_BASE_URL
     this.apiKey = config.apiKey || process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN
     this.modelId = config.model || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514"
     this.originalModelId = this.modelId
     this.timeout = config.timeout || parseInt(process.env.API_TIMEOUT_MS || "120000", 10)
 
-    // 模型路由配置
+    // Model routing configuration
     this.modelRouting = {
       planModel: process.env.PLAN_MODE_MODEL || "claude-opus-4",
       buildModel: this.modelId,
-      enabled: process.env.ENABLE_MODEL_ROUTING !== "false",  // 默认启用
+      enabled: process.env.ENABLE_MODEL_ROUTING !== "false",
     }
 
-    // 创建 Anthropic 客户端，支持自定义 base URL
-    // 注意: MiniMax 等 API 需要使用 Authorization: Bearer 格式
-    this.isMiniMax = this.baseURL?.includes("minimax") || false
-    const anthropicConfig: any = {
-      ...(this.baseURL && { baseURL: this.baseURL }),
-    }
-
-    if (this.apiKey) {
-      anthropicConfig.apiKey = this.apiKey
-      // MiniMax 需要 Authorization: Bearer 格式
-      if (this.isMiniMax) {
-        anthropicConfig.headers = {
-          Authorization: `Bearer ${this.apiKey}`,
-        }
-      }
-    }
-
-    this.provider = createAnthropic(anthropicConfig)
-
-    this.model = this.provider(this.modelId)
+    // Initialize provider based on protocol
+    this.initProvider(config)
 
     if (process.env.DEBUG_LLM === "1") {
-      console.log(`[LLM] Initialized with model: ${this.modelId}, timeout: ${this.timeout}ms`)
+      console.log(`[LLM] Initialized with model: ${this.modelId}, protocol: ${this.protocol}, timeout: ${this.timeout}ms`)
       if (this.modelRouting.enabled) {
         console.log(`[LLM] Model routing enabled: Plan=${this.modelRouting.planModel}, Build=${this.modelRouting.buildModel}`)
       }
     }
+  }
+
+  /**
+   * Initialize the AI provider based on protocol
+   */
+  private initProvider(config: LLMConfig): void {
+    switch (this.protocol) {
+      case "openai":
+        this.provider = createOpenAI({
+          ...(this.baseURL && { baseURL: this.baseURL }),
+          ...(this.apiKey && { apiKey: this.apiKey }),
+        })
+        break
+
+      case "google":
+        this.provider = createGoogleGenerativeAI({
+          ...(this.apiKey && { apiKey: this.apiKey }),
+        })
+        break
+
+      default: // anthropic
+        // Handle MiniMax special case
+        this.isMiniMax = this.baseURL?.includes("minimax") || false
+        const anthropicConfig: any = {
+          ...(this.baseURL && { baseURL: this.baseURL }),
+        }
+
+        if (this.apiKey) {
+          anthropicConfig.apiKey = this.apiKey
+          if (this.isMiniMax) {
+            anthropicConfig.headers = {
+              Authorization: `Bearer ${this.apiKey}`,
+            }
+          }
+        }
+
+        this.provider = createAnthropic(anthropicConfig)
+    }
+
+    this.model = this.provider(this.modelId)
   }
 
   /**
