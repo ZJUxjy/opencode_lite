@@ -5,48 +5,26 @@
  * Wraps the main LLMClient and provides agent-specific functionality.
  */
 
-import { generateText } from "ai"
-import { createAnthropic } from "@ai-sdk/anthropic"
+import { LLMClient } from "../../llm.js"
 import type { TaskContract, WorkArtifact, ReviewArtifact } from "../core/contracts.js"
-import type { CostController } from "../execution/cost-controller.js"
+import type { CostController, WorkerOutput, ReviewerOutput } from "../core/types.js"
+import { WorkerOutputSchema, ReviewerOutputSchema } from "../core/types.js"
 import type { SharedBlackboard } from "../core/types.js"
+import { getErrorMessage } from "../../utils/error.js"
+
+// Re-export types for backward compatibility
+export type { WorkerOutput, ReviewerOutput } from "../core/types.js"
 
 // ============================================================================
 // Agent LLM Config
 // ============================================================================
 
 export interface AgentLLMConfig {
-  model: string
-  baseURL?: string
-  apiKey?: string
-  timeout?: number
+  /** Main LLMClient instance (supports multiple providers) */
+  llmClient: LLMClient
   temperature?: number
-}
-
-// ============================================================================
-// Structured Output Types
-// ============================================================================
-
-export interface WorkerOutput {
-  summary: string
-  changedFiles: string[]
-  patchRef: string
-  testResults: { command: string; passed: boolean; output?: string }[]
-  risks: string[]
-  assumptions: string[]
-  toolCalls?: Array<{
-    tool: string
-    params: Record<string, unknown>
-    result?: string
-  }>
-}
-
-export interface ReviewerOutput {
-  status: "approved" | "changes_requested"
-  severity: "P0" | "P1" | "P2" | "P3"
-  mustFix: string[]
-  suggestions: string[]
-  reviewNotes?: string
+  /** Callback for token usage tracking */
+  onTokenUsage?: (usage: { inputTokens: number; outputTokens: number }) => void
 }
 
 // ============================================================================
@@ -54,28 +32,16 @@ export interface ReviewerOutput {
 // ============================================================================
 
 export class AgentLLMClient {
-  private model: string
-  private provider: ReturnType<typeof createAnthropic>
-  private timeout: number
+  private llmClient: LLMClient
   private temperature: number
   private costController?: CostController
   private blackboard?: SharedBlackboard
+  private onTokenUsage?: (usage: { inputTokens: number; outputTokens: number }) => void
 
   constructor(config: AgentLLMConfig) {
-    this.model = config.model
-    this.timeout = config.timeout || 120000
+    this.llmClient = config.llmClient
     this.temperature = config.temperature ?? 0.2
-
-    // Create provider
-    const anthropicConfig: {
-      baseURL?: string
-      apiKey?: string
-    } = {
-      ...(config.baseURL && { baseURL: config.baseURL }),
-      ...(config.apiKey && { apiKey: config.apiKey }),
-    }
-
-    this.provider = createAnthropic(anthropicConfig)
+    this.onTokenUsage = config.onTokenUsage
   }
 
   /**
@@ -105,7 +71,7 @@ export class AgentLLMClient {
     this.postMessage("worker", "started", { iteration, taskId: taskContract.taskId })
 
     try {
-      const result = await this.callLLM(prompt, this.model)
+      const result = await this.callLLMWithRetry(prompt)
 
       // Parse structured output
       const output = this.parseWorkerOutput(result.content)
@@ -115,8 +81,13 @@ export class AgentLLMClient {
         this.costController.recordUsage(
           result.usage.inputTokens,
           result.usage.outputTokens,
-          this.model
+          this.llmClient.getModelId()
         )
+      }
+
+      // Notify token usage callback
+      if (this.onTokenUsage && result.usage) {
+        this.onTokenUsage(result.usage)
       }
 
       const artifact: WorkArtifact = {
@@ -133,7 +104,7 @@ export class AgentLLMClient {
 
       return artifact
     } catch (error) {
-      this.postMessage("worker", "failed", { error: String(error), iteration })
+      this.postMessage("worker", "failed", { error: getErrorMessage(error), iteration })
       throw error
     }
   }
@@ -150,7 +121,7 @@ export class AgentLLMClient {
     this.postMessage("reviewer", "started", { taskId: workArtifact.taskId })
 
     try {
-      const result = await this.callLLM(prompt, this.model)
+      const result = await this.callLLMWithRetry(prompt)
 
       // Parse structured output
       const output = this.parseReviewerOutput(result.content)
@@ -160,8 +131,13 @@ export class AgentLLMClient {
         this.costController.recordUsage(
           result.usage.inputTokens,
           result.usage.outputTokens,
-          this.model
+          this.llmClient.getModelId()
         )
+      }
+
+      // Notify token usage callback
+      if (this.onTokenUsage && result.usage) {
+        this.onTokenUsage(result.usage)
       }
 
       const review: ReviewArtifact = {
@@ -175,7 +151,7 @@ export class AgentLLMClient {
 
       return review
     } catch (error) {
-      this.postMessage("reviewer", "failed", { error: String(error), taskId: workArtifact.taskId })
+      this.postMessage("reviewer", "failed", { error: getErrorMessage(error), taskId: workArtifact.taskId })
       throw error
     }
   }
@@ -184,39 +160,58 @@ export class AgentLLMClient {
   // Private Methods
   // ============================================================================
 
-  private async callLLM(
+  /**
+   * Call LLM with retry mechanism
+   */
+  private async callLLMWithRetry(
     prompt: string,
-    model: string
+    maxRetries: number = 3
   ): Promise<{ content: string; usage?: { inputTokens: number; outputTokens: number } }> {
-    const abortController = new AbortController()
-    const timeoutId = setTimeout(() => abortController.abort(), this.timeout)
+    let lastError: Error | null = null
 
-    try {
-      const result = await generateText({
-        model: this.provider(model),
-        messages: [{ role: "user", content: prompt }],
-        temperature: this.temperature,
-        maxTokens: 16000,
-        abortSignal: abortController.signal,
-      })
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        return await this.callLLM(prompt)
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(getErrorMessage(error))
 
-      clearTimeout(timeoutId)
+        // Don't retry on non-retryable errors
+        if (this.isNonRetryableError(error)) {
+          throw error
+        }
 
-      return {
-        content: result.text,
-        usage: {
-          inputTokens: result.usage?.promptTokens || 0,
-          outputTokens: result.usage?.completionTokens || 0,
-        },
+        // Exponential backoff
+        if (attempt < maxRetries - 1) {
+          const delay = Math.pow(2, attempt) * 1000 // 1s, 2s, 4s
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
       }
-    } catch (error: unknown) {
-      clearTimeout(timeoutId)
+    }
 
-      if ((error as Error).name === "AbortError") {
-        throw new Error(`Request timed out after ${this.timeout / 1000} seconds`)
-      }
+    throw lastError
+  }
 
-      throw error
+  /**
+   * Check if error should not be retried
+   */
+  private isNonRetryableError(error: unknown): boolean {
+    const message = getErrorMessage(error)
+    return message.includes("401") || message.includes("403") || message.includes("timed out")
+  }
+
+  /**
+   * Call LLM using the main LLMClient's generateTextForCompression method
+   * which supports multiple providers
+   */
+  private async callLLM(
+    prompt: string
+  ): Promise<{ content: string; usage?: { inputTokens: number; outputTokens: number } }> {
+    // Use LLMClient's method that works with any configured provider
+    const content = await this.llmClient.generateTextForCompression(prompt, 16000)
+
+    return {
+      content,
+      usage: undefined, // generateTextForCompression doesn't return usage
     }
   }
 
@@ -360,23 +355,26 @@ Important:
 
       const parsed = JSON.parse(jsonStr.trim())
 
-      // Validate required fields
-      if (!parsed.summary) {
-        throw new Error("Missing required field: summary")
+      // Use Zod schema for validation
+      const result = WorkerOutputSchema.safeParse(parsed)
+
+      if (result.success) {
+        return result.data
       }
 
+      // Fallback for validation errors - return with error info
       return {
-        summary: parsed.summary,
-        changedFiles: parsed.changedFiles || [],
-        patchRef: parsed.patchRef || "",
-        testResults: parsed.testResults || [],
-        risks: parsed.risks || [],
-        assumptions: parsed.assumptions || [],
+        summary: `Worker output validation failed: ${result.error.errors.map((e) => e.message).join(", ")}. Raw: ${content.slice(0, 200)}`,
+        changedFiles: [],
+        patchRef: "",
+        testResults: [],
+        risks: ["Output validation failed - manual review required"],
+        assumptions: [],
       }
     } catch (error) {
       // Fallback: create basic output from raw content
       return {
-        summary: `Worker output parsing failed: ${error instanceof Error ? error.message : String(error)}. Raw content: ${content.slice(0, 500)}`,
+        summary: `Worker output parsing failed: ${getErrorMessage(error)}. Raw content: ${content.slice(0, 500)}`,
         changedFiles: [],
         patchRef: "",
         testResults: [],
@@ -394,17 +392,21 @@ Important:
 
       const parsed = JSON.parse(jsonStr.trim())
 
-      // Validate required fields
-      if (!parsed.status || !parsed.severity) {
-        throw new Error("Missing required fields: status and/or severity")
+      // Use Zod schema for validation
+      const result = ReviewerOutputSchema.safeParse(parsed)
+
+      if (result.success) {
+        return result.data
       }
 
+      // Fallback for validation errors
       return {
-        status: parsed.status,
-        severity: parsed.severity,
-        mustFix: parsed.mustFix || [],
-        suggestions: parsed.suggestions || [],
-        reviewNotes: parsed.reviewNotes,
+        status: "changes_requested",
+        severity: "P1",
+        mustFix: [
+          `Review output validation failed: ${result.error.errors.map((e) => e.message).join(", ")}`,
+        ],
+        suggestions: ["Please ensure response matches expected format"],
       }
     } catch (error) {
       // Fallback: request changes with parsing error
@@ -412,7 +414,7 @@ Important:
         status: "changes_requested",
         severity: "P1",
         mustFix: [
-          `Review output parsing failed: ${error instanceof Error ? error.message : String(error)}. Raw content: ${content.slice(0, 500)}`,
+          `Review output parsing failed: ${getErrorMessage(error)}. Raw content: ${content.slice(0, 500)}`,
         ],
         suggestions: ["Please ensure response is valid JSON"],
       }

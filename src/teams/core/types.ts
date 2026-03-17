@@ -95,6 +95,11 @@ export const ThinkingBudgetSchema = z.object({
 // Budget Configuration
 // ============================================================================
 
+export interface TokenUsage {
+  input: number
+  output: number
+}
+
 export interface BudgetConfig {
   maxTokens: number
   maxCostUsd?: number
@@ -724,3 +729,70 @@ export interface ModeRunner {
   ): Promise<unknown>
   cancel(): void
 }
+
+// ============================================================================
+// Worker and Reviewer Output Types (Unified)
+// ============================================================================
+
+/**
+ * WorkerOutput represents the parsed output from a worker agent
+ * Used for structured communication between agents
+ */
+export interface WorkerOutput {
+  summary: string
+  changedFiles: string[]
+  patchRef: string
+  testResults: Array<{ command: string; passed: boolean; output?: string }>
+  risks: string[]
+  assumptions: string[]
+  toolCalls?: Array<{
+    tool: string
+    params: Record<string, unknown>
+    result?: string
+  }>
+}
+
+/**
+ * ReviewerOutput represents the parsed output from a reviewer agent
+ * Used for structured communication between agents
+ */
+export interface ReviewerOutput {
+  status: "approved" | "changes_requested"
+  severity: "P0" | "P1" | "P2" | "P3"
+  mustFix: string[]
+  suggestions: string[]
+  reviewNotes?: string
+}
+
+// Zod schemas for validation
+export const TestResultOutputSchema = z.object({
+  command: z.string(),
+  passed: z.boolean(),
+  output: z.string().optional(),
+})
+
+export const WorkerOutputSchema = z.object({
+  summary: z.string(),
+  changedFiles: z.array(z.string()).optional().default([]),
+  patchRef: z.string().optional().default(""),
+  testResults: z.array(TestResultOutputSchema).optional().default([]),
+  risks: z.array(z.string()).optional().default([]),
+  assumptions: z.array(z.string()).optional().default([]),
+  toolCalls: z
+    .array(
+      z.object({
+        tool: z.string(),
+        params: z.record(z.unknown()),
+        result: z.string().optional(),
+      })
+    )
+    .optional(),
+})
+
+export const ReviewerOutputSchema = z.object({
+  status: z.enum(["approved", "changes_requested"]),
+  severity: z.enum(["P0", "P1", "P2", "P3"]),
+  mustFix: z.array(z.string()).optional().default([]),
+  suggestions: z.array(z.string()).optional().default([]),
+  reviewNotes: z.string().optional(),
+})

@@ -8,24 +8,12 @@
  */
 
 import { BaseModeRunner, type TeamResult } from "./base.js"
-import type { TeamConfig, TeamState, TaskContract, WorkArtifact } from "../core/types.js"
+import type { TeamConfig, TeamState, TaskContract, WorkArtifact, WorkerOutput, ReviewerOutput } from "../core/types.js"
 import type { ReviewArtifact } from "../core/contracts.js"
+import { createEmptyWorkArtifact } from "../core/contracts.js"
 
-export interface WorkerOutput {
-  summary: string
-  changedFiles: string[]
-  patchRef: string
-  testResults: Array<{ command: string; passed: boolean }>
-  risks: string[]
-  assumptions: string[]
-}
-
-export interface ReviewerOutput {
-  status: "approved" | "changes_requested"
-  severity: "P0" | "P1" | "P2" | "P3"
-  mustFix: string[]
-  suggestions: string[]
-}
+// Re-export types for backward compatibility
+export type { WorkerOutput, ReviewerOutput } from "../core/types.js"
 
 export interface WorkerReviewerCallbacks {
   askWorker: (objective: string, contract: TaskContract) => Promise<WorkerOutput>
@@ -91,10 +79,16 @@ export class WorkerReviewerRunner extends BaseModeRunner<string, WorkArtifact> {
 
     // Max iterations reached without approval
     this.state.status = "failed"
+
+    // Handle case where no artifact was produced
+    const finalArtifact = currentArtifact ?? createEmptyWorkArtifact(contract.taskId)
+
     return {
       status: "failed",
-      output: currentArtifact!,
-      error: `Max iterations (${this.config.maxIterations}) reached without approval`,
+      output: finalArtifact,
+      error: currentArtifact
+        ? `Max iterations (${this.config.maxIterations}) reached without approval`
+        : `No artifact produced after ${this.config.maxIterations} iterations`,
       stats: {
         durationMs: Date.now() - startTime,
         tokensUsed: this.state.tokensUsed,

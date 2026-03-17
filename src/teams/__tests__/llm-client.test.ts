@@ -1,22 +1,31 @@
 import { describe, it, expect, vi } from "vitest"
 import { AgentLLMClient, createAgentLLMClient, WorkerOutput, ReviewerOutput } from "../client/llm-client.js"
+import { LLMClient } from "../../llm.js"
+
+// Mock LLMClient for testing
+function createMockLLMClient(): LLMClient {
+  return new LLMClient({
+    model: "claude-sonnet-4-6",
+    apiKey: "test-key",
+  })
+}
 
 describe("AgentLLMClient", () => {
   describe("constructor", () => {
-    it("should create client with config", () => {
+    it("should create client with LLMClient", () => {
+      const mockLLM = createMockLLMClient()
       const client = new AgentLLMClient({
-        model: "claude-3-5-sonnet-20241022",
+        llmClient: mockLLM,
       })
       expect(client).toBeDefined()
     })
 
     it("should create client with all config options", () => {
+      const mockLLM = createMockLLMClient()
       const client = new AgentLLMClient({
-        model: "claude-3-5-sonnet-20241022",
-        baseURL: "https://api.anthropic.com",
-        apiKey: "test-key",
-        timeout: 60000,
+        llmClient: mockLLM,
         temperature: 0.5,
+        onTokenUsage: vi.fn(),
       })
       expect(client).toBeDefined()
     })
@@ -24,13 +33,15 @@ describe("AgentLLMClient", () => {
 
   describe("setters", () => {
     it("should have cost controller setter", () => {
-      const client = new AgentLLMClient({ model: "test" })
+      const mockLLM = createMockLLMClient()
+      const client = new AgentLLMClient({ llmClient: mockLLM })
       expect(client.setCostController).toBeDefined()
       expect(typeof client.setCostController).toBe("function")
     })
 
     it("should have blackboard setter", () => {
-      const client = new AgentLLMClient({ model: "test" })
+      const mockLLM = createMockLLMClient()
+      const client = new AgentLLMClient({ llmClient: mockLLM })
       expect(client.setBlackboard).toBeDefined()
       expect(typeof client.setBlackboard).toBe("function")
     })
@@ -38,7 +49,8 @@ describe("AgentLLMClient", () => {
 
   describe("worker execution", () => {
     it("should have executeWorker method", () => {
-      const client = new AgentLLMClient({ model: "test" })
+      const mockLLM = createMockLLMClient()
+      const client = new AgentLLMClient({ llmClient: mockLLM })
       expect(client.executeWorker).toBeDefined()
       expect(typeof client.executeWorker).toBe("function")
     })
@@ -46,7 +58,8 @@ describe("AgentLLMClient", () => {
 
   describe("reviewer execution", () => {
     it("should have executeReviewer method", () => {
-      const client = new AgentLLMClient({ model: "test" })
+      const mockLLM = createMockLLMClient()
+      const client = new AgentLLMClient({ llmClient: mockLLM })
       expect(client.executeReviewer).toBeDefined()
       expect(typeof client.executeReviewer).toBe("function")
     })
@@ -55,7 +68,8 @@ describe("AgentLLMClient", () => {
 
 describe("createAgentLLMClient factory", () => {
   it("should create client using factory", () => {
-    const client = createAgentLLMClient({ model: "test-model" })
+    const mockLLM = createMockLLMClient()
+    const client = createAgentLLMClient({ llmClient: mockLLM })
     expect(client).toBeInstanceOf(AgentLLMClient)
   })
 })
