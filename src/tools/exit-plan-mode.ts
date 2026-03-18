@@ -32,6 +32,7 @@ Only call this when:
 
     const { planFilePath } = exitPlanModeCurrent()
     ctx.setPlanMode?.(false)  // 同步 PolicyEngine 状态
+    ctx.setPlanFilePath?.(null)  // 清除计划文件路径
     const relativePath = planFilePath.replace(ctx.cwd, ".")
 
     return `Successfully exited Plan Mode.
