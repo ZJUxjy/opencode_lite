@@ -1,3 +1,4 @@
+import { resolve } from "path"
 import type { ToolCall } from "./types.js"
 import type { RiskConfig, RiskClassification, ToolRiskRule } from "./policy/risk.js"
 import {
@@ -83,6 +84,8 @@ export class PolicyEngine {
   private yoloMode: boolean = false
   /** Plan Mode：只读模式 */
   private planMode: boolean = false
+  /** Plan file path for Plan Mode editing */
+  private planFilePath: string | null = null
   /** Risk classification rules */
   private riskRules: ToolRiskRule[]
 
@@ -347,6 +350,25 @@ export class PolicyEngine {
    * 在 Plan Mode 下，只允许只读操作
    */
   private checkPlanMode(toolName: string, args: Record<string, unknown>): PolicyResult | null {
+    // 新增：对 edit/write 工具的特殊处理
+    if (toolName === "edit" || toolName === "write") {
+      if (this.planFilePath && args.path) {
+        const targetPath = resolve(String(args.path))
+        const planPath = resolve(this.planFilePath)
+        if (targetPath === planPath) {
+          return {
+            decision: "allow",
+            reason: "Plan Mode: 允许编辑计划文件",
+          }
+        }
+      }
+      // 非计划文件直接拒绝，不弹窗
+      return {
+        decision: "deny",
+        reason: "Plan Mode 下只能编辑计划文件，请先退出 Plan Mode",
+      }
+    }
+
     // 首先检查 Plan Mode 专用规则
     for (const rule of this.rules) {
       // 只应用 Plan Mode 规则或通用规则
@@ -559,5 +581,19 @@ export class PolicyEngine {
    */
   isPlanMode(): boolean {
     return this.planMode
+  }
+
+  /**
+   * 设置计划文件路径
+   */
+  setPlanFilePath(path: string | null): void {
+    this.planFilePath = path
+  }
+
+  /**
+   * 获取计划文件路径
+   */
+  getPlanFilePath(): string | null {
+    return this.planFilePath
   }
 }
