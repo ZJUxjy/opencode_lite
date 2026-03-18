@@ -15,6 +15,7 @@ export interface Context {
   cwd: string
   messages: Message[]
   setPlanMode?: (enabled: boolean) => void  // 用于同步 Plan Mode 状态到 PolicyEngine
+  setPlanFilePath?: (path: string | null) => void  // 用于设置计划文件路径
 }
 
 // 消息
