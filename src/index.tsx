@@ -13,7 +13,6 @@ import * as path from "path"
 import * as os from "os"
 import * as fs from "fs"
 import { parseDumpOption } from "./cli/dump-option.js"
-import { getTokenService } from "./tokens/index.js"
 
 // 从 settings.json 加载配置
 import type { MCPGlobalConfig } from "./mcp/config.js"
@@ -76,42 +75,6 @@ function applySettingsEnvToProcess(settings: SettingsConfig): void {
       // 不覆盖已存在的环境变量（优先级：shell env > settings.env）
       if (process.env[key] === undefined) {
         process.env[key] = value
-      }
-    }
-  }
-}
-
-/**
- * 从 TokenService 加载 API keys 到 process.env
- * 优先级：现有环境变量 > TokenService > settings.json
- */
-async function loadTokensFromService(): Promise<void> {
-  const tokenService = getTokenService()
-
-  const providerEnvMap: Record<string, string> = {
-    anthropic: "ANTHROPIC_API_KEY",
-    openai: "OPENAI_API_KEY",
-    minimax: "MINIMAX_API_KEY",
-    gemini: "GEMINI_API_KEY",
-    deepseek: "DEEPSEEK_API_KEY",
-    kimi: "KIMI_API_KEY",
-  }
-
-  for (const [provider, envKey] of Object.entries(providerEnvMap)) {
-    // 如果环境变量已设置，不覆盖
-    if (process.env[envKey]) {
-      continue
-    }
-
-    try {
-      const token = await tokenService.getToken(provider as any)
-      if (token) {
-        process.env[envKey] = token
-      }
-    } catch (error) {
-      // Log warning but continue - token service may not be available
-      if (process.env.DEBUG) {
-        console.warn(`[Token] Failed to load ${provider}:`, error)
       }
     }
   }
@@ -291,9 +254,6 @@ program
       const settings = loadSettings()
       applySettingsEnvToProcess(settings)
 
-      // 从 TokenService 加载 API keys
-      await loadTokensFromService()
-
       const teamModel = getConfig(options.model, "ANTHROPIC_MODEL", settings, "claude-sonnet-4-20250514")
       const teamBaseURL = getConfig(options.baseUrl, "ANTHROPIC_BASE_URL", settings, "https://api.anthropic.com")
       const teamApiKey = getConfig(undefined, "ANTHROPIC_AUTH_TOKEN", settings, process.env.ANTHROPIC_API_KEY || "")
@@ -340,9 +300,6 @@ program
     const settings = loadSettings()
     applySettingsEnvToProcess(settings)
 
-    // 从 TokenService 加载 API keys
-    await loadTokensFromService()
-
     // Load provider configuration
     const { ProviderConfigService } = await import("./providers/service.js")
     const providerService = new ProviderConfigService()
@@ -351,7 +308,7 @@ program
     let llmConfigFromProvider: { model: string; baseURL: string; apiKey: string } | null = null
     try {
       if (providerService.hasProviders()) {
-        llmConfigFromProvider = await providerService.getLLMConfig()
+        llmConfigFromProvider = providerService.getLLMConfig()
       }
     } catch (error) {
       // Provider service not configured, fall back to settings
@@ -501,60 +458,6 @@ configCommand
       console.log()
     } catch (error) {
       console.error(`❌ ${error instanceof Error ? error.message : String(error)}`)
-      process.exit(1)
-    }
-  })
-
-// Token management commands
-configCommand
-  .command("set-token <provider> <key>")
-  .description("Store an API token securely")
-  .action(async (provider: string, key: string) => {
-    const { getTokenService } = await import("./tokens/index.js")
-    const service = getTokenService()
-    try {
-      await service.setToken(provider as any, key)
-      const storageType = await service.getStorageType()
-      console.log(`✅ Token for ${provider} stored securely (${storageType})`)
-    } catch (error) {
-      console.error(`❌ Failed to store token: ${error instanceof Error ? error.message : String(error)}`)
-      process.exit(1)
-    }
-  })
-
-configCommand
-  .command("list-tokens")
-  .description("List stored tokens")
-  .action(async () => {
-    const { getTokenService } = await import("./tokens/index.js")
-    const service = getTokenService()
-    const tokens = await service.listTokens()
-    const storageType = await service.getStorageType()
-
-    if (tokens.length === 0) {
-      console.log("No tokens stored.")
-      return
-    }
-
-    console.log(`# Stored Tokens (${tokens.length})`)
-    console.log(`Storage: ${storageType}`)
-    console.log("")
-    for (const token of tokens) {
-      console.log(`- ${token.provider}`)
-    }
-  })
-
-configCommand
-  .command("delete-token <provider>")
-  .description("Delete a stored API token")
-  .action(async (provider: string) => {
-    const { getTokenService } = await import("./tokens/index.js")
-    const service = getTokenService()
-    try {
-      await service.deleteToken(provider as any)
-      console.log(`🗑️ Token for ${provider} deleted`)
-    } catch (error) {
-      console.error(`❌ Failed to delete token: ${error instanceof Error ? error.message : String(error)}`)
       process.exit(1)
     }
   })

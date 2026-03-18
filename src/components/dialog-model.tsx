@@ -21,7 +21,6 @@ interface ModelItem {
 }
 
 export function DialogModel({ currentProvider, currentModel, onSelect, onCancel }: DialogModelProps) {
-  const { exit } = useApp()
   const statePersistence = getStatePersistence()
   const [selectedIndex, setSelectedIndex] = useState(0)
 
@@ -77,7 +76,7 @@ export function DialogModel({ currentProvider, currentModel, onSelect, onCancel 
   useInput((input, key) => {
     if (key.escape) {
       onCancel()
-      exit()
+      return
     }
     if (key.upArrow) {
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : selectableItems.length - 1))
@@ -91,7 +90,6 @@ export function DialogModel({ currentProvider, currentModel, onSelect, onCancel 
         // Add to recent
         statePersistence.addRecentModel(item.value.provider, item.value.model)
         onSelect(item.value.provider, item.value.model)
-        exit()
       }
     }
   })

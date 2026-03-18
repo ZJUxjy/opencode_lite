@@ -1,11 +1,10 @@
 // src/components/dialog-provider.tsx
 
 import React, { useState, useMemo, useCallback } from "react"
-import { Box, Text, useApp, useInput } from "ink"
+import { Box, Text, useInput } from "ink"
 import TextInput from "ink-text-input"
 import { BUILTIN_PROVIDERS, getBuiltinProvider } from "../providers/registry.js"
 import { ProviderConfigService } from "../providers/service.js"
-import { getTokenService } from "../tokens/index.js"
 import type { BuiltinProvider } from "../providers/types.js"
 
 interface DialogProviderProps {
@@ -23,9 +22,7 @@ interface ProviderItem {
 }
 
 export function DialogProvider({ onSelect, onCancel }: DialogProviderProps) {
-  const { exit } = useApp()
   const providerService = new ProviderConfigService()
-  const tokenService = getTokenService()
 
   const [step, setStep] = useState<Step>("select")
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -45,13 +42,15 @@ export function DialogProvider({ onSelect, onCancel }: DialogProviderProps) {
 
     for (const providerInfo of BUILTIN_PROVIDERS) {
       const config = providerService.getProvider(providerInfo.id)
+      // Check if provider has apiKey configured
+      const hasApiKey = providerService.isConfigured(providerInfo.id)
       const item: ProviderItem = {
-        label: `${providerInfo.name} [${providerInfo.id}]`,
+        label: `${providerInfo.name} [${providerInfo.id}]${hasApiKey ? " (configured)" : ""}`,
         value: providerInfo.id,
-        configured: !!config,
+        configured: hasApiKey,
       }
 
-      if (config) {
+      if (hasApiKey) {
         configured.push(item)
       } else {
         available.push(item)
@@ -63,23 +62,28 @@ export function DialogProvider({ onSelect, onCancel }: DialogProviderProps) {
 
   const handleProviderSelect = useCallback((providerId: string) => {
     const config = providerService.getProvider(providerId)
+    const providerInfo = getBuiltinProvider(providerId as BuiltinProvider)
 
-    if (config) {
-      // Already configured, just switch
-      providerService.setDefault(providerId)
-      providerService.save()
-      onSelect(providerId)
-      exit()
+    // Pre-fill with existing config or defaults
+    setSelectedProvider(providerId)
+    setBaseUrl(config?.baseUrl ?? providerInfo?.baseUrl ?? "")
+
+    // Pre-fill existing API key (if any)
+    setApiKey(config?.apiKey ?? "")
+
+    // Set model index based on existing config or default
+    if (config && providerInfo) {
+      const modelIdx = providerInfo.models.indexOf(config.defaultModel)
+      setModelIndex(modelIdx >= 0 ? modelIdx : 0)
     } else {
-      // Need to configure
-      const providerInfo = getBuiltinProvider(providerId as BuiltinProvider)
-      setSelectedProvider(providerId)
-      setBaseUrl(providerInfo?.baseUrl ?? "")
-      setStep("configure")
+      setModelIndex(0)
     }
-  }, [providerService, onSelect, exit])
 
-  const handleConfigComplete = useCallback(async () => {
+    // Always enter configure step (allows reconfiguration)
+    setStep("configure")
+  }, [providerService])
+
+  const handleConfigComplete = useCallback(() => {
     if (!apiKey.trim()) {
       setError("API Key is required")
       return
@@ -88,22 +92,19 @@ export function DialogProvider({ onSelect, onCancel }: DialogProviderProps) {
     const providerInfo = getBuiltinProvider(selectedProvider as BuiltinProvider)
     const selectedModel = providerInfo?.models[modelIndex] ?? ""
 
-    // Save to provider config
+    // Save to provider config (including apiKey)
     providerService.setProvider(selectedProvider, {
       name: providerInfo?.name ?? selectedProvider,
       provider: selectedProvider as BuiltinProvider,
       baseUrl,
       defaultModel: selectedModel,
+      apiKey: apiKey,  // Store apiKey directly in config
     })
     providerService.setDefault(selectedProvider)
     providerService.save()
 
-    // Save API key to token service
-    await tokenService.setToken(selectedProvider as any, apiKey)
-
     onSelect(selectedProvider)
-    exit()
-  }, [apiKey, baseUrl, modelIndex, selectedProvider, providerService, tokenService, onSelect, exit])
+  }, [apiKey, baseUrl, modelIndex, selectedProvider, providerService, onSelect])
 
   // Keyboard handling for select step
   useInput((input, key) => {
@@ -111,7 +112,7 @@ export function DialogProvider({ onSelect, onCancel }: DialogProviderProps) {
 
     if (key.escape) {
       onCancel()
-      exit()
+      return
     }
     if (key.upArrow) {
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : items.length - 1))

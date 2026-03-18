@@ -37,6 +37,8 @@ const FC_CAPABLE_MODELS = [
   "yi",
   "moonshot",
   "kimi",
+  "glm-5",
+  "nova"
 ]
 
 /**

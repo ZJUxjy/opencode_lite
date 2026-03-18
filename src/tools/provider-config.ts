@@ -157,12 +157,13 @@ Example: switch_model model="gpt-4o"`,
           ? `\n\nWarning: \`${params.model}\` is not in the standard model list for ${providerInfo?.name}.`
           : ""
 
-      // Update provider config with new model
+      // Update provider config with new model (preserve apiKey)
       service.setProvider(current.id, {
         name: current.name,
         provider: current.provider,
         baseUrl: current.baseUrl,
         defaultModel: params.model,
+        apiKey: current.apiKey,  // Preserve existing apiKey
       })
       service.save()
 

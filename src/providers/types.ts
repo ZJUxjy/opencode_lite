@@ -33,7 +33,9 @@ export interface ProviderConfig {
   baseUrl: string
   /** Default model to use */
   defaultModel: string
-  /** Environment variable name for API key */
+  /** API key (stored directly in config) */
+  apiKey?: string
+  /** Environment variable name for API key (fallback) */
   envKey?: string
   /** Whether this is the default provider */
   isDefault?: boolean
@@ -46,10 +48,14 @@ export interface ProviderConfig {
 /**
  * Provider configuration file structure
  * Stored at ~/.lite-opencode/providers.json
+ *
+ * Version history:
+ * - v1: Initial version (apiKey stored separately in tokens.enc)
+ * - v2: Unified storage (apiKey stored directly in ProviderConfig)
  */
 export interface ProvidersFile {
   /** Config file version for future migrations */
-  version: 1
+  version: 2
   /** Current default provider ID */
   defaultProvider: string
   /** All provider configurations */

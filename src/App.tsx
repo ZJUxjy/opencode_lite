@@ -11,6 +11,7 @@ import { DialogModel, DialogProvider } from "./components/index.js"
 import { parseSlashCommand, type SlashCommand } from "./input/slash-commands.js"
 import { getStatePersistence } from "./state/index.js"
 import { getBuiltinProvider } from "./providers/registry.js"
+import { ProviderConfigService } from "./providers/service.js"
 import type { BuiltinProvider } from "./providers/types.js"
 import { Session, SessionStore } from "./session/index.js"
 import type { CommandContext, PermissionRequest, PermissionDecision } from "./commands/types.js"
@@ -308,8 +309,35 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   // =========================================================================
 
   const [activeDialog, setActiveDialog] = useState<SlashCommand | null>(null)
-  const [currentProvider, setCurrentProvider] = useState<string>("anthropic")
-  const [currentModel, setCurrentModel] = useState<string>("claude-sonnet-4-6")
+
+  // Initialize provider/model from saved config - fail explicitly if not configured
+  const [configError, setConfigError] = useState<string | null>(null)
+
+  const getInitialProviderAndModel = useCallback((): { provider: string; model: string } => {
+    const providerService = new ProviderConfigService()
+    const defaultProvider = providerService.getDefaultProvider()
+    return {
+      provider: defaultProvider.id,
+      model: defaultProvider.defaultModel,
+    }
+  }, [])
+
+  const [currentProvider, setCurrentProvider] = useState<string>(() => {
+    try {
+      return getInitialProviderAndModel().provider
+    } catch (e) {
+      setConfigError(e instanceof Error ? e.message : String(e))
+      return ""
+    }
+  })
+  const [currentModel, setCurrentModel] = useState<string>(() => {
+    try {
+      return getInitialProviderAndModel().model
+    } catch {
+      // Error already set in provider initialization
+      return ""
+    }
+  })
 
   // 加载可用会话
   const loadSessions = useCallback(() => {
@@ -795,7 +823,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   // =========================================================================
 
   useInput((input, key) => {
-    // Ctrl+C: Exit
+    // Ctrl+C: Exit (always active)
     if (key.ctrl && input === "c") {
       // 显示恢复提示
       process.stdout.write('\n\n📋 To resume this session, run:\n')
@@ -844,7 +872,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
       setIsProcessing(false)
       updateContextUsage()
     }
-  })
+  }, { isActive: !activeDialog })  // Disable when dialog is open
 
   // =========================================================================
   // 初始化
@@ -900,6 +928,21 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
   }, [messages, messageFilter])
 
   // =========================================================================
+
+  // Show configuration error if provider setup is missing
+  if (configError) {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text color="red" bold>⚠ Configuration Error</Text>
+        <Text> </Text>
+        <Text>{configError}</Text>
+        <Text> </Text>
+        <Text dimColor>Please configure a provider first:</Text>
+        <Text color="cyan">  lite-opencode config</Text>
+        <Text dimColor>Or use the /provider command to set up a provider.</Text>
+      </Box>
+    )
+  }
 
   return (
     <Box flexDirection="column">
@@ -1040,6 +1083,7 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
           commandContext={commandContext}
           initialHistory={inputHistory}
           onHistoryChange={handleSaveInputHistory}
+          isActive={!activeDialog}
         />
 
         {/* 底部横线 */}

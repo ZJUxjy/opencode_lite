@@ -31,7 +31,8 @@ export function useCommandInput({
   isProcessing,
   initialHistory = [],
   onHistoryChange,
-}: UseCommandInputProps): UseCommandInputReturn {
+  isActive = true,
+}: UseCommandInputProps & { isActive?: boolean }): UseCommandInputReturn {
   const [input, setInput] = useState("")
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
@@ -142,7 +143,7 @@ export function useCommandInput({
         return
       }
     },
-    { isActive: !isProcessing }
+    { isActive: isActive && !isProcessing }
   )
 
   /**

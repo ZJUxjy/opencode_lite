@@ -141,12 +141,13 @@ describe("ProviderConfigService", () => {
       const initialProviders = service.listProviders()
       expect(initialProviders).toHaveLength(0)
 
-      // Add one provider
+      // Add one provider WITH apiKey (configured status requires apiKey)
       service.setProvider("anthropic", {
         name: "Anthropic",
         provider: "anthropic",
         baseUrl: "https://api.anthropic.com",
         defaultModel: "claude-sonnet-4-6",
+        apiKey: "sk-test-key",
       })
 
       const builtinProviders = service.getBuiltinProviders()
@@ -155,7 +156,7 @@ describe("ProviderConfigService", () => {
       const anthropic = builtinProviders.find((p) => p.id === "anthropic")
       expect(anthropic?.configured).toBe(true)
 
-      // Verify openai is not configured (only anthropic was added)
+      // Verify openai is not configured (only anthropic was added with apiKey)
       const openai = builtinProviders.find((p) => p.id === "openai")
       expect(openai?.configured).toBe(false)
     })

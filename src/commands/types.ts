@@ -58,6 +58,8 @@ export interface CommandInputProps {
   commandContext: CommandContext
   initialHistory?: string[]
   onHistoryChange?: (history: string[]) => void
+  /** Whether the input should be active (default: true) */
+  isActive?: boolean
 }
 
 /**
@@ -69,6 +71,8 @@ export interface UseCommandInputProps {
   isProcessing: boolean
   initialHistory?: string[]
   onHistoryChange?: (history: string[]) => void
+  /** Whether the input should be active (default: true) */
+  isActive?: boolean
 }
 
 /**

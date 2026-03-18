@@ -53,7 +53,7 @@ export const BUILTIN_PROVIDERS: BuiltinProviderInfo[] = [
   {
     id: "minimax",
     name: "MiniMax-code-plan",
-    baseUrl: "https://api.minimaxi.com/anthropic",
+    baseUrl: "https://api.minimaxi.com/anthropic/v1",
     defaultModel: "MiniMax-M2.5",
     envKey: "MINIMAX_API_KEY",
     models: ["MiniMax-M2.5"],
@@ -61,7 +61,7 @@ export const BUILTIN_PROVIDERS: BuiltinProviderInfo[] = [
   {
     id: "kimi",
     name: "Kimi (Moonshot)-code-plan",
-    baseUrl: "https://api.kimi.com/coding",
+    baseUrl: "https://api.kimi.com/coding/v1",
     defaultModel: "kimi-k2.5",
     envKey: "KIMI_API_KEY",
     models: ["kimi-k2.5"],

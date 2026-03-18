@@ -849,13 +849,14 @@ export class Agent {
       // Switch LLM client model
       this.llm.switchModel(modelId)
 
-      // Save to current provider config
+      // Save to current provider config (preserve apiKey)
       const currentProvider = this.providerService.getDefaultProvider()
       this.providerService.setProvider(currentProvider.id, {
         name: currentProvider.name,
         provider: currentProvider.provider,
         baseUrl: currentProvider.baseUrl,
         defaultModel: modelId,
+        apiKey: currentProvider.apiKey,  // Preserve existing apiKey
       })
       this.providerService.save()
 

@@ -6,7 +6,6 @@ import SelectInput from "ink-select-input"
 import { ProviderConfigService } from "../providers/service.js"
 import { BUILTIN_PROVIDERS } from "../providers/registry.js"
 import type { BuiltinProvider } from "../providers/types.js"
-import { getTokenService } from "../tokens/index.js"
 
 interface WizardProps {
   onComplete?: () => void
@@ -17,7 +16,6 @@ type WizardStep = "select-provider" | "enter-api-key" | "enter-base-url" | "ente
 export function ConfigWizard({ onComplete }: WizardProps) {
   const { exit } = useApp()
   const service = new ProviderConfigService()
-  const tokenService = getTokenService()
 
   const [step, setStep] = useState<WizardStep>("select-provider")
   const [selectedProvider, setSelectedProvider] = useState<string>()
@@ -102,6 +100,7 @@ export function ConfigWizard({ onComplete }: WizardProps) {
         baseUrl,
         defaultModel: model,
         envKey: providerInfo.envKey,
+        apiKey: apiKey,  // Store apiKey directly in config
       })
     } else if (selectedProvider === "custom") {
       service.setProvider(providerId, {
@@ -109,6 +108,7 @@ export function ConfigWizard({ onComplete }: WizardProps) {
         provider: "custom",
         baseUrl,
         defaultModel: model,
+        apiKey: apiKey,  // Store apiKey directly in config
       })
     }
 
@@ -118,14 +118,8 @@ export function ConfigWizard({ onComplete }: WizardProps) {
 
     service.save()
 
-    // Store API key in TokenService
-    if (selectedProvider) {
-      const tokenProvider = selectedProvider === "custom" ? "custom" : selectedProvider
-      tokenService.setToken(tokenProvider as any, apiKey)
-    }
-
     setStep("done")
-  }, [selectedProvider, baseUrl, model, setAsDefault, service, tokenService, apiKey])
+  }, [selectedProvider, baseUrl, model, setAsDefault, service, apiKey])
 
   const handleDone = useCallback(() => {
     onComplete?.()

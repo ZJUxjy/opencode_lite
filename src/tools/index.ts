@@ -5,6 +5,7 @@ import { writeTool } from "./write.js"
 import { editTool } from "./edit.js"
 import { grepTool } from "./grep.js"
 import { globTool } from "./glob.js"
+import { echoTool } from "./echo.js"
 import { enterPlanModeTool } from "./enter-plan-mode.js"
 import { exitPlanModeTool } from "./exit-plan-mode.js"
 import { taskTool, getSubagentResultTool, parallelExploreTool } from "./task.js"
@@ -17,7 +18,6 @@ import {
   reloadSkillTool,
 } from "./skill.js"
 import { webSearchTool } from "./web-search.js"
-import { listTokensTool, setTokenTool, deleteTokenTool } from "./token.js"
 import { mcpStatusTool, mcpDiagnoseTool } from "./mcp-status.js"
 import { filterMessagesTool } from "./message-filter.js"
 import {
@@ -80,9 +80,6 @@ export class ToolRegistry {
       getActiveSkillsPromptTool,
       reloadSkillTool,
       webSearchTool,
-      listTokensTool,
-      setTokenTool,
-      deleteTokenTool,
       mcpStatusTool,
       mcpDiagnoseTool,
       filterMessagesTool,
@@ -90,6 +87,7 @@ export class ToolRegistry {
       switchProviderTool,
       switchModelTool,
       listModelsTool,
+      echoTool,
     ]
 
     // 如果是 subagent，过滤掉 subagent 工具以防止递归

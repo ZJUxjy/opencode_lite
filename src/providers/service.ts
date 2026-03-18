@@ -1,11 +1,11 @@
 // src/providers/service.ts
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs"
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "fs"
 import { join, dirname } from "path"
-import { homedir } from "os"
+import { homedir, userInfo } from "os"
+import { createDecipheriv, createHash } from "crypto"
 import type { ProviderConfig, ProvidersFile, LLMConfig, BuiltinProvider } from "./types.js"
 import { BUILTIN_PROVIDERS, getBuiltinProvider } from "./registry.js"
-import { getTokenService } from "../tokens/index.js"
 
 /**
  * Provider with configuration status
@@ -20,7 +20,7 @@ export interface ProviderWithStatus extends ProviderConfig {
  * Default empty providers file
  */
 const DEFAULT_PROVIDERS_FILE: ProvidersFile = {
-  version: 1,
+  version: 2,
   defaultProvider: "",
   providers: {},
 }
@@ -35,8 +35,7 @@ function getDefaultConfigPath(): string {
 /**
  * Provider Configuration Service
  *
- * Manages LLM provider configurations (non-sensitive data).
- * API keys are stored separately in TokenService.
+ * Manages LLM provider configurations including API keys.
  */
 export class ProviderConfigService {
   private filePath: string
@@ -66,8 +65,18 @@ export class ProviderConfigService {
     try {
       const content = readFileSync(this.filePath, "utf-8")
       const data = JSON.parse(content)
+
+      // Handle version migration from v1 to v2
+      if (data.version === 1) {
+        console.log("[ProviderConfig] Migrating configuration from v1 to v2...")
+        data.version = 2
+
+        // Attempt to migrate API keys from old encrypted token storage
+        this.migrateTokensFromV1(data)
+      }
+
       // Validate version
-      if (data.version !== 1) {
+      if (data.version !== 2) {
         console.warn(`[ProviderConfig] Unknown version ${data.version}, using default`)
         return JSON.parse(JSON.stringify(DEFAULT_PROVIDERS_FILE))
       }
@@ -103,7 +112,7 @@ export class ProviderConfigService {
     return Object.entries(this.data.providers).map(([id, config]) => ({
       id,
       ...config,
-      configured: true,
+      configured: !!(config.apiKey),
       builtin: getBuiltinProvider(id as BuiltinProvider) !== undefined,
     }))
   }
@@ -117,7 +126,7 @@ export class ProviderConfigService {
     return {
       id,
       ...config,
-      configured: true,
+      configured: !!(config.apiKey),
       builtin: getBuiltinProvider(id as BuiltinProvider) !== undefined,
     }
   }
@@ -140,6 +149,7 @@ export class ProviderConfigService {
 
   /**
    * Add or update a provider configuration
+   * Merges with existing config to preserve fields like apiKey
    */
   setProvider(
     id: string,
@@ -148,8 +158,10 @@ export class ProviderConfigService {
     const now = new Date().toISOString()
     const existing = this.data.providers[id]
 
+    // Merge with existing config to preserve fields like apiKey
     this.data.providers[id] = {
-      ...config,
+      ...existing,  // Preserve all existing fields
+      ...config,    // Override with new values
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     }
@@ -205,7 +217,7 @@ export class ProviderConfigService {
       return {
         id: info.id,
         info,
-        configured: !!config,
+        configured: !!(config?.apiKey),
         config,
       }
     })
@@ -214,21 +226,15 @@ export class ProviderConfigService {
   /**
    * Check if a provider has an API key configured
    */
-  async isConfigured(id: string): Promise<boolean> {
+  isConfigured(id: string): boolean {
     const config = this.data.providers[id]
-    if (!config) return false
-
-    // Check if API key exists in TokenService
-    const tokenService = getTokenService()
-    const token = await tokenService.getToken(id as any)
-    return !!token
+    return !!(config && config.apiKey)
   }
 
   /**
    * Get LLM runtime configuration for a provider
-   * Merges provider config with API key from TokenService
    */
-  async getLLMConfig(id?: string): Promise<LLMConfig> {
+  getLLMConfig(id?: string): LLMConfig {
     const providerId = id ?? this.data.defaultProvider
     if (!providerId) {
       throw new Error("No provider configured")
@@ -239,20 +245,16 @@ export class ProviderConfigService {
       throw new Error(`Provider '${providerId}' not found`)
     }
 
-    // Get API key from TokenService
-    const tokenService = getTokenService()
-    const apiKey = await tokenService.getToken(providerId as any)
-
-    // Fallback to environment variable
-    const finalApiKey =
-      apiKey ??
+    // Priority: config.apiKey > env variable
+    const apiKey =
+      config.apiKey ??
       (config.envKey ? process.env[config.envKey] : null) ??
       ""
 
     return {
       model: config.defaultModel,
       baseURL: config.baseUrl,
-      apiKey: finalApiKey,
+      apiKey,
     }
   }
 
@@ -261,5 +263,126 @@ export class ProviderConfigService {
    */
   hasProviders(): boolean {
     return Object.keys(this.data.providers).length > 0
+  }
+
+  /**
+   * Set API key for a provider
+   */
+  setApiKey(id: string, apiKey: string): void {
+    const config = this.data.providers[id]
+    if (config) {
+      config.apiKey = apiKey
+      config.updatedAt = new Date().toISOString()
+    }
+  }
+
+  /**
+   * Migrate API keys from v1 encrypted token storage to v2 config format
+   * Attempts to read and decrypt tokens from ~/.lite-opencode/tokens.enc
+   */
+  private migrateTokensFromV1(data: ProvidersFile): void {
+    try {
+      const tokenFilePath = join(dirname(this.filePath), "tokens.enc")
+
+      if (!existsSync(tokenFilePath)) {
+        // No old token file exists, nothing to migrate
+        return
+      }
+
+      const encryptedContent = readFileSync(tokenFilePath, "utf-8")
+      if (!encryptedContent) {
+        return
+      }
+
+      // Try to decrypt using the old method (AES-256-GCM with machine-specific key)
+      const tokens = this.decryptV1Tokens(encryptedContent)
+      if (!tokens || Object.keys(tokens).length === 0) {
+        return
+      }
+
+      // Migrate tokens to provider configs
+      let migratedCount = 0
+      for (const [providerId, apiKey] of Object.entries(tokens)) {
+        if (data.providers[providerId] && apiKey) {
+          data.providers[providerId].apiKey = apiKey as string
+          data.providers[providerId].updatedAt = new Date().toISOString()
+          migratedCount++
+        }
+      }
+
+      if (migratedCount > 0) {
+        console.log(`[ProviderConfig] Migrated ${migratedCount} API key(s) from v1 storage`)
+        // Save immediately to persist the migration
+        this.writeToFile(data)
+
+        // Rename the old token file as backup (don't delete for safety)
+        const backupPath = `${tokenFilePath}.backup`
+        try {
+          renameSync(tokenFilePath, backupPath)
+          console.log(`[ProviderConfig] Backed up v1 token file to ${backupPath}`)
+        } catch (backupError) {
+          console.warn(`[ProviderConfig] Could not backup v1 token file: ${backupError}`)
+        }
+      }
+    } catch (error) {
+      // Migration failure should not block application startup
+      console.warn(`[ProviderConfig] Token migration failed (non-fatal): ${error}`)
+    }
+  }
+
+  /**
+   * Decrypt v1 format tokens from encrypted file
+   * Uses AES-256-GCM with a key derived from machine-specific identifiers
+   */
+  private decryptV1Tokens(encryptedContent: string): Record<string, string> | null {
+    try {
+      // Parse the encrypted payload format: iv:authTag:ciphertext (base64 encoded)
+      const parts = encryptedContent.split(":")
+      if (parts.length !== 3) {
+        console.warn("[ProviderConfig] Invalid v1 token file format")
+        return null
+      }
+
+      const [ivBase64, authTagBase64, ciphertextBase64] = parts
+      const iv = Buffer.from(ivBase64, "base64")
+      const authTag = Buffer.from(authTagBase64, "base64")
+      const ciphertext = Buffer.from(ciphertextBase64, "base64")
+
+      // Derive key from machine info (must match v1 implementation)
+      const key = this.deriveV1EncryptionKey()
+      if (!key) {
+        return null
+      }
+
+      // Decrypt
+      const decipher = createDecipheriv("aes-256-gcm", key, iv)
+      decipher.setAuthTag(authTag)
+
+      let decrypted = decipher.update(ciphertext, undefined, "utf8")
+      decrypted += decipher.final("utf8")
+
+      return JSON.parse(decrypted)
+    } catch (error) {
+      console.warn(`[ProviderConfig] Failed to decrypt v1 tokens: ${error}`)
+      return null
+    }
+  }
+
+  /**
+   * Derive encryption key using the same method as v1
+   * Uses machine-specific identifiers for key derivation
+   */
+  private deriveV1EncryptionKey(): Buffer | null {
+    try {
+      // Build a machine-specific string (same as v1 implementation)
+      const info = userInfo()
+      const machineId = `${info.username}-${info.uid}-${info.gid}-${process.env.HOME || process.env.USERPROFILE}`
+
+      // Hash to 32 bytes for AES-256
+      return createHash("sha256").update(machineId).digest()
+    } catch (error) {
+      console.warn(`[ProviderConfig] Failed to derive v1 encryption key: ${error}`)
+      return null
+    }
   }
 }

@@ -62,6 +62,12 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   // GLM
   "glm-4": 128000,
   "glm-4.7": 128000,
+  "glm-5": 200000,
+
+  // kimi
+  "kimi-k2.5": 256000,
+
+  "nova": 256000,
 
   // 默认值
   "default": 200000,

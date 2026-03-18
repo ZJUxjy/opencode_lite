@@ -25,6 +25,7 @@ export function CommandInput({
   commandContext,
   initialHistory,
   onHistoryChange,
+  isActive = true,
 }: CommandInputProps) {
   const { stdout } = useStdout()
   const terminalWidth = stdout?.columns || 80
@@ -45,6 +46,7 @@ export function CommandInput({
     isProcessing,
     initialHistory,
     onHistoryChange,
+    isActive,
   })
 
   return (
