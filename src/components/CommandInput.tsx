@@ -31,7 +31,7 @@ export function CommandInput({
   const terminalWidth = stdout?.columns || 80
 
   const {
-    input,
+    displayInput,
     suggestions,
     selectedIndex,
     scrollOffset,
@@ -61,7 +61,7 @@ export function CommandInput({
         <Box flexGrow={1}>
           <TextInput
             key={inputKey}
-            value={input}
+            value={displayInput}
             onChange={handleInputChange}
             onSubmit={handleSubmit}
             placeholder={

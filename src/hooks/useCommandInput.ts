@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react"
 import { useInput } from "ink"
 import type { UseCommandInputProps, UseCommandInputReturn, Command } from "../commands/types.js"
 import { registry } from "../commands/index.js"
+import { PastedTextManager } from "../utils/pastedText.js"
 
 /** Maximum number of suggestions to display at once */
 const MAX_VISIBLE_ITEMS = 5
@@ -34,6 +35,7 @@ export function useCommandInput({
   isActive = true,
 }: UseCommandInputProps & { isActive?: boolean }): UseCommandInputReturn {
   const [input, setInput] = useState("")
+  const [displayInput, setDisplayInput] = useState("")
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dropdownClosed, setDropdownClosed] = useState(false)
@@ -42,6 +44,11 @@ export function useCommandInput({
 
   // Track if we just accepted a suggestion (to prevent double-submit)
   const justAcceptedRef = useRef(false)
+
+  // Pasted text manager for handling large text placeholders
+  const pastedManagerRef = useRef(new PastedTextManager())
+  // Track previous input length for paste detection
+  const prevInputLengthRef = useRef(0)
 
   // Input history for up/down navigation
   const [inputHistory, setInputHistory] = useState<string[]>(initialHistory)
@@ -90,7 +97,10 @@ export function useCommandInput({
       if (key.tab && showDropdown && suggestions.length > 0) {
         const selectedCmd = suggestions[selectedIndex]
         if (selectedCmd) {
-          setInput(selectedCmd.name + " ")
+          const newValue = selectedCmd.name + " "
+          setInput(newValue)
+          setDisplayInput(newValue)
+          prevInputLengthRef.current = newValue.length
           setInputKey((prev) => prev + 1)
           setDropdownClosed(true)
         }
@@ -135,7 +145,10 @@ export function useCommandInput({
       if (key.return && showDropdown && suggestions.length > 0) {
         const selectedCmd = suggestions[selectedIndex]
         if (selectedCmd) {
-          setInput(selectedCmd.name + " ")
+          const newValue = selectedCmd.name + " "
+          setInput(newValue)
+          setDisplayInput(newValue)
+          prevInputLengthRef.current = newValue.length
           setInputKey((prev) => prev + 1)
           justAcceptedRef.current = true
           setDropdownClosed(true)
@@ -161,26 +174,65 @@ export function useCommandInput({
       // Move up in history (towards more recent = higher index)
       const newIndex = historyIndex + 1
       if (newIndex < inputHistory.length) {
+        const historyValue = inputHistory[inputHistory.length - 1 - newIndex]
         setHistoryIndex(newIndex)
-        setInput(inputHistory[inputHistory.length - 1 - newIndex])
+        setInput(historyValue)
+
+        // Check if history value needs placeholder
+        if (pastedManagerRef.current.shouldPlaceholderize(historyValue)) {
+          const placeholder = pastedManagerRef.current.createPlaceholder(historyValue)
+          setDisplayInput(placeholder)
+        } else {
+          setDisplayInput(historyValue)
+        }
+        prevInputLengthRef.current = historyValue.length
       }
     } else {
       // Move down in history
       const newIndex = historyIndex - 1
       if (newIndex >= 0) {
+        const historyValue = inputHistory[inputHistory.length - 1 - newIndex]
         setHistoryIndex(newIndex)
-        setInput(inputHistory[inputHistory.length - 1 - newIndex])
+        setInput(historyValue)
+
+        // Check if history value needs placeholder
+        if (pastedManagerRef.current.shouldPlaceholderize(historyValue)) {
+          const placeholder = pastedManagerRef.current.createPlaceholder(historyValue)
+          setDisplayInput(placeholder)
+        } else {
+          setDisplayInput(historyValue)
+        }
+        prevInputLengthRef.current = historyValue.length
       } else if (newIndex === -1) {
         // Back to current editing
         setHistoryIndex(-1)
         setInput(tempInputRef.current)
+        setDisplayInput(tempInputRef.current)
+        prevInputLengthRef.current = tempInputRef.current.length
       }
     }
   }, [inputHistory, historyIndex, input])
 
   // Handle input change
   const handleInputChange = useCallback((value: string) => {
-    setInput(value)
+    // Detect paste: if more than 1 character was added at once
+    const addedChars = value.length - prevInputLengthRef.current
+    const isPaste = addedChars > 1
+
+    // Update previous length reference
+    prevInputLengthRef.current = value.length
+
+    if (isPaste && pastedManagerRef.current.shouldPlaceholderize(value)) {
+      // Create placeholder for pasted text
+      const placeholder = pastedManagerRef.current.createPlaceholder(value)
+      setDisplayInput(placeholder)
+      setInput(value)
+    } else {
+      // Normal input or small paste
+      setDisplayInput(value)
+      setInput(value)
+    }
+
     // Reset the "just accepted" flag when user types
     justAcceptedRef.current = false
     // Reset history index when user manually types
@@ -192,7 +244,9 @@ export function useCommandInput({
   // Handle form submission
   const handleSubmit = useCallback(
     (value: string) => {
-      const trimmed = value.trim()
+      // Resolve placeholders to actual content
+      const resolvedValue = pastedManagerRef.current.resolvePlaceholder(value)
+      const trimmed = resolvedValue.trim()
 
       // If we just accepted a suggestion, don't submit yet
       if (justAcceptedRef.current) {
@@ -201,6 +255,7 @@ export function useCommandInput({
       }
 
       // Save to history if not empty and different from last entry
+      // Save resolved content (actual text, not placeholder)
       if (trimmed) {
         setInputHistory((prev) => {
           // Don't save if same as last entry
@@ -225,8 +280,13 @@ export function useCommandInput({
       setHistoryIndex(-1)
       tempInputRef.current = ""
 
-      // Clear input
+      // Clear input and display
       setInput("")
+      setDisplayInput("")
+      prevInputLengthRef.current = 0
+
+      // Clear pasted text entries
+      pastedManagerRef.current.clear()
 
       // Check if it's a command
       if (trimmed.startsWith("/")) {
@@ -256,6 +316,7 @@ export function useCommandInput({
 
   return {
     input,
+    displayInput,
     setInput,
     suggestions,
     selectedIndex,

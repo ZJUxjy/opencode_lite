@@ -79,7 +79,10 @@ export interface UseCommandInputProps {
  * Return type for useCommandInput hook
  */
 export interface UseCommandInputReturn {
+  /** Internal input state (actual content) */
   input: string
+  /** Display input (may contain placeholders for pasted text) */
+  displayInput: string
   setInput: React.Dispatch<React.SetStateAction<string>>
   suggestions: Command[]
   selectedIndex: number

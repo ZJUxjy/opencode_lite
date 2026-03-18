@@ -5,7 +5,6 @@ import { writeTool } from "./write.js"
 import { editTool } from "./edit.js"
 import { grepTool } from "./grep.js"
 import { globTool } from "./glob.js"
-import { echoTool } from "./echo.js"
 import { enterPlanModeTool } from "./enter-plan-mode.js"
 import { exitPlanModeTool } from "./exit-plan-mode.js"
 import { taskTool, getSubagentResultTool, parallelExploreTool } from "./task.js"
@@ -87,7 +86,6 @@ export class ToolRegistry {
       switchProviderTool,
       switchModelTool,
       listModelsTool,
-      echoTool,
     ]
 
     // 如果是 subagent，过滤掉 subagent 工具以防止递归
