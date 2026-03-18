@@ -334,7 +334,8 @@ export class Agent {
     const ctx: Context = {
       cwd: this.cwd,
       messages: [],
-      setPlanMode: (enabled) => this.setPlanMode(enabled)  // 调用 Agent 方法以触发模型切换
+      setPlanMode: (enabled) => this.setPlanMode(enabled),  // 调用 Agent 方法以触发模型切换
+      setPlanFilePath: (path) => this.setPlanFilePath(path),
     }
 
     for (const call of toolCalls) {
@@ -608,6 +609,13 @@ export class Agent {
     } else {
       this.llm.switchToBuildModel()
     }
+  }
+
+  /**
+   * 设置计划文件路径
+   */
+  setPlanFilePath(path: string | null): void {
+    this.policyEngine.setPlanFilePath(path)
   }
 
   /**
