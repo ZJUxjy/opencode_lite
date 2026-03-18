@@ -29,6 +29,7 @@ Use this when:
   execute: async (_params, ctx) => {
     const { planFilePath } = enterPlanModeCurrent()
     ctx.setPlanMode?.(true)  // 同步 PolicyEngine 状态
+    ctx.setPlanFilePath?.(planFilePath)  // 设置计划文件路径
     const relativePath = planFilePath.replace(ctx.cwd, ".")
 
     return `Successfully entered Plan Mode.
