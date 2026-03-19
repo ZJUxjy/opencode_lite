@@ -33,6 +33,17 @@ node dist/index.js --session <id>                     # Use/create specific sess
 # Advanced Options
 node dist/index.js --no-stream                        # Disable streaming output
 node dist/index.js --compression-threshold <0-1>      # Set context compression threshold (default: 0.92)
+node dist/index.js --dump-prompt [enabled]            # Dump prompts/responses to file for debugging
+
+# Team Mode (multi-agent collaboration)
+node dist/index.js --team <mode> --team-objective "<task>"   # Run in team mode
+node dist/index.js --team worker-reviewer --team-objective "Fix bug in auth"
+# Available modes: council, leader-workers, worker-reviewer, planner-executor-reviewer, hotfix-guardrail
+# Additional team options:
+#   --team-config <path>      Path to team configuration file
+#   --team-profile <profile>  Configuration profile (default: 'default')
+#   --team-budget <tokens>    Maximum token budget
+#   --team-timeout <ms>       Timeout in milliseconds
 
 # Token Management
 node dist/index.js config set-token <provider> <key>  # Store API key securely
@@ -165,11 +176,18 @@ This is a lightweight AI coding agent implementing the ReAct (Reasoning + Acting
 | `src/agent.ts` | Core Agent class, session management, integrates all components |
 | `src/llm.ts` | LLM client using Vercel AI SDK, supports Anthropic/OpenAI-compatible APIs |
 | `src/store.ts` | Message persistence using better-sqlite3 |
+| `src/db.ts` | Shared SQLite database initialization |
 | `src/session/` | Session management (create, resume, list, archive) |
 | `src/compression.ts` | Progressive context compression (light → moderate → aggressive) |
 | `src/loopDetection.ts` | Three-layer loop detection (tool calls, content repetition, LLM-assisted) |
 | `src/policy.ts` | Policy engine for permission control |
 | `src/policy/risk.ts` | Risk level classification (low/medium/high) for tools |
+| `src/plan/` | Plan Mode management: state, file path, 5-phase workflow coordination |
+| `src/subagent/` | Subagent system: pool, runner, timer, completer for parallel task execution |
+| `src/teams/` | Multi-agent team collaboration (worker-reviewer, leader-workers, etc.) |
+| `src/state/` | Persistent UI/agent state across sessions |
+| `src/commands/` | Built-in slash command definitions and registry |
+| `src/providers/` | Provider registry, service layer, and protocol adapters |
 | `src/mcp/` | Model Context Protocol integration for external tools |
 | `src/App.tsx` | Ink-based TUI with Static/dynamic separation for proper scrolling |
 | `src/index.tsx` | CLI entry point with commander |
@@ -187,7 +205,7 @@ This is a lightweight AI coding agent implementing the ReAct (Reasoning + Acting
 
 ### Prompt System (`src/prompts/`)
 
-10 sections assembled by `PromptProvider`:
+11 sections assembled by `PromptProvider`:
 
 1. **identity** - Agent identity (Lite OpenCode)
 2. **objectives** - Task objectives
@@ -199,6 +217,7 @@ This is a lightweight AI coding agent implementing the ReAct (Reasoning + Acting
 8. **errorHandling** - Error handling guidelines
 9. **constraints** - Behavior constraints
 10. **react** - ReAct format (conditional, CoT mode only)
+11. **plan** - 5-phase planning workflow (conditional, Plan Mode only)
 
 ### TUI Architecture (`src/App.tsx`)
 
@@ -260,12 +279,47 @@ filter_messages mode="compact"        # Collapse all groups
 
 ### Tools (`src/tools/`)
 
-12 built-in tools:
+Built-in tools by category:
 - **File**: `read`, `write`, `edit`, `grep`, `glob`
-- **System**: `bash`
+- **System**: `bash`, `web_search`
 - **Plan Mode**: `enter_plan_mode`, `exit_plan_mode`, `task`, `get_subagent_result`, `parallel_explore`
-- **Skills**: `list_skills`, `activate_skill`, `deactivate_skill`, `show_skill`, `get_active_skills_prompt`
+- **Skills**: `list_skills`, `activate_skill`, `deactivate_skill`, `show_skill`, `get_active_skills_prompt`, `reload_skill`
+- **MCP**: `mcp_status`, `mcp_diagnose`
+- **Provider**: `show_config`, `switch_provider`, `switch_model`, `list_models`
 - **UI**: `filter_messages`
+
+Subagent-disabled tools (prevented from recursive calls): `task`, `get_subagent_result`, `parallel_explore`, `enter_plan_mode`, `exit_plan_mode`.
+
+### Teams / Multi-Agent Mode (`src/teams/`)
+
+Invoked via `--team <mode>` CLI flag. The `TeamManager` creates the appropriate runner based on mode.
+
+**Available modes:**
+| Mode | Default for task type | Description |
+|------|-----------------------|-------------|
+| `worker-reviewer` | review | Worker produces, reviewer critiques |
+| `leader-workers` | feature | Leader decomposes into parallel worker tasks |
+| `planner-executor-reviewer` | refactor | Three-role pipeline |
+| `hotfix-guardrail` | bugfix | Fast fix with safety guardrail |
+| `council` | (default) | All agents vote on approach |
+
+**Key sub-packages:**
+- `src/teams/core/` - Types, contracts (Zod schemas), blackboard (shared state), checkpoint/resume, conflict detector, thinking budget
+- `src/teams/execution/` - TaskDAG, cost controller, progress tracker, fallback handler
+- `src/teams/isolation/` - `WorktreeIsolation` for git worktree-based agent isolation
+- `src/teams/loop/` - `RalphLoopManager` for iterative refinement loops
+- `src/teams/testing/` - `LLMJudge` for quality evaluation, drill scenarios for testing
+- `src/teams/config/` - Config loader with profile support (`~/.lite-opencode/team-config.json`)
+
+### Subagent System (`src/subagent/`)
+
+Used by Plan Mode tools (`task`, `parallel_explore`, `get_subagent_result`) to run isolated AI agents:
+- `SubagentManager` - Singleton pool manager, max 3 concurrent subagents
+- `SubagentRunner` - Executes a subagent with its own message context
+- `DeadlineTimer` - Enforces per-subagent timeouts
+- `TaskCompleter` / `completeTaskTool` - Tool injected into subagents to signal completion
+
+Subagent types: `explore` (read-only), `plan` (read-only), `review` (read-only).
 
 ### Skills System (`src/skills/`)
 
