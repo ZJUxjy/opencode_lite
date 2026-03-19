@@ -1,5 +1,6 @@
 import { z } from "zod"
-import { readFile, writeFile } from "fs/promises"
+import { readFile, writeFile, rename, unlink } from "fs/promises"
+import { resolve } from "path"
 import type { Tool } from "../types.js"
 
 export const editTool: Tool = {
@@ -16,7 +17,17 @@ export const editTool: Tool = {
   }),
 
   async execute({ path, old_string, new_string }, ctx) {
-    const fullPath = path.startsWith("/") ? path : `${ctx.cwd}/${path}`
+    const fullPath = path.startsWith("/") ? resolve(path) : resolve(ctx.cwd, path)
+
+    // Prevent relative-path traversal outside cwd
+    if (!path.startsWith("/")) {
+      const resolvedCwd = resolve(ctx.cwd)
+      if (!fullPath.startsWith(resolvedCwd + "/") && fullPath !== resolvedCwd) {
+        return `Error: Path traversal outside working directory is not allowed`
+      }
+    }
+
+    const tmpPath = `${fullPath}.tmp.${process.pid}`
 
     try {
       const content = await readFile(fullPath, "utf-8")
@@ -31,10 +42,14 @@ export const editTool: Tool = {
       }
 
       const newContent = content.replace(old_string, new_string)
-      await writeFile(fullPath, newContent, "utf-8")
+      // Atomic write: write to temp file, then rename
+      await writeFile(tmpPath, newContent, "utf-8")
+      await rename(tmpPath, fullPath)
 
       return `Successfully edited ${fullPath}`
     } catch (error: any) {
+      // Clean up temp file on failure
+      await unlink(tmpPath).catch(() => {})
       return `Error: ${error.message}`
     }
   },

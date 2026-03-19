@@ -262,8 +262,14 @@ export class Agent {
       if (response.content) {
         const contentLoopResult = this.loopDetection.checkContentLoop(response.content)
         if (contentLoopResult.detected) {
-          this.events.onLoopDetected?.(contentLoopResult.type!, contentLoopResult.message)
-          return `${response.content}\n\n[系统检测到可能的循环，已终止。]`
+          // CR-24: Layer 3 LLM verification when needsVerification is set
+          const confirmed = contentLoopResult.needsVerification && contentLoopResult.verificationContext
+            ? await this.verifyLoopWithLLM(contentLoopResult.verificationContext)
+            : true
+          if (confirmed) {
+            this.events.onLoopDetected?.(contentLoopResult.type!, contentLoopResult.message)
+            return `${response.content}\n\n[系统检测到可能的循环，已终止。]`
+          }
         }
       }
 
@@ -272,8 +278,14 @@ export class Agent {
         for (const toolCall of response.toolCalls) {
           const toolLoopResult = this.loopDetection.checkToolCallLoop(toolCall)
           if (toolLoopResult.detected) {
-            this.events.onLoopDetected?.(toolLoopResult.type!, toolLoopResult.message)
-            return `[系统检测到工具调用循环：${toolCall.name} 连续调用了太多次。]`
+            // CR-24: Layer 3 LLM verification when needsVerification is set
+            const confirmed = toolLoopResult.needsVerification && toolLoopResult.verificationContext
+              ? await this.verifyLoopWithLLM(toolLoopResult.verificationContext)
+              : true
+            if (confirmed) {
+              this.events.onLoopDetected?.(toolLoopResult.type!, toolLoopResult.message)
+              return `[系统检测到工具调用循环：${toolCall.name} 连续调用了太多次。]`
+            }
           }
         }
       }
@@ -456,6 +468,27 @@ export class Agent {
 
   getHistory(): Message[] {
     return this.store.get(this._sessionId)
+  }
+
+  /**
+   * CR-24: Layer 3 LLM-assisted loop verification.
+   * Returns true if the LLM confirms a loop is occurring.
+   */
+  private async verifyLoopWithLLM(verificationContext: string): Promise<boolean> {
+    try {
+      const result = await this.llm.chat(
+        [{
+          role: "user",
+          content: `You are a loop detection assistant. Based on the following recent agent activity, is the agent stuck in a loop (repeating the same actions without progress)? Answer with only "yes" or "no".\n\n${verificationContext}`,
+        }],
+        [],
+        "You are a helpful assistant that detects repetitive loops in AI agent behavior."
+      )
+      return result.content.toLowerCase().includes("yes")
+    } catch {
+      // On error, assume loop is real to fail safe
+      return true
+    }
   }
 
   clearSession() {

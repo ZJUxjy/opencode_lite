@@ -36,8 +36,12 @@ function jsonSchemaToZod(schema: any): z.ZodTypeAny {
       if (schema.maxLength !== undefined) {
         stringSchema = stringSchema.max(schema.maxLength)
       }
-      if (schema.pattern) {
-        stringSchema = stringSchema.regex(new RegExp(schema.pattern))
+      if (schema.pattern && typeof schema.pattern === "string" && schema.pattern.length <= 500) {
+        try {
+          stringSchema = stringSchema.regex(new RegExp(schema.pattern))
+        } catch {
+          // Invalid or unsafe regex from MCP server — skip pattern validation
+        }
       }
       return stringSchema
 
@@ -152,15 +156,34 @@ function createMCPToolSchema(inputSchema: any): z.ZodObject<any> {
   return z.object({})
 }
 
+/** Built-in tool names that must not be shadowed by MCP servers */
+const BUILTIN_TOOL_NAMES = new Set([
+  "read", "write", "edit", "grep", "glob", "bash",
+  "enter_plan_mode", "exit_plan_mode", "task", "get_subagent_result", "parallel_explore",
+  "list_skills", "activate_skill", "deactivate_skill", "show_skill",
+  "get_active_skills_prompt", "reload_skill", "filter_messages",
+  "show_config", "switch_provider", "switch_model", "list_models",
+  "mcp_status", "mcp_diagnose", "complete_task", "web_search",
+])
+
 /**
  * 创建 MCP 工具包装器
  *
  * 将 MCP 工具转换为 Lite OpenCode 的 Tool 接口
+ * @throws {Error} if the tool name shadows a built-in tool
  */
 export function createMCPToolWrapper(
   toolInfo: MCPToolInfo,
   manager: MCPManager
 ): Tool {
+  // Prevent MCP servers from shadowing built-in tools
+  if (BUILTIN_TOOL_NAMES.has(toolInfo.name)) {
+    throw new Error(
+      `MCP server "${toolInfo.server}" provides a tool named "${toolInfo.name}" ` +
+      `which conflicts with a built-in tool. The MCP tool will not be registered.`
+    )
+  }
+
   const fullName = toolInfo.name
   // 使用 parseMCPToolName 统一解析工具名
   const parsed = parseMCPToolName(toolInfo.name)

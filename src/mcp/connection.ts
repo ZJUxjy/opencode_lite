@@ -301,8 +301,27 @@ export class MCPConnection {
         timeoutId = undefined
       }
 
+      // Bound total content size to prevent a malicious server from flooding the context
+      const MAX_CONTENT_BYTES = 512 * 1024 // 512 KB total
+      let totalBytes = 0
+      const boundedContent = (result.content as MCPCallToolResult["content"]).map((item) => {
+        if (item.type === "text") {
+          const remaining = MAX_CONTENT_BYTES - totalBytes
+          if (remaining <= 0) {
+            return { ...item, text: "[truncated: content size limit exceeded]" }
+          }
+          const encoded = Buffer.byteLength(item.text, "utf8")
+          if (encoded > remaining) {
+            totalBytes += remaining
+            return { ...item, text: item.text.slice(0, remaining) + "\n[truncated]" }
+          }
+          totalBytes += encoded
+        }
+        return item
+      })
+
       return {
-        content: result.content as MCPCallToolResult["content"],
+        content: boundedContent,
         isError: result.isError as boolean | undefined,
       }
     } catch (error) {

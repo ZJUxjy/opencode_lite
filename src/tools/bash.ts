@@ -30,11 +30,13 @@ export const bashTool: Tool = {
       if (stderr) result += `${result ? "\n" : ""}STDERR:\n${stderr}`
 
       return result || "Command completed with no output"
-    } catch (error: any) {
-      if (error.killed) {
+    } catch (error: unknown) {
+      if (error instanceof Error && (error as NodeJS.ErrnoException & { killed?: boolean }).killed) {
         return `Error: Command timed out after ${timeout}ms`
       }
-      return `Error: ${error.message}\n${error.stderr || ""}`
+      const msg = error instanceof Error ? error.message : String(error)
+      const stderr = (error as any)?.stderr || ""
+      return `Error: ${msg}\n${stderr}`
     }
   },
 }

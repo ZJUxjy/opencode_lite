@@ -10,6 +10,7 @@ import { MessageItem } from "./components/MessageItem.js"
 import { DialogModel, DialogProvider } from "./components/index.js"
 import { parseSlashCommand, type SlashCommand } from "./input/slash-commands.js"
 import { getStatePersistence } from "./state/index.js"
+import { getErrorMessage } from "./utils/error.js"
 import { getBuiltinProvider } from "./providers/registry.js"
 import { ProviderConfigService } from "./providers/service.js"
 import type { BuiltinProvider } from "./providers/types.js"
@@ -776,24 +777,25 @@ export function App({ agent, model, baseURL, sessionId, workingDir, dbPath, isRe
 
     try {
       await agent.run(trimmed)
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : ""
       // 如果是用户取消，不显示错误（已经在上面的 useInput 中处理了）
-      if (error.message?.includes("cancelled by user")) {
+      if (errMsg.includes("cancelled by user")) {
         // 用户取消，静默处理
         setIsProcessing(false)
         updateContextUsage()
         return
       }
 
-      let errorMessage = error.message || "Unknown error"
+      let errorMessage = getErrorMessage(error)
 
-      if (error.message?.includes("timed out")) {
+      if (errMsg.includes("timed out")) {
         errorMessage = `Request timed out. Please check your network connection or try again.`
-      } else if (error.message?.includes("ECONNREFUSED") || error.message?.includes("ENOTFOUND")) {
+      } else if (errMsg.includes("ECONNREFUSED") || errMsg.includes("ENOTFOUND")) {
         errorMessage = `Network error: Unable to connect to the API. Please check your base URL.`
-      } else if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
+      } else if (errMsg.includes("401") || errMsg.includes("Unauthorized")) {
         errorMessage = `Authentication error: Please check your API key.`
-      } else if (error.message?.includes("429")) {
+      } else if (errMsg.includes("429")) {
         errorMessage = `Rate limited: Too many requests. Please wait a moment and try again.`
       }
 

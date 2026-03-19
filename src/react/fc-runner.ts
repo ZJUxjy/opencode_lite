@@ -28,6 +28,10 @@ export interface FCRunnerConfig {
   loopDetection?: LoopDetectionService
   /** 外部策略引擎（用于状态共享） */
   policyEngine?: PolicyEngine
+  /** Plan Mode 状态同步回调 */
+  setPlanMode?: (enabled: boolean) => void
+  /** 计划文件路径同步回调 */
+  setPlanFilePath?: (path: string | null) => void
 }
 
 /**
@@ -179,7 +183,12 @@ export class FCRunner implements Runner {
       isError?: boolean
     }> = []
 
-    const ctx: Context = { cwd: this.cwd, messages: [] }
+    const ctx: Context = {
+      cwd: this.cwd,
+      messages: [],
+      setPlanMode: this.config.setPlanMode,
+      setPlanFilePath: this.config.setPlanFilePath,
+    }
 
     for (const call of toolCalls) {
       // 触发工具调用事件

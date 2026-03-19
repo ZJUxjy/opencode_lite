@@ -1,4 +1,6 @@
-import { resolve } from "path"
+import { resolve, join, dirname } from "path"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs"
+import { homedir } from "os"
 import type { ToolCall } from "./types.js"
 import type { RiskConfig, RiskClassification, ToolRiskRule } from "./policy/risk.js"
 import {
@@ -93,6 +95,7 @@ export class PolicyEngine {
     this.config = { ...DEFAULT_CONFIG, ...config }
     this.riskRules = config.customRiskRules || DEFAULT_TOOL_RISK_RULES
     this.initializeDefaultRules()
+    this.loadLearnedRules()
   }
 
   /**
@@ -200,35 +203,21 @@ export class PolicyEngine {
    * @param cwd 工作目录（用于 "Always Allow" 规则匹配）
    */
   check(toolName: string, args: Record<string, unknown>, cwd?: string): PolicyResult {
-    // 0.5. 对于非 mcp_ 前缀的工具名，也尝试匹配 mcp_* 规则
-    // 这样 LLM 调用 "web_search" 时也能匹配 "mcp_*" 规则
-    if (!toolName.startsWith("mcp_")) {
-      // 先检查是否有 mcp_ 前缀版本的工具能匹配规则
-      for (const rule of this.rules) {
-        if (rule.tool.endsWith("_*") && rule.tool.startsWith("mcp_")) {
-          // mcp_* 规则，检查原始名称是否可能是 MCP 工具
-          // 由于我们不知道完整名称，这里简单地对非内置工具放行
-          const builtinTools = ["read", "write", "edit", "grep", "glob", "bash",
-            "enter_plan_mode", "exit_plan_mode", "task", "get_subagent_result", "parallel_explore",
-            "list_skills", "activate_skill", "deactivate_skill", "show_skill", "get_active_skills_prompt"]
-          if (!builtinTools.includes(toolName) && rule.decision === "allow") {
-            return {
-              decision: rule.decision,
-              reason: rule.description || `规则匹配: ${rule.tool}`,
-              rule,
-            }
-          }
-        }
-      }
-    }
-
     // 0. YOLO 模式：自动批准所有（除了危险操作）
     if (this.yoloMode) {
       // 即使在 YOLO 模式下，仍然阻止极其危险的操作
       if (toolName === "bash" && args.command) {
         const cmd = String(args.command)
-        const extremelyDangerous = /\b(rm\s+-rf\s+\/|mkfs|dd\s+if=|>\s*\/dev\/(sda|hda|nvme))/i
-        if (extremelyDangerous.test(cmd)) {
+        // Note: regex-based blocking can be bypassed by obfuscation.
+        // This is a best-effort guard for the most obvious destructive patterns.
+        const extremelyDangerous =
+          /\b(rm\s+-[^\s]*r[^\s]*f|rm\s+-[^\s]*f[^\s]*r)\s+\//i.test(cmd) || // rm -rf / or rm -fr /
+          /\bmkfs\b/.test(cmd) ||
+          /\bdd\s+if=/.test(cmd) ||
+          /\bshred\b/.test(cmd) ||
+          /\bwipefs\b/.test(cmd) ||
+          />\s*\/dev\/(sd[a-z]|hd[a-z]|nvme\d)/.test(cmd)
+        if (extremelyDangerous) {
           return {
             decision: "deny",
             reason: "Extremely dangerous command blocked even in YOLO mode",
@@ -505,19 +494,50 @@ export class PolicyEngine {
   }
 
   /**
-   * 加载学习的规则（从内存，实际项目可持久化到文件）
+   * 获取 learnedRules 存储路径（默认 ~/.lite-opencode/learned-rules.json）
    */
-  private loadLearnedRules(): void {
-    // TODO: 从文件加载
-    // 目前只在内存中保存
+  private getLearnedRulesPath(): string {
+    return this.config.learnedRulesPath ?? join(homedir(), ".lite-opencode", "learned-rules.json")
   }
 
   /**
-   * 保存学习的规则
+   * 加载学习的规则（从文件）
+   */
+  private loadLearnedRules(): void {
+    if (this.config.enableLearning === false) return
+    const filePath = this.getLearnedRulesPath()
+    if (!existsSync(filePath)) return
+    try {
+      const data = JSON.parse(readFileSync(filePath, "utf-8")) as Record<string, string>
+      for (const [key, decision] of Object.entries(data)) {
+        this.learnedRules.set(key, decision as PolicyDecision)
+      }
+    } catch {
+      // Corrupt or missing file — start fresh
+    }
+  }
+
+  /**
+   * 保存学习的规则（到文件）
    */
   private saveLearnedRules(): void {
-    // TODO: 保存到文件
-    // 目前只在内存中保存
+    if (this.config.enableLearning === false) return
+    const filePath = this.getLearnedRulesPath()
+    try {
+      const dir = dirname(filePath)
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+      const data: Record<string, string> = {}
+      for (const [key, decision] of this.learnedRules) {
+        data[key] = decision
+      }
+      const tmp = filePath + ".tmp"
+      writeFileSync(tmp, JSON.stringify(data, null, 2), "utf-8")
+      // atomic rename
+      const { renameSync } = require("fs") as typeof import("fs")
+      renameSync(tmp, filePath)
+    } catch {
+      // Non-fatal — rules survive only in memory for this session
+    }
   }
 
   /**

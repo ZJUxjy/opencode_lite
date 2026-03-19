@@ -4,9 +4,7 @@
  * 存储 Team 运行的元数据、成本、状态、检查点索引
  */
 
-import Database from "better-sqlite3"
-import { mkdirSync } from "fs"
-import { dirname } from "path"
+import { DatabaseManager } from "../../db.js"
 import type { TeamMode } from "./types.js"
 
 // ============================================================================
@@ -112,11 +110,10 @@ export interface ListTeamRunsOptions {
 // ============================================================================
 
 export class TeamRunStore {
-  private db: Database.Database
+  private db: ReturnType<DatabaseManager["getDatabase"]>
 
   constructor(dbPath: string) {
-    mkdirSync(dirname(dbPath), { recursive: true })
-    this.db = new Database(dbPath)
+    this.db = DatabaseManager.getInstance(dbPath).getDatabase()
     this.init()
   }
 

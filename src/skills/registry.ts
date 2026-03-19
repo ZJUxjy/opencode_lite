@@ -84,6 +84,13 @@ export class SkillRegistry {
   }
 
   /**
+   * Check whether hot reload is currently active
+   */
+  isHotReloadEnabled(): boolean {
+    return this.watcher !== undefined
+  }
+
+  /**
    * Handle skill file change
    */
   private async handleSkillChange(skillId: string, path: string): Promise<void> {

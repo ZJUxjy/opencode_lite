@@ -5,6 +5,7 @@ import * as os from "os"
 import type { z } from "zod"
 import { DeadlineTimer } from "./timer.js"
 import { TaskCompleter, CompleteTaskSchema } from "./completer.js"
+import { getErrorMessage } from "../utils/error.js"
 import type {
   SubagentTerminateReason,
   CompleteTaskParams,
@@ -84,64 +85,62 @@ export class SubagentRunner {
   ): Promise<SubagentRunnerResult> {
     const startTime = Date.now()
     let turnCount = 0
-
-    // 创建 deadline timer
-    const timer = new DeadlineTimer({ timeoutMs: this.config.maxTimeMs })
-    timer.start()
+    let timedOut = false
 
     const agent = await this.createSubagent(taskId, objective)
     const completer = this.completers.get(taskId)!
 
-    try {
-      // 执行 agent
-      const output = await agent.run(objective)
+    // Connect DeadlineTimer to agent.abort() so the timeout actually stops the agent
+    const timer = new DeadlineTimer({
+      timeoutMs: this.config.maxTimeMs,
+      onTimeout: () => {
+        timedOut = true
+        agent.abort()
+      },
+    })
 
-      // 检查是否调用了 complete_task
+    // Count turns via agent response events
+    agent.setEvents({
+      onResponse: () => { turnCount++ },
+    })
+
+    timer.start()
+
+    try {
+      const output = await agent.run(objective)
       const isCompleted = completer.isCompleted()
 
-      // 确定终止原因
-      let terminateReason: SubagentTerminateReason
-      if (isCompleted) {
-        terminateReason = "goal" as SubagentTerminateReason
-      } else {
-        terminateReason = "goal" as SubagentTerminateReason // 暂时允许无 complete_task
-      }
+      const terminateReason: SubagentTerminateReason = timedOut
+        ? ("timeout" as SubagentTerminateReason)
+        : isCompleted
+          ? ("goal" as SubagentTerminateReason)
+          : ("no_complete" as SubagentTerminateReason)
 
       return {
-        success: true,
+        success: !timedOut,
         output: completer.serializeOutput() || output,
         sessionId: agent.sessionId,
         executionTime: Date.now() - startTime,
         terminateReason,
         turnCount,
-        timedOut: false,
+        timedOut,
         validatedOutput: completer.getOutput(),
       }
-    } catch (error) {
+    } catch (error: unknown) {
       return {
         success: false,
-        output: error instanceof Error ? error.message : String(error),
+        output: getErrorMessage(error),
         sessionId: agent.sessionId,
         executionTime: Date.now() - startTime,
-        terminateReason: "error" as SubagentTerminateReason,
+        terminateReason: timedOut
+          ? ("timeout" as SubagentTerminateReason)
+          : ("error" as SubagentTerminateReason),
         turnCount,
-        timedOut: timer.isExpired(),
+        timedOut,
       }
     } finally {
       timer.destroy()
     }
-  }
-
-  private async runWithLimits(
-    agent: Agent,
-    objective: string,
-    timer: DeadlineTimer,
-    completer: TaskCompleter,
-    turnCount: number
-  ): Promise<string> {
-    // 这里应该集成到 Agent.run 中实现真正的 turn 限制
-    // 暂时模拟执行 - 实际实现需要修改 Agent 类
-    return agent.run(objective)
   }
 
   private async executeGracePeriod(

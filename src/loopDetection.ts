@@ -295,15 +295,17 @@ export class LoopDetectionService {
 
     for (const [key, value] of Object.entries(args)) {
       if (typeof value === "string") {
-        // 字符串：只比较长度范围
-        result[key] = `string(${value.length})`
+        // 截断长字符串以避免哈希过大，同时保留足够信息区分不同调用
+        result[key] = value.length > 200 ? value.slice(0, 200) : value
       } else if (typeof value === "number") {
         // 数字：保留原值
         result[key] = value
       } else if (typeof value === "boolean") {
         result[key] = value
       } else if (Array.isArray(value)) {
-        result[key] = `array(${value.length})`
+        result[key] = value.slice(0, 10).map((v) =>
+          typeof v === "string" ? v.slice(0, 50) : v
+        )
       } else if (typeof value === "object" && value !== null) {
         result[key] = this.simplifyArgs(value as Record<string, unknown>)
       } else {

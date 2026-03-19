@@ -297,8 +297,7 @@ const skillsCommand: Command = {
     if (trimmedArgs === "watch") {
       const registry = ctx.agent.getSkillRegistry()
 
-      // Check if hot reload is currently enabled by looking for watcher
-      const isWatching = !!(registry as any)["watcher"]
+      const isWatching = registry.isHotReloadEnabled()
 
       if (isWatching) {
         registry.disableHotReload()

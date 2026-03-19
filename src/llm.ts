@@ -1,4 +1,6 @@
 import { generateText, streamText, CoreMessage, Tool } from "ai"
+
+const DEBUG = process.env.DEBUG_LLM === "1"
 import { createAnthropic } from "@ai-sdk/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
@@ -116,7 +118,7 @@ export class LLMClient {
 
     // Model routing configuration
     this.modelRouting = {
-      planModel: process.env.PLAN_MODE_MODEL || "claude-opus-4",
+      planModel: process.env.PLAN_MODE_MODEL || "claude-opus-4-5",
       buildModel: this.modelId,
       enabled: process.env.ENABLE_MODEL_ROUTING !== "false",
     }
@@ -124,7 +126,7 @@ export class LLMClient {
     // Initialize provider based on protocol
     this.initProvider(config)
 
-    if (process.env.DEBUG_LLM === "1") {
+    if (DEBUG) {
       console.log(`[LLM] Initialized with model: ${this.modelId}, protocol: ${this.protocol}, timeout: ${this.timeout}ms`)
       if (this.modelRouting.enabled) {
         console.log(`[LLM] Model routing enabled: Plan=${this.modelRouting.planModel}, Build=${this.modelRouting.buildModel}`)
@@ -220,7 +222,7 @@ export class LLMClient {
       this.modelId = planModel
       this.model = this.provider(this.modelId)
 
-      if (process.env.DEBUG_LLM === "1") {
+      if (DEBUG) {
         console.log(`[LLM] Switched to Plan Mode model: ${this.modelId}`)
       }
     }
@@ -237,7 +239,7 @@ export class LLMClient {
       this.modelId = buildModel
       this.model = this.provider(this.modelId)
 
-      if (process.env.DEBUG_LLM === "1") {
+      if (DEBUG) {
         console.log(`[LLM] Switched to Build model: ${this.modelId}`)
       }
     }
@@ -284,7 +286,7 @@ export class LLMClient {
       protocol: this.protocol,
     })
 
-    if (process.env.DEBUG_LLM === "1") {
+    if (DEBUG) {
       console.log(`[LLM] Switched provider: protocol=${this.protocol}, model=${this.modelId}`)
     }
   }
@@ -297,7 +299,7 @@ export class LLMClient {
     this.originalModelId = modelId
     this.model = this.provider(modelId)
 
-    if (process.env.DEBUG_LLM === "1") {
+    if (DEBUG) {
       console.log(`[LLM] Switched model: ${modelId}`)
     }
   }
@@ -378,7 +380,7 @@ export class LLMClient {
     if (this.currentAbortController) {
       this.currentAbortController.abort()
       this.currentAbortController = null
-      if (process.env.DEBUG_LLM === "1") {
+      if (DEBUG) {
         console.log(`[LLM] Request aborted by user`)
       }
     }
@@ -462,12 +464,12 @@ export class LLMClient {
     const controller = this.currentAbortController
     const timeoutId = setTimeout(() => {
       controller.abort()
-      if (process.env.DEBUG_LLM === "1") {
+      if (DEBUG) {
         console.log(`[LLM] Request timed out after ${this.timeout}ms`)
       }
     }, this.timeout)
 
-    if (process.env.DEBUG_LLM === "1") {
+    if (DEBUG) {
       console.log(`[LLM] Starting stream request with ${messages.length} messages, timeout: ${this.timeout}ms`)
     }
 
@@ -542,7 +544,7 @@ export class LLMClient {
       }
 
       // 处理其他错误
-      if (process.env.DEBUG_LLM === "1") {
+      if (DEBUG) {
         console.error(`[LLM] Stream error:`, error)
       }
       throw error

@@ -257,14 +257,14 @@ Format the summary as bullet points. Be concise but comprehensive.`
       (_, i) => keepFirst + i
     )
 
-    // 生成摘要并替换
-    return this.destructiveCompress(messages, toCompress, keepFirst, keepLast, level, removedIndices)
+    // 生成摘要并替换（返回新数组，不修改原始 messages）
+    return this.buildCompressedMessages(messages, toCompress, keepFirst, keepLast, level, removedIndices)
   }
 
   /**
-   * 破坏性压缩：生成摘要并删除原消息
+   * 构建压缩后的消息数组：生成摘要消息并替换中间部分（返回新数组，非破坏性）
    */
-  private async destructiveCompress(
+  private async buildCompressedMessages(
     messages: Message[],
     toCompress: Message[],
     keepFirst: number,

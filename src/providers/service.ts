@@ -1,6 +1,6 @@
 // src/providers/service.ts
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "fs"
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, unlinkSync } from "fs"
 import { join, dirname } from "path"
 import { homedir, userInfo } from "os"
 import { createDecipheriv, createHash } from "crypto"
@@ -95,7 +95,15 @@ export class ProviderConfigService {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
     }
-    writeFileSync(this.filePath, JSON.stringify(data, null, 2), "utf-8")
+    // Atomic write: write to temp file, then rename to prevent corruption
+    const tmpPath = `${this.filePath}.tmp.${process.pid}`
+    try {
+      writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8")
+      renameSync(tmpPath, this.filePath)
+    } catch (err) {
+      try { unlinkSync(tmpPath) } catch { }
+      throw err
+    }
   }
 
   /**

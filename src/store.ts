@@ -59,28 +59,31 @@ export class MessageStore {
       VALUES (?, ?, ?, ?, ?)
     `)
 
-    stmt.run(
-      sessionId,
-      message.role,
-      message.content || null,
-      message.toolCalls ? JSON.stringify(message.toolCalls) : null,
-      message.toolResults ? JSON.stringify(message.toolResults) : null
-    )
+    // Wrap insert + session metadata update in a transaction to prevent count divergence
+    this.db.transaction(() => {
+      stmt.run(
+        sessionId,
+        message.role,
+        message.content || null,
+        message.toolCalls ? JSON.stringify(message.toolCalls) : null,
+        message.toolResults ? JSON.stringify(message.toolResults) : null
+      )
 
-    // 更新会话元数据
-    if (this.sessionStore) {
-      const session = this.sessionStore.get(sessionId)
-      if (session) {
-        // 检查是否需要更新标题（第一条用户消息）
-        if (message.role === "user" && session.messageCount === 0) {
-          const title = generateSessionTitle(message.content || "")
-          this.sessionStore.update(sessionId, { title, messageCount: 1 })
-        } else {
-          // 仅增加消息计数
-          this.sessionStore.incrementMessageCount(sessionId)
+      // 更新会话元数据
+      if (this.sessionStore) {
+        const session = this.sessionStore.get(sessionId)
+        if (session) {
+          // 检查是否需要更新标题（第一条用户消息）
+          if (message.role === "user" && session.messageCount === 0) {
+            const title = generateSessionTitle(message.content || "")
+            this.sessionStore.update(sessionId, { title, messageCount: 1 })
+          } else {
+            // 仅增加消息计数
+            this.sessionStore.incrementMessageCount(sessionId)
+          }
         }
       }
-    }
+    })()
   }
 
   get(sessionId: string): Message[] {

@@ -11,8 +11,9 @@ import type {
   AggregatedResult,
 } from "./types.js"
 import { SubagentTerminateReason } from "./types.js"
-import { DeadlineTimer } from "./timer.js"
 import { TaskCompleter } from "./completer.js"
+import { SubagentRunner } from "./runner.js"
+import { getErrorMessage } from "../utils/error.js"
 
 /**
  * 子代理管理器
@@ -27,9 +28,9 @@ export class SubagentManager {
   private subagents = new Map<string, Subagent>()
   private config: Required<SubagentManagerConfig>
   private events: SubagentEvents = {}
-
   private completers = new Map<string, TaskCompleter>()
-  private timers = new Map<string, DeadlineTimer>()
+  /** Session ID of the parent agent — required for SubagentRunner */
+  private parentSessionId: string = "unknown"
 
   constructor(config: SubagentManagerConfig = {}) {
     this.config = {
@@ -40,6 +41,13 @@ export class SubagentManager {
       maxTurns: config.maxTurns ?? 15,
       maxTimeMs: config.maxTimeMs ?? 5 * 60 * 1000, // 5分钟
     }
+  }
+
+  /**
+   * Set the parent agent's session ID so SubagentRunner can write to the correct DB scope
+   */
+  setParentSessionId(sessionId: string): void {
+    this.parentSessionId = sessionId
   }
 
   /**
@@ -220,7 +228,7 @@ export class SubagentManager {
   }
 
   /**
-   * 执行子代理（模拟执行，实际需要集成 Agent）
+   * 执行子代理（通过 SubagentRunner 运行真实 Agent）
    */
   async execute(id: string): Promise<SubagentResult> {
     const subagent = this.subagents.get(id)
@@ -235,34 +243,38 @@ export class SubagentManager {
     this.updateStatus(id, "running")
     this.events.onStart?.(subagent)
 
-    // 创建 deadline timer
-    const timer = new DeadlineTimer({ timeoutMs: this.config.maxTimeMs })
-    this.timers.set(id, timer)
-    timer.start()
+    const runner = new SubagentRunner({
+      workingDir: subagent.cwd,
+      parentSessionId: this.parentSessionId,
+      maxTimeMs: this.config.maxTimeMs,
+      maxTurns: this.config.maxTurns,
+    })
 
     try {
-      // 执行（带时间限制）
-      const result = await this.simulateExecution(subagent)
+      const result = await runner.execute(id, subagent.prompt)
 
-      // 检查终止原因
-      const completer = this.completers.get(id)
-      let terminateReason: SubagentTerminateReason = completer?.isCompleted()
-        ? SubagentTerminateReason.GOAL
-        : SubagentTerminateReason.NO_COMPLETE_CALL
-
-      this.setResult(id, result)
-
-      return {
-        id,
-        status: "completed",
-        result,
-        duration: Date.now() - (subagent.startedAt ?? subagent.createdAt),
-        terminateReason,
+      if (result.success) {
+        this.setResult(id, result.output)
+        return {
+          id,
+          status: "completed",
+          result: result.output,
+          duration: result.executionTime,
+          terminateReason: result.terminateReason as SubagentTerminateReason,
+        }
+      } else {
+        this.setError(id, result.output)
+        return {
+          id,
+          status: "failed",
+          error: result.output,
+          duration: result.executionTime,
+          terminateReason: result.terminateReason as SubagentTerminateReason ?? SubagentTerminateReason.ERROR,
+        }
       }
-    } catch (error: any) {
-      const errorMsg = error.message || String(error)
+    } catch (error: unknown) {
+      const errorMsg = getErrorMessage(error)
       this.setError(id, errorMsg)
-
       return {
         id,
         status: "failed",
@@ -270,22 +282,28 @@ export class SubagentManager {
         duration: Date.now() - (subagent.startedAt ?? subagent.createdAt),
         terminateReason: SubagentTerminateReason.ERROR,
       }
-    } finally {
-      timer.destroy()
-      this.timers.delete(id)
     }
   }
 
   /**
    * 并行执行多个子代理
+   * 检查当前运行数量，确保不超过 maxConcurrent
    */
   async executeParallel(ids: string[]): Promise<SubagentResult[]> {
-    // 限制并行数
-    const limitedIds = ids.slice(0, this.config.maxConcurrent)
+    const runningCount = this.getByStatus("running").length
+    const available = Math.max(0, this.config.maxConcurrent - runningCount)
+    const toRun = ids.slice(0, available)
 
-    // 并行执行
-    const promises = limitedIds.map((id) => this.execute(id))
-    return Promise.all(promises)
+    if (toRun.length === 0) {
+      return ids.map((id) => ({
+        id,
+        status: "failed" as const,
+        error: `Concurrency limit (${this.config.maxConcurrent}) reached`,
+        terminateReason: SubagentTerminateReason.ERROR,
+      }))
+    }
+
+    return Promise.all(toRun.map((id) => this.execute(id)))
   }
 
   /**
@@ -381,30 +399,6 @@ export class SubagentManager {
       current = parent
     }
     return depth
-  }
-
-  /**
-   * 模拟执行（实际项目中替换为真实 Agent 执行）
-   */
-  private async simulateExecution(subagent: Subagent): Promise<string> {
-    // 模拟异步执行
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    return `# ${subagent.type.toUpperCase()} Agent Result
-
-Task: ${subagent.prompt.slice(0, 100)}...
-
-## Summary
-This is a simulated result. In production, this would be the actual output from the AI agent.
-
-## Files Examined
-- Simulated file paths would be listed here
-
-## Key Findings
-- Simulated findings would be listed here
-
-Status: ${subagent.status}
-Execution Time: ${Date.now() - subagent.createdAt}ms`
   }
 
   /**

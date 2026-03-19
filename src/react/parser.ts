@@ -235,30 +235,20 @@ export class ReActParser {
 
   /**
    * 异步流式解析
+   * Accumulates all chunks, then delegates to the synchronous parseStream.
    */
   async *parseStreamAsync(
     chunks: AsyncGenerator<string, void, unknown>
   ): AsyncGenerator<ParseResult, void, unknown> {
-    this.reset()
-
-    for await (const chunk of chunks) {
-      for (const char of chunk) {
-        const result = this.processChar(char)
-        if (result.type) {
-          yield result
-        }
-      }
+    function* singleChunkGen(text: string): Generator<string, void, unknown> {
+      yield text
     }
-  }
 
-  /**
-   * 逐字符处理（保留用于某些场景）
-   */
-  private processChar(char: string): ParseResult {
-    const result: ParseResult = { type: null, value: null }
-
-    // 简化实现
-    return result
+    let fullText = ""
+    for await (const chunk of chunks) {
+      fullText += chunk
+    }
+    yield* this.parseStream(singleChunkGen(fullText))
   }
 
   /**

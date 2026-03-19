@@ -1,6 +1,6 @@
 import Database from "better-sqlite3"
 import { mkdirSync } from "fs"
-import { dirname } from "path"
+import { dirname, resolve } from "path"
 
 /**
  * 数据库管理器 - 单例模式
@@ -13,16 +13,17 @@ import { dirname } from "path"
 export class DatabaseManager {
   private static instances: Map<string, DatabaseManager> = new Map()
   private db: Database.Database
-  private dbPath: string
+  /** Normalized (resolved) path used as the map key */
+  private readonly normalizedPath: string
 
-  private constructor(dbPath: string) {
-    this.dbPath = dbPath
+  private constructor(normalizedPath: string) {
+    this.normalizedPath = normalizedPath
 
     // 确保目录存在
-    mkdirSync(dirname(dbPath), { recursive: true })
+    mkdirSync(dirname(normalizedPath), { recursive: true })
 
     // 创建数据库连接
-    this.db = new Database(dbPath)
+    this.db = new Database(normalizedPath)
 
     // 启用 WAL 模式，提高并发性能
     // WAL 模式允许读写并发，避免读写互斥
@@ -34,6 +35,9 @@ export class DatabaseManager {
 
     // 设置同步模式为 NORMAL，平衡性能和数据安全
     this.db.pragma('synchronous = NORMAL')
+
+    // 启用外键约束，确保引用完整性
+    this.db.pragma('foreign_keys = ON')
   }
 
   /**
@@ -42,7 +46,7 @@ export class DatabaseManager {
    */
   static getInstance(dbPath: string): DatabaseManager {
     // 规范化路径，确保相同路径返回同一实例
-    const normalizedPath = dbPath.startsWith('/') ? dbPath : process.cwd() + '/' + dbPath
+    const normalizedPath = resolve(dbPath)
 
     if (!this.instances.has(normalizedPath)) {
       this.instances.set(normalizedPath, new DatabaseManager(normalizedPath))
@@ -61,15 +65,25 @@ export class DatabaseManager {
    * 获取数据库路径
    */
   getDbPath(): string {
-    return this.dbPath
+    return this.normalizedPath
   }
 
   /**
    * 关闭数据库连接
    */
   close(): void {
-    this.db.close()
-    DatabaseManager.instances.delete(this.dbPath)
+    try { this.db.close() } catch { }
+    DatabaseManager.instances.delete(this.normalizedPath)
+  }
+
+  /**
+   * 关闭所有数据库连接（进程退出时调用）
+   */
+  static closeAll(): void {
+    for (const mgr of DatabaseManager.instances.values()) {
+      try { mgr.db.close() } catch { }
+    }
+    DatabaseManager.instances.clear()
   }
 
   /**
@@ -84,3 +98,8 @@ export class DatabaseManager {
     }
   }
 }
+
+// CR-21: Close all DB connections on process exit to ensure WAL checkpoint
+process.on('exit', () => {
+  DatabaseManager.closeAll()
+})
